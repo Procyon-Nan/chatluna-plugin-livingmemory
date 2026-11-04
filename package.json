@@ -28,17 +28,21 @@
     ],
     "scripts": {
         "build": "yakumo build",
-        "clean": "yakumo clean"
+        "clean": "yakumo clean",
+        "test": "node --test --experimental-transform-types --import ./tests/setup.ts \"tests/**/*.spec.ts\""
     },
     "dependencies": {
         "schemastery": "^3.18.0"
     },
     "peerDependencies": {
         "@chatluna/core": "*",
+        "@cordisjs/plugin-database": "^4.1.1",
         "cordis": "^4.0.0-rc.12"
     },
     "devDependencies": {
         "@chatluna/ui-client": "*",
+        "@cordisjs/plugin-database": "^4.1.1",
+        "@cordisjs/plugin-database-sqlite": "^5.1.1",
         "cordis": "^4.0.0-rc.12",
         "react": "*",
         "react-dom": "*",

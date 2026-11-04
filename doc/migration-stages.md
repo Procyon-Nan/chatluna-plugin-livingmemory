@@ -8,7 +8,7 @@
 
 | 阶段 | 内容 | 涉及 M | 完成后可验证 | 依赖框架侧 |
 | --- | --- | --- | --- | --- |
-| S1 | 数据层：表定义、仓储、事务、迁移记录 | M03 | 建表、读写往返、旧数据导入的字段映射 | 否 |
+| S1 ✅ | 数据层：表定义、仓储、事务、迁移记录 | M03 | 建表、读写往返、旧数据导入的字段映射 | 否 |
 | S2 | 后端适配：实现 `MemoryBackend` 全套方法与注册 | M01-L1、M03 | 原生页面可选到后端，原生工具可增删改查 | 否 |
 | S3 | 采集层：消息池、回填、去重、游标、纪元 | M05 | 各引擎消息进入同一池 | 是，M05-C1/C2 |
 | S4 | 模型与工具：langchain 换 `ctx.ai`，zod 换 Schema，工具改注册 | M04 | 单次提取与召回可用真实模型跑通 | 否 |
@@ -25,7 +25,20 @@ S1、S2 与框架侧无关，可立即开始。S3 依赖统一采集与交付归
 
 迁移 `src/service/persistence/`（2784 行）：表定义、条目仓储、任务仓储、快照仓储、画像仓储、来源与规范化、维护与清理。v1 使用 koishi 的 `ctx.model.extend` 与 `database.get/create/set`，v2 的 `@cordisjs/plugin-database` 提供同名 API，`packages/conversations/core/src/database.ts` 是现成范例。
 
-同一提交内迁移以下测试：`query`、`query-projections`、`repository-maintenance`、`snapshot-repository`、`user-profile`、`user-profile-repository`、`job-repository`、`memory-entry-fields`。
+同一提交内迁移以下测试：`query`、`query-projections`、`repository-maintenance`、`snapshot-repository`、`user-profile-repository`、`job-repository`。
+
+**已完成**（2026-11-04）。落地内容与验收依据：
+
+| 项 | 结果 |
+| --- | --- |
+| 源文件 | `src/contracts/` 4 个、`src/query.ts`、`src/service/{app,memory,persistence,shared,workflows}/` 共 23 个 |
+| 运行时替换 | `Context` 取自 cordis；数据库经 `ctx.get('database')` 获取（驱动就绪前该服务不存在）；相对 import 统一补 `.ts` 后缀 |
+| 表定义 | 8 张表改用 `ctx.model.extend`，`isConsolidated` 字段退役改用 `ctx.model.migrate`；8 张表在 `Tables` 上做模块增强 |
+| 测试环境 | `node:test` + 内存 SQLite，`tests/setup.ts` 还原 vitest 的全局函数 |
+| 结果 | 17 个用例全部通过；`tsc --noEmit` 无报错 |
+| 未覆盖 | `memory-entry-fields`、`user-profile` 两个测试依赖 S4/S5 的模块，随对应阶段迁移 |
+
+S1 只搬仓储与查询，没有实现 `MemoryBackend`。后端适配在 S2，届时这些仓储成为后端实现的读写基础。
 
 ### S2 后端适配
 

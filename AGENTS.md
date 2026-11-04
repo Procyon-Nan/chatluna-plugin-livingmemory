@@ -31,19 +31,31 @@
 
 ## 代码结构
 
-本项目为 `chatluna-plugin-livingmemory`，位于 ChatLuna v2 模板项目的 `external/livingmemory/`，由模板项目提供开发运行环境。当前处于插件脚手架与迁移方案讨论阶段。
+本项目为 `chatluna-plugin-livingmemory`，位于 ChatLuna v2 模板项目的 `external/livingmemory/`，由模板项目提供开发运行环境。当前处于 S1 数据层迁移完成、S2 后端适配待开始的阶段。
 
 ```text
 livingmemory/
 ├── AGENTS.md                   # 本项目协作规范、代码结构与文档索引
 ├── CHANGELOG.md                # 变更记录
 ├── README.md                   # 插件说明，当前为脚手架内容
-├── package.json                # 插件包信息、导出入口与依赖
+├── package.json                # 插件包信息、导出入口、依赖与测试脚本
 ├── tsconfig.json               # 服务端 TypeScript 配置，继承模板项目配置
 ├── tsconfig.client.json        # 客户端 TypeScript 配置，继承模板项目配置
 ├── src/
 │   ├── index.ts                # 插件入口、配置 schema 与依赖声明
-│   └── service.ts              # Cordis 服务骨架
+│   ├── service.ts              # Cordis 服务骨架
+│   ├── query.ts                # 记忆、快照、任务、画像的列表过滤、分面统计与分页
+│   ├── contracts/              # 跨模块契约：记忆与任务、工作流、向量索引、管理接口
+│   ├── service/
+│   │   ├── app/                # 查询投影等应用层读取
+│   │   ├── memory/             # 字段规范化、说话人身份、来源消息、错误类型
+│   │   ├── persistence/        # 表定义、条目/快照/任务/画像/人设仓储与事务
+│   │   ├── shared/             # 串行任务队列与通用工具
+│   │   └── workflows/          # 工作流共用组件（当前为任务跟踪器）
+├── tests/
+│   ├── setup.ts                # 把 node:test 的同名函数装回全局，兼容 v1 测试体
+│   ├── persistence-test-utils.ts # 内存 SQLite 的仓储测试环境
+│   └── *.spec.ts               # 与源码同期迁移的测试
 ├── client/
 │   ├── index.ts                # WebUI 客户端入口，当前注册国际化资源
 │   └── locales/
