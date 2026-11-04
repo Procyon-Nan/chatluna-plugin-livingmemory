@@ -57,6 +57,7 @@ livingmemory/
 │       └── archived/            # 冻结的历史记录
 └── doc/
     ├── migration-plan.md       # v1 → v2 迁移方案、任务进度与验收清单
+    ├── migration-stages.md      # S1—S8 实施阶段、交付物与阻塞项
     ├── message-pool.md          # 统一消息采集、内存消息池维护与验收清单
     ├── framework-requirements.md # ChatLuna v2 框架侧接口需求，供 v2 开发者实施
     └── v1-behavior-inventory.md # v1 全量业务行为清单与迁移核对入口
@@ -70,6 +71,7 @@ livingmemory/
 | --- | --- |
 | [README.md](README.md) | 插件简介与配置说明，当前为脚手架内容 |
 | [doc/migration-plan.md](doc/migration-plan.md) | 迁移目标、确认事项、任务编号与依赖、设计/实施/验收进度、双方接口及职责草案、旧数据迁移范围 |
+| [doc/migration-stages.md](doc/migration-stages.md) | S1—S8 实施阶段划分、各阶段交付物、模块归属、向量索引与测试处置、提交粒度与阻塞项 |
 | [doc/message-pool.md](doc/message-pool.md) | M05 跨引擎统一采集、分池、回填、去重、内存游标、会话生命周期、冷启动与实施验收 |
 | [doc/framework-requirements.md](doc/framework-requirements.md) | 由 ChatLuna v2 承担的接口项：统一采集、交付归属、会话与预设通知、调度归属、任务受理与取消、原生任务页面接入，含当前源码事实与验收条件 |
 | [doc/v1-behavior-inventory.md](doc/v1-behavior-inventory.md) | D11 的 v1 全量业务行为清单、源码/测试核对入口、v2 适配归属和执行标记 |
@@ -77,6 +79,8 @@ livingmemory/
 | [.agent/note/proposed/architecture/2026-11-03-extraction-window-and-chunking.md](.agent/note/proposed/architecture/2026-11-03-extraction-window-and-chunking.md) | 沿用 v1 自动提取窗口、完整交流、旁听分块和批次进度语义的提案 |
 | [.agent/note/proposed/architecture/2026-11-04-v1-behavior-preservation.md](.agent/note/proposed/architecture/2026-11-04-v1-behavior-preservation.md) | v1 全部业务行为作为迁移基线，以及 v2 适配层的职责边界 |
 | [.agent/note/proposed/architecture/2026-11-04-extraction-inflight-lifecycle.md](.agent/note/proposed/architecture/2026-11-04-extraction-inflight-lifecycle.md) | v1 在途自动提取的状态失效、原作用域提交和 v2 卸载生命周期契约提案 |
+| [.agent/note/proposed/architecture/2026-11-04-vector-index-retention.md](.agent/note/proposed/architecture/2026-11-04-vector-index-retention.md) | 保留 v1 向量索引能力，只把 embedding 调用层替换为 v2 `ctx.ai.embed` 的提案 |
+| [.agent/note/proposed/architecture/2026-11-04-test-migration-strategy.md](.agent/note/proposed/architecture/2026-11-04-test-migration-strategy.md) | v1 测试按模块随源码迁移的三档处置与文件清单提案 |
 
 迁移讨论持续更新方案文档，分别标记已确认事项、设计草案与待讨论问题。后续按实际讨论内容拆分专题文档，并同步本索引。
 
