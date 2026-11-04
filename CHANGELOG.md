@@ -11,3 +11,7 @@
 - pending: 测试运行器由 vitest 换成 `node --test --experimental-transform-types`；新增 `tests/setup.ts` 把 `it`/`describe` 装回全局，兼容 v1 测试体，不引入新依赖。
 - pending: 迁移 `query`、`query-projections`、`repository-maintenance`、`snapshot-repository`、`user-profile-repository`、`job-repository` 六个测试文件，17 个用例全部通过；`job-repository` 的首个用例改用统一测试环境。
 - pending: 新增 `.gitignore`；`package.json` 增加 `test` 脚本与数据库相关依赖；`tsconfig.json` 开启 `allowImportingTsExtensions`。
+- pending: 完成 S2 后端适配。新增 `src/service/backend.ts` 实现 v2 `MemoryBackend` 的 14 个方法，`src/service.ts` 持有仓储与后端并通过 `ctx.memory.backend` 注册，入口改用 `ctx.effect` 管理注销。
+- pending: 记忆表增加 `topic`/`title`/`fields` 三列以匹配 v2 的 `MemoryEntry`；新增 `src/service/memory/entry_identity.ts` 定义主题与标题的确定性推导，旧行读取时按同一规则补齐标题。
+- pending: 导出格式增加 `topic`/`title`/`fields` 可选字段，旧导出文件按缺省规则导入；`createMemory` 支持显式 id，用于保持导入时的原有身份。
+- pending: 新增 `tests/backend.spec.ts` 共 7 个用例，覆盖主题标题推导、作用域过滤、面统计、检索、归档删除与变更通知、字段更新、索引分组与导出导入往返；全套 24 个用例通过。

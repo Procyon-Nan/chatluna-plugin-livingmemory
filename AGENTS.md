@@ -31,7 +31,7 @@
 
 ## 代码结构
 
-本项目为 `chatluna-plugin-livingmemory`，位于 ChatLuna v2 模板项目的 `external/livingmemory/`，由模板项目提供开发运行环境。当前处于 S1 数据层迁移完成、S2 后端适配待开始的阶段。
+本项目为 `chatluna-plugin-livingmemory`，位于 ChatLuna v2 模板项目的 `external/livingmemory/`，由模板项目提供开发运行环境。当前处于 S2 后端适配完成、S3 采集层待开始的阶段。
 
 ```text
 livingmemory/
@@ -43,12 +43,13 @@ livingmemory/
 ├── tsconfig.client.json        # 客户端 TypeScript 配置，继承模板项目配置
 ├── src/
 │   ├── index.ts                # 插件入口、配置 schema 与依赖声明
-│   ├── service.ts              # Cordis 服务骨架
+│   ├── service.ts              # Cordis 服务：持有仓储与后端，并向 ctx.memory 注册
 │   ├── query.ts                # 记忆、快照、任务、画像的列表过滤、分面统计与分页
 │   ├── contracts/              # 跨模块契约：记忆与任务、工作流、向量索引、管理接口
 │   ├── service/
+│   │   ├── backend.ts          # v2 MemoryBackend 实现，映射到 v1 仓储
 │   │   ├── app/                # 查询投影等应用层读取
-│   │   ├── memory/             # 字段规范化、说话人身份、来源消息、错误类型
+│   │   ├── memory/             # 字段规范化、说话人身份、主题标题推导、来源消息、错误类型
 │   │   ├── persistence/        # 表定义、条目/快照/任务/画像/人设仓储与事务
 │   │   ├── shared/             # 串行任务队列与通用工具
 │   │   └── workflows/          # 工作流共用组件（当前为任务跟踪器）

@@ -20,10 +20,27 @@ export function defineLivingMemoryTables(ctx: Context) {
         length: 16,
         initial: 'active'
       },
+      // v2 的 MemoryEntry 以 topic 分组目录与索引行；v1 无此概念，旧数据落为 other。
+      topic: {
+        type: 'string',
+        length: 255,
+        initial: 'other'
+      },
+      title: {
+        type: 'text',
+        nullable: true,
+        initial: null
+      },
       content: 'text',
       keywords: {
         type: 'json',
         initial: []
+      },
+      // v2 的结构化字段；v1 不使用，保留以支持原生工具与管理界面。
+      fields: {
+        type: 'json',
+        nullable: true,
+        initial: null
       },
       summary: {
         type: 'text',
@@ -246,6 +263,9 @@ export function defineLivingMemoryTables(ctx: Context) {
 declare module '@cordisjs/plugin-database' {
   interface Tables {
     living_memory_entry: import('../../contracts/memory.ts').MemoryEntryRecord & {
+      topic: string
+      title: string | null
+      fields: Record<string, string | number> | null
       embedding: number[] | null
       embeddingModelId: string | null
       isConsolidated?: boolean

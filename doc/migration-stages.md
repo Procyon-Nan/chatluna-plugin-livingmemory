@@ -9,7 +9,7 @@
 | 阶段 | 内容 | 涉及 M | 完成后可验证 | 依赖框架侧 |
 | --- | --- | --- | --- | --- |
 | S1 ✅ | 数据层：表定义、仓储、事务、迁移记录 | M03 | 建表、读写往返、旧数据导入的字段映射 | 否 |
-| S2 | 后端适配：实现 `MemoryBackend` 全套方法与注册 | M01-L1、M03 | 原生页面可选到后端，原生工具可增删改查 | 否 |
+| S2 ✅ | 后端适配：实现 `MemoryBackend` 全套方法与注册 | M01-L1、M03 | 原生页面可选到后端，原生工具可增删改查 | 否 |
 | S3 | 采集层：消息池、回填、去重、游标、纪元 | M05 | 各引擎消息进入同一池 | 是，M05-C1/C2 |
 | S4 | 模型与工具：langchain 换 `ctx.ai`，zod 换 Schema，工具改注册 | M04 | 单次提取与召回可用真实模型跑通 | 否 |
 | S5 | 工作流：提取、召回、Dream、画像、人设 | M06、M07 | 业务闭环可用，与 v1 行为对照 | 部分，M06-C1 |
@@ -43,6 +43,27 @@ S1 只搬仓储与查询，没有实现 `MemoryBackend`。后端适配在 S2，�
 ### S2 后端适配
 
 实现 `MemoryBackend` 接口。`packages/memory/core/src/types.ts` 定义签名，`packages/memory/core/src/markdown.ts`（674 行）是完整的参考实现。需要处理 `index()` 的预算语义、`watch()` 的变更通知、`history()`/`revert()` 的版本能力，以及 `export`/`import` 的格式。
+
+**已完成**（2026-11-04）。落地内容与验收依据：
+
+| 项 | 结果 |
+| --- | --- |
+| 后端实现 | `src/service/backend.ts`，实现 `search`/`get`/`list`/`create`/`update`/`merge`/`split`/`archive`/`remove`/`sources`/`index`/`export`/`import`/`watch` |
+| 注册 | `src/service.ts` 持有仓储与后端，`register()` 调用 `ctx.memory.backend('livingmemory', …)`，入口用 `ctx.effect` 保证卸载时注销 |
+| 字段补齐 | 表增加 `topic`/`title`/`fields` 三列（v2 的 `MemoryEntry` 强制要求）；`src/service/memory/entry_identity.ts` 定义确定性推导：主题取记忆类型，标题取显式值 → 摘要 → 内容首行 |
+| 导入语义 | 目标预设内已存在的 id 跳过；同 id 落在其他预设时换发导入 id（记录表以 id 为主键） |
+| 结果 | 新增 7 个后端测试，全套 24 个用例通过；`tsc --noEmit` 无报错 |
+
+**暂未实现**，随对应阶段补齐：
+
+| 能力 | 现状 | 补齐阶段 |
+| --- | --- | --- |
+| `search()` 的向量检索 | 当前为关键词/短语打分，不含 pgvector 混合检索与重排 | S3（向量索引迁移） |
+| `extract()`/`dream()` 可选入口 | 未提供；原生自动流程不会把窗口交给本后端 | S5 |
+| `history()`/`revert()` | 未提供；v1 无版本历史能力 | 视 M03 决定 |
+| 旧数据导入 | 只覆盖 `ctx.memory.import` 的 v2 格式；v1 的完整预设导入（含来源、画像、人设）仍在 `repository.importPresetData` | S7 |
+
+S2 只保证原生 memory 能把 LivingMemory 当作普通后端读写。S3 的向量索引会把 `search()` 换成 v1 的混合检索实现。
 
 ### S3 采集层
 
