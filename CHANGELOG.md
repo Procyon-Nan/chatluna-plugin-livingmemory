@@ -15,3 +15,9 @@
 - pending: 记忆表增加 `topic`/`title`/`fields` 三列以匹配 v2 的 `MemoryEntry`；新增 `src/service/memory/entry_identity.ts` 定义主题与标题的确定性推导，旧行读取时按同一规则补齐标题。
 - pending: 导出格式增加 `topic`/`title`/`fields` 可选字段，旧导出文件按缺省规则导入；`createMemory` 支持显式 id，用于保持导入时的原有身份。
 - pending: 新增 `tests/backend.spec.ts` 共 7 个用例，覆盖主题标题推导、作用域过滤、面统计、检索、归档删除与变更通知、字段更新、索引分组与导出导入往返；全套 24 个用例通过。
+- pending: 完成 S3 采集层。新增 `src/service/message_collector.ts`，把框架的观察、交付与会话变化事件统一接入 `MessageLogRegistry`，各引擎共用同一套入池、回填、去重与读取逻辑；`src/service.ts` 随之持有采集层，`src/index.ts` 增加对 `chatluna_collector` 的依赖声明。
+- pending: 新增 `src/contracts/framework.ts` 声明框架侧待补的采集、交付与变化契约（对应 `doc/framework-requirements.md` 的 M05-C1、M05-C2、M02-C1），上游落地后改为从 `@chatluna/*` 导入即可。
+- pending: `src/service/transcript/element_text.ts` 改为基于 v2 已归一化的 `ChatBlock` 渲染日志文本，替换 v1 按 satori 元素类型逐项解析的 319 行实现。
+- pending: 消息池的历史回填改由框架的可见历史接口按会话键与历史头读取，移除 v1 的频道绑定与 `toBackfillChannelId`；历史头变化（重置、切换、分支）时整池丢弃并按新历史重建，避免旧分支内容混入。
+- pending: 修正回填失败后 `warmup` 不重试的问题：失败时保留实时缓冲并复位状态，下次预热按历史、实时顺序重新入账。
+- pending: 迁移 `message-log`、`message-log-registry`、`message-collector`、`element-text` 四个测试文件共 35 个用例；全套 59 个用例通过，`tsc --noEmit` 无报错。

@@ -5,7 +5,7 @@ import LivingmemoryService from './service.ts'
 
 export const name = 'livingmemory'
 
-export const inject = ['chatluna', 'memory', 'database'] as const
+export const inject = ['chatluna', 'memory', 'database', 'chatluna_collector'] as const
 
 export interface Config {}
 

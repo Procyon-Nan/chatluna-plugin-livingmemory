@@ -10,7 +10,7 @@
 | --- | --- | --- | --- | --- |
 | S1 ✅ | 数据层：表定义、仓储、事务、迁移记录 | M03 | 建表、读写往返、旧数据导入的字段映射 | 否 |
 | S2 ✅ | 后端适配：实现 `MemoryBackend` 全套方法与注册 | M01-L1、M03 | 原生页面可选到后端，原生工具可增删改查 | 否 |
-| S3 | 采集层：消息池、回填、去重、游标、纪元 | M05 | 各引擎消息进入同一池 | 是，M05-C1/C2 |
+| S3 ✅ | 采集层：消息池、回填、去重、游标、纪元 | M05 | 各引擎消息进入同一池 | 是，M05-C1/C2 |
 | S4 | 模型与工具：langchain 换 `ctx.ai`，zod 换 Schema，工具改注册 | M04 | 单次提取与召回可用真实模型跑通 | 否 |
 | S5 | 工作流：提取、召回、Dream、画像、人设 | M06、M07 | 业务闭环可用，与 v1 行为对照 | 部分，M06-C1 |
 | S6 | 调度与任务：让出原生调度、稳定任务 ID、卸载取消 | M01 | 自动流程只触发一次，两个页面任务一致 | 是，M01-C1/C2/C3 |
@@ -71,6 +71,22 @@ S2 只保证原生 memory 能把 LivingMemory 当作普通后端读写。S3 的�
 
 阻塞点：需要 M05-C1 的观察事件与可见历史接口。接口未就绪前可用 `recentOfConversation` 轮询，但那只是临时适配，不写入设计。
 
+**已完成**（2026-11-04）。按 `framework-requirements.md` 声明的形状直接实现，框架侧接口落地后只需换 import：
+
+| 项 | 结果 |
+| --- | --- |
+| 采集入口 | `src/service/message_collector.ts` 订阅观察、交付、会话变化三类事件，统一维护每会话消息池 |
+| 框架契约 | `src/contracts/framework.ts` 声明 `ObservedMessageEvent`、`HistoryReader`、`DeliveredReply`、`ConversationChange`、`ChatLunaCollector`，并通过模块增强声明 `ctx.chatluna_collector` |
+| 正文规范化 | `src/service/transcript/element_text.ts` 基于 `ChatBlock` 与 `contentText` 实现，替代 v1 的 satori 元素渲染（319 行 → 60 行） |
+| 消息池 | `message_log.ts`（容量、序号、去重、清空纪元）与 `message_log_registry.ts`（建池、回填缓冲、召回窗口、游标、整池释放）从 v1 迁移 |
+| 回填 | 由框架按会话键与历史头读取，移除 v1 的频道绑定；失败保留实时缓冲并在下次 `warmup` 重试 |
+| 会话生命周期 | 历史头变化与显式 reset/switch/fork 一律整池丢弃后按新历史重建；预设切换不影响池 |
+| 测试 | 迁移 `message-log`、`message-log-registry`、`message-collector`、`element-text` 共 35 个用例；全套 59 个用例通过，`tsc --noEmit` 无报错 |
+
+**未纳入本阶段**：`transcript_message`、`transcript_renderer`、`source_serializer`、`message_formatter`、`origin_context`、`message_log/converter` 与 `memory/helpers` 在 v2 中的消费者是提取与召回，随 S5 一起迁移，避免留下无人引用的模块。
+
+`chat-middleware`、`character-middleware`、`chatluna-transcript-adapter` 三个 v1 测试验证的是中间件挂载与适配器接口，v2 中这两个对象都不存在；对应的入池规则与转写转换已由 `message-collector`、`message-log-registry` 覆盖，转换部分随 S5 迁移时补测。
+
 ### S4 模型与工具
 
 langchain 在 v1 中被 21 个文件引用，`ctx.ai` 提供 `chatluna.extract(schema, {...})` 与 `chatluna.judge(...)` 两种结构化调用。工具从 langchain `tool()` 改为 `ctx.tools.define()`。
@@ -107,8 +123,6 @@ langchain 在 v1 中被 21 个文件引用，`ctx.ai` 提供 `chatluna.extract(s
 
 | 阶段 | 阻塞项 | 对应框架侧子项 |
 | --- | --- | --- |
-| S3 | 无公共观察事件，无按会话+历史的可见历史接口，无交付归属字段 | M05-C1、M05-C2 |
-| S3 | 无会话 reset/switch/fork 通知，无预设实际生效通知 | M02-C1 |
 | S6 | 后端无法声明调度归属 | M01-C1 |
 | S6 | 任务 ID 不可预派，`extract` 无取消信号 | M01-C2、M06-C1 |
 | S6 | 原生任务页只读 `listJobs` | M01-C3 |
