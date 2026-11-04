@@ -11,7 +11,7 @@
 | S1 ✅ | 数据层：表定义、仓储、事务、迁移记录 | M03 | 建表、读写往返、旧数据导入的字段映射 | 否 |
 | S2 ✅ | 后端适配：实现 `MemoryBackend` 全套方法与注册 | M01-L1、M03 | 原生页面可选到后端，原生工具可增删改查 | 否 |
 | S3 ✅ | 采集层：消息池、回填、去重、游标、纪元 | M05 | 各引擎消息进入同一池 | 是，M05-C1/C2 |
-| S4 | 模型与工具：langchain 换 `ctx.ai`，zod 换 Schema，工具改注册 | M04 | 单次提取与召回可用真实模型跑通 | 否 |
+| S4 ✅ | 模型与工具：langchain 换 `ctx.ai`，zod 换 Schema，工具改注册 | M04 | 单次提取与召回可用真实模型跑通 | 否 |
 | S5 | 工作流：提取、召回、Dream、画像、人设 | M06、M07 | 业务闭环可用，与 v1 行为对照 | 部分，M06-C1 |
 | S6 | 调度与任务：让出原生调度、稳定任务 ID、卸载取消 | M01 | 自动流程只触发一次，两个页面任务一致 | 是，M01-C1/C2/C3 |
 | S7 | 管理与导入：WebUI、命令、配置、旧数据导入 | M08 | 管理端可用，旧数据进入新流程 | 否 |
@@ -49,7 +49,7 @@ S1 只搬仓储与查询，没有实现 `MemoryBackend`。后端适配在 S2，�
 | 项 | 结果 |
 | --- | --- |
 | 后端实现 | `src/service/backend.ts`，实现 `search`/`get`/`list`/`create`/`update`/`merge`/`split`/`archive`/`remove`/`sources`/`index`/`export`/`import`/`watch` |
-| 注册 | `src/service.ts` 持有仓储与后端，`register()` 调用 `ctx.memory.backend('livingmemory', …)`，入口用 `ctx.effect` 保证卸载时注销 |
+| 注册 | `src/service.ts` 持有仓储与后端，启动时调用 `ctx.memory.backend('livingmemory', …)`，入口用 `ctx.effect` 保证卸载时注销 |
 | 字段补齐 | 表增加 `topic`/`title`/`fields` 三列（v2 的 `MemoryEntry` 强制要求）；`src/service/memory/entry_identity.ts` 定义确定性推导：主题取记忆类型，标题取显式值 → 摘要 → 内容首行 |
 | 导入语义 | 目标预设内已存在的 id 跳过；同 id 落在其他预设时换发导入 id（记录表以 id 为主键） |
 | 结果 | 新增 7 个后端测试，全套 24 个用例通过；`tsc --noEmit` 无报错 |
@@ -90,6 +90,28 @@ S2 只保证原生 memory 能把 LivingMemory 当作普通后端读写。S3 的�
 ### S4 模型与工具
 
 langchain 在 v1 中被 21 个文件引用，`ctx.ai` 提供 `chatluna.extract(schema, {...})` 与 `chatluna.judge(...)` 两种结构化调用。工具从 langchain `tool()` 改为 `ctx.tools.define()`。
+
+**已完成**（2026-11-04）：
+
+| 项 | 结果 |
+| --- | --- |
+| 结构化输出 | `src/service/workflows/structured_output.ts` 以 `chatluna.extract(schema, …)` 实现，保留 v1 的三次尝试与纠正提示措辞；v2 没有 langchain 的暂存工具调用循环，模型调用失败改为同样重试 |
+| 提示词与 schema | `src/service/prompts/schema.ts` 用 schemastery 重建字段约束；`memory_tools.ts` 把字段说明并入工具描述（v2 的 schema→JSON Schema 转换会丢弃 description，见框架需求 7） |
+| 工具 | `src/service/memory/tools/` 注册 7 个模型工具：检索、读取来源消息、创建、更新、合并、拆分、删除；作用域取自 `agent.options`，子代理调用按 `permissions.origin` 拒绝；快照编辑只保留反应式编辑函数 `createUpdateSnapshotTool`，v1 的快照工具文档随 S5 接入 |
+| 作用域适配 | 移除 v1 的 Character 预设后缀拼接：v2 的 Character 引擎把自己的预设 id 写入 `agent.options.presetId` |
+| 日志 | `src/service/logging/` 提供 `LivingMemoryLogger`（凭据脱敏、循环引用、日志故障隔离）与 `invokeLoggedModel` |
+| 向量索引 | `src/service/vector_index/` 从 v1 整体迁移（25 个文件），只替换 embedding 获取：`ctx.chatluna.embed` 包装成 `EmbeddingsLike`；数据目录改用 `resolveChatlunaDataDir` |
+| Worker 打包 | `scripts/build-workers.mjs` 用模板项目的 rolldown 打包单文件产物；`npm run build` 后续衔接 |
+| 装配 | `src/service/app/memory_providers.ts` 接通仓储、后端与索引；`src/service.ts` 启动向量索引，卸载时先停索引再注销 |
+| 测试 | 新增 `structured-output`、`memory-tools`、`logging`、`update-snapshot-tool` 与 5 个向量索引测试；迁移 `legacy-embedding-migration`、`vector-index-dream-ann`、`vector-index-service`；全套 153 个用例中 152 通过、1 个仅 Windows 的目录切换用例跳过；`tsc --noEmit` 无报错 |
+
+**暂未实现**：
+
+| 能力 | 现状 | 补齐阶段 |
+| --- | --- | --- |
+| 提取/召回/Dream 工作流调用工具 | 工具已注册，但尚无工作流驱动它们 | S5 |
+| `searchHybrid` 的生产接入 | 索引已提供混合检索，`providers.searchMemories` 仍走仓储关键词打分 | S5 |
+| 预设级串行写入队列 | `providers` 未接 `SerialTaskQueue`，并发写入未串行化 | S5 |
 
 ### S5 工作流
 

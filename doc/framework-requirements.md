@@ -118,6 +118,23 @@
 - LivingMemory 自动任务出现在原生任务列表，状态、错误与统计与专用页面一致。
 - `memory.jobs.run` 对后端任务返回同一个判定的新任务。
 
+## 7. 工具参数 schema 保留字段说明（M04）
+
+**当前事实**
+
+- `packages/core/schema/src/json-schema.ts` 的 `convertString` / `convertNumber` / `convertArray` 只输出 `type`、`min`、`max`、`pattern`、`minItems`、`maxItems`，`meta.description` 没有被写出。
+- 实测 `Schema.object({ a: Schema.string().description('说明A') })` 经 `schemasteryToJsonSchemaNode` 得到 `{"type":"object","properties":{"a":{"type":"string"}},...}`，说明字段消失。
+- v1 用 zod 的 `.describe()` 承载行为约束，例如记忆检索的「必须是完整句子结构」与「避免以用户名作为关键词」、记忆正文的第一人称与字数要求。这些说明是模型行为的一部分，属于 D11 基线。
+
+**需要补充**
+
+- `convertString`、`convertNumber`、`convertArray`、`convertObject`、`convertUnion`、`convert` 的 `const` 分支在 `meta.description` 存在时输出 `description` 字段，`Schema <-> JsonSchema` 双向转换（`packages/core/schema/src/subset.ts` 的 `withCommon` 已支持读取）保持一致。
+
+**验收**
+
+- `Schema.object({ a: Schema.string().description('说明') })` 转换后 `properties.a.description` 等于 `'说明'`。
+- 工具注册后 `toolSpec().parameters` 与 `describe()` 的输出都带字段说明。
+
 ## 依赖关系
 
-1 → 3 是 M05/M02 的前置；4 → 5 → 6 是 M01 的实施顺序。M06 的重新计数依赖 1、2、3 全部落地。
+1 → 3 是 M05/M02 的前置；4 → 5 → 6 是 M01 的实施顺序。7 独立，影响 M04 的工具契约保真。M06 的重新计数依赖 1、2、3 全部落地。

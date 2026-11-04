@@ -27,11 +27,13 @@
         "dist"
     ],
     "scripts": {
-        "build": "yakumo build",
+        "build": "yakumo build && node scripts/build-workers.mjs",
         "clean": "yakumo clean",
         "test": "node --test --experimental-transform-types --import ./tests/setup.ts \"tests/**/*.spec.ts\""
     },
     "dependencies": {
+        "@electric-sql/pglite": "0.5.11",
+        "@electric-sql/pglite-pgvector": "0.0.12",
         "schemastery": "^3.18.0"
     },
     "peerDependencies": {
@@ -46,6 +48,7 @@
         "cordis": "^4.0.0-rc.12",
         "react": "*",
         "react-dom": "*",
+        "rolldown": "1.2.16",
         "typescript": "*"
     },
     "cordis": {

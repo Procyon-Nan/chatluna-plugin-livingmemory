@@ -21,3 +21,12 @@
 - pending: 消息池的历史回填改由框架的可见历史接口按会话键与历史头读取，移除 v1 的频道绑定与 `toBackfillChannelId`；历史头变化（重置、切换、分支）时整池丢弃并按新历史重建，避免旧分支内容混入。
 - pending: 修正回填失败后 `warmup` 不重试的问题：失败时保留实时缓冲并复位状态，下次预热按历史、实时顺序重新入账。
 - pending: 迁移 `message-log`、`message-log-registry`、`message-collector`、`element-text` 四个测试文件共 35 个用例；全套 59 个用例通过，`tsc --noEmit` 无报错。
+- pending: 完成 S4 模型与工具。新增 `src/service/workflows/structured_output.ts`，以 v2 的 `chatluna.extract(schema, …)` 实现结构化输出，保留 v1 的三次尝试、纠正提示措辞与取消传播；v2 无 langchain 的暂存工具调用循环，模型调用失败改为一并重试。
+- pending: 新增 `src/service/prompts/` 四个文件，用 schemastery 重建记忆生成 schema、工具参数说明、提示词 XML 片段与记忆渲染；字段约束说明并入工具描述，规避 v2 `schemasteryToJsonSchemaNode` 丢弃 description 的问题（框架需求见 `doc/framework-requirements.md` 第 7 节）。
+- pending: 新增 `src/service/memory/tools/`，注册检索、读取来源消息、创建、更新、合并、拆分、删除 7 个模型工具；作用域从 `agent.options` 解析，子代理调用按 `permissions.origin` 拒绝；删除 v1 的 Character 预设后缀拼接，v2 Character 引擎已写入自己的预设 id。
+- pending: 新增 `src/service/logging/`，`LivingMemoryLogger` 负责诊断块格式化、凭据脱敏、循环引用处理与日志故障隔离；`invokeLoggedModel` 统一记录模型调用。
+- pending: 从 v1 整体迁移 `src/service/vector_index/` 共 25 个文件，保留 PGlite + pgvector 索引、重建对账、目录切换与 Dream 近邻维护；embedding 层改由 `ctx.chatluna.embed` 提供，数据目录改用 `resolveChatlunaDataDir` 解析 `CHATLUNA_DATA`。
+- pending: 新增 `scripts/build-workers.mjs`，用模板项目的 rolldown 打包 Vector Worker 单文件产物；新增 `src/worker_artifacts.ts` 统一解析产物路径；`package.json` 增加 `@electric-sql/pglite`、`@electric-sql/pglite-pgvector` 依赖与 `rolldown` 开发依赖。
+- pending: 新增 `src/service/app/memory_providers.ts` 接通仓储、后端与向量索引，保持「主数据已提交、索引失败只记警告」的 v1 语义。
+- pending: `src/service.ts` 改为在启动时注册后端、采集与工具并启动向量索引，卸载时先停索引再注销；此前向量索引未启动，记忆写入会因索引未就绪而失败。`src/index.ts` 相应改为调用 `start()`。
+- pending: 新增 `structured-output`、`memory-tools`、`logging`、`update-snapshot-tool`、`vector-index-worker`、`vector-index-hybrid-query`、`vector-index-status-store`、`vector-index-rebuild`、`vector-index-directory-switch` 测试；迁移 `legacy-embedding-migration`、`vector-index-dream-ann`、`vector-index-service`；vitest 的 `vi.spyOn` 改为 `node:test` 的 `mock.method`。全套 153 个用例中 152 个通过，1 个仅 Windows 的目录切换用例跳过；`tsc --noEmit` 无报错。

@@ -13,6 +13,6 @@ export const Config: Schema<Config> = Schema.object({})
 
 export async function apply(ctx: Context) {
     const service = new LivingmemoryService(ctx)
-    ctx.effect(() => service.register())
+    ctx.effect(() => service.start())
     ctx.logger.info('livingmemory loaded')
 }

@@ -31,7 +31,7 @@
 
 ## 代码结构
 
-本项目为 `chatluna-plugin-livingmemory`，位于 ChatLuna v2 模板项目的 `external/livingmemory/`，由模板项目提供开发运行环境。当前处于 S3 采集层完成、S4 模型与工具待开始的阶段。
+本项目为 `chatluna-plugin-livingmemory`，位于 ChatLuna v2 模板项目的 `external/livingmemory/`，由模板项目提供开发运行环境。当前处于 S4 模型与工具完成、S5 工作流待开始的阶段。
 
 ```text
 livingmemory/
@@ -42,23 +42,33 @@ livingmemory/
 ├── tsconfig.json               # 服务端 TypeScript 配置，继承模板项目配置
 ├── tsconfig.client.json        # 客户端 TypeScript 配置，继承模板项目配置
 ├── src/
-│   ├── index.ts                # 插件入口、配置 schema 与依赖声明
-│   ├── service.ts              # Cordis 服务：持有仓储、后端与采集层，并向 ctx.memory 注册
+│   ├── index.ts                # 插件入口、配置 schema、依赖声明与服务启动
+│   ├── service.ts              # Cordis 服务：持有仓储、后端、采集层、向量索引与工具注册
 │   ├── query.ts                # 记忆、快照、任务、画像的列表过滤、分面统计与分页
+│   ├── worker_artifacts.ts     # 解析 Worker 打包产物路径（源码与构建包共用）
 │   ├── contracts/              # 跨模块契约：记忆与任务、工作流、向量索引、管理接口、框架侧待补接口
 │   ├── service/
 │   │   ├── backend.ts          # v2 MemoryBackend 实现，映射到 v1 仓储
 │   │   ├── message_collector.ts # 统一采集层：订阅框架事件，维护每会话消息池
-│   │   ├── app/                # 查询投影等应用层读取
+│   │   ├── app/                # 应用层组装：记忆读写提供者、查询投影
+│   │   ├── logging/            # 诊断日志构造、凭据脱敏与模型调用记录
 │   │   ├── memory/             # 字段规范化、说话人身份、主题标题推导、来源消息、错误类型
+│   │   │   └── tools/          # 记忆工具：检索、增删改合并拆分、快照编辑与注册入口
 │   │   ├── persistence/        # 表定义、条目/快照/任务/画像/人设仓储与事务
+│   │   ├── prompts/            # 提示词骨架：结构化 schema、工具参数说明、记忆渲染
 │   │   ├── shared/             # 串行任务队列与通用工具
 │   │   ├── transcript/         # 消息日志、回填与 ChatBlock 到日志文本的规范化
-│   │   └── workflows/          # 工作流共用组件（当前为任务跟踪器）
+│   │   ├── vector_index/       # PGlite + pgvector 索引：维护、重建、对账、状态与 Worker
+│   │   │   └── worker/         # 索引进程内实现：schema、查询、变更、Dream 近邻
+│   │   └── workflows/          # 工作流共用组件：任务跟踪器、结构化输出调用
 ├── tests/
 │   ├── setup.ts                # 把 node:test 的同名函数装回全局，兼容 v1 测试体
 │   ├── persistence-test-utils.ts # 内存 SQLite 的仓储测试环境
+│   ├── worker-test-utils.ts    # 打包 Vector Worker 并给出产物路径
+│   ├── tool-test-utils.ts      # 工具调用上下文与执行辅助
 │   └── *.spec.ts               # 与源码同期迁移的测试
+├── scripts/
+│   └── build-workers.mjs       # 用 rolldown 打包 Vector Worker 单文件产物
 ├── client/
 │   ├── index.ts                # WebUI 客户端入口，当前注册国际化资源
 │   └── locales/
