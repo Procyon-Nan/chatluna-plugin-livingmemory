@@ -1,0 +1,52 @@
+{
+    "name": "chatluna-plugin-livingmemory",
+    "version": "0.0.0",
+    "description": "ChatLuna plugin livingmemory",
+    "type": "module",
+    "license": "AGPL-3.0-only",
+    "keywords": [
+        "chatluna-plugin"
+    ],
+    "main": "lib/index.js",
+    "types": "lib/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./lib/index.d.ts",
+            "default": "./lib/index.js"
+        },
+        "./package.json": "./package.json",
+        "./client": {
+            "types": "./client/index.ts",
+            "default": "./client/index.ts"
+        }
+    },
+    "files": [
+        "lib",
+        "README.md",
+        "client",
+        "dist"
+    ],
+    "scripts": {
+        "build": "yakumo build",
+        "clean": "yakumo clean"
+    },
+    "dependencies": {
+        "schemastery": "^3.18.0"
+    },
+    "peerDependencies": {
+        "@chatluna/core": "*",
+        "cordis": "^4.0.0-rc.12"
+    },
+    "devDependencies": {
+        "@chatluna/ui-client": "*",
+        "cordis": "^4.0.0-rc.12",
+        "react": "*",
+        "react-dom": "*",
+        "typescript": "*"
+    },
+    "cordis": {
+        "description": {
+            "en": "ChatLuna plugin livingmemory"
+        }
+    }
+}
