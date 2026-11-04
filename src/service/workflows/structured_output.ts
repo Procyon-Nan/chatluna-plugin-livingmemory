@@ -1,15 +1,29 @@
 import type { Schema } from '@chatluna/schema'
 import type { Context } from 'cordis'
+import { ProtocolError } from '@chatluna/ai'
 import type {} from '@chatluna/ai-runtime/ops'
 import type {} from '@chatluna/core'
 import { formatErrorDetails } from '../shared/utils.ts'
+import { formatLogScope, type LivingMemoryLogger } from '../logging/logger.ts'
+import { modelStageLabels } from '../logging/model_calls.ts'
 
 const structuredOutputMaxModelCalls = 3
+
+export interface StructuredOutputLogging {
+    logger: LivingMemoryLogger
+    stage: string
+    presetId: string
+    conversationId: string
+}
 
 /**
  * 结构化输出的重试语义沿用 v1：最多三次模型调用，每次把上一次的错误
  * 与修正要求回给模型。v2 用 `ctx.chatluna.extract` 直接约束 JSON schema
  * 结果，不再构造 langchain 的 agent 与工具循环。
+ *
+ * 只有解析与校验失败进入修正重试：`extract` 在输出缺少 JSON 或未通过
+ * schema 时抛 `ProtocolError`，与 v1 的 `OutputParserException` 同义。
+ * 模型请求本身失败原样抛出，等待调用方的失败语义处理。
  */
 export interface StructuredOutputOptions<T> {
     ctx: Context
@@ -26,6 +40,7 @@ export interface StructuredOutputOptions<T> {
      * 是为了让有同样坏习惯的模型在重试时得到同一条指引。
      */
     stringifiedArrayField?: string
+    logging?: StructuredOutputLogging
 }
 
 export type StructuredOutputResult<T> =
@@ -50,7 +65,8 @@ export async function invokeStructuredOutput<T>(
             const value = await options.ctx.chatluna.extract(options.schema, {
                 prompt,
                 system: options.systemPrompt,
-                ...(options.model === undefined ? {} : { model: options.model })
+                ...(options.model === undefined ? {} : { model: options.model }),
+                ...(options.signal === undefined ? {} : { signal: options.signal })
             })
             options.signal?.throwIfAborted()
             outputs.push(`[attempt ${attempt}]\n${JSON.stringify(value, null, 2)}`)
@@ -61,9 +77,20 @@ export async function invokeStructuredOutput<T>(
             lastError = validationError
         } catch (error) {
             options.signal?.throwIfAborted()
+            if (!(error instanceof ProtocolError)) throw error
             lastError = formatErrorDetails(error)
             outputs.push(`[attempt ${attempt}]\n${lastError}`)
         }
+        options.logging?.logger.diagnosticSummary((fields) => ({
+            event: `${modelStageLabels[options.logging!.stage] ?? options.logging!.stage}结果解析失败`,
+            detail: [
+                formatLogScope(fields),
+                `调用序号：${attempt}`,
+                `原因：${lastError}`
+            ]
+                .filter(Boolean)
+                .join('; ')
+        }))
         correction = formatCorrection(lastError, options.stringifiedArrayField)
     }
 

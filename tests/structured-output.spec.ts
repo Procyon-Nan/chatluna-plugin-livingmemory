@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { ProtocolError } from '@chatluna/ai'
 import { Schema } from '@chatluna/schema'
 import { invokeStructuredOutput } from '../src/service/workflows/structured_output.ts'
 import type { Context } from 'cordis'
@@ -8,7 +9,10 @@ const schema = Schema.object({
     note: Schema.transform(Schema.string(), (value) => value.trim()).optional()
 })
 
-/** 按顺序返回预设响应：值表示成功，Error 表示模型调用失败。 */
+/** v2 的 schema 校验失败由 `extract` 抛 `ProtocolError`，与 v1 的解析失败同义。 */
+const parseFailure = (message: string) => new ProtocolError({ message })
+
+/** 按顺序返回预设响应：值表示成功，Error 表示调用失败。 */
 const createHarness = (responses: (unknown | Error)[]) => {
     const pending = [...responses]
     const prompts: { prompt: string; system: string; model?: string }[] = []
@@ -72,7 +76,7 @@ it('retries results rejected by contextual validation', async () => {
 })
 
 it('retries malformed stringified arrays with direct array guidance', async () => {
-    const { result, prompts } = invoke([new Error('items is not an array'), { items: ['corrected'] }])
+    const { result, prompts } = invoke([parseFailure('items is not an array'), { items: ['corrected'] }])
 
     const resolved = await result
 
@@ -83,22 +87,19 @@ it('retries malformed stringified arrays with direct array guidance', async () =
     assert.ok(prompts[1].prompt.includes('错误 {"items":"[]"}'))
 })
 
-it('propagates model invocation errors after the retry budget', async () => {
+it('propagates model invocation errors without a correction retry', async () => {
     const failure = new Error('model request failed')
-    const { result, prompts } = invoke([failure, failure, failure])
+    const { result, prompts } = invoke([failure])
 
-    const resolved = await result
-
-    assert.equal(resolved.value, null)
-    assert.match(resolved.parseError ?? '', /model request failed/u)
-    assert.equal(prompts.length, 3)
+    await assert.rejects(result, (error) => error === failure)
+    assert.equal(prompts.length, 1)
 })
 
 it('returns a parse error after three invalid structured responses', async () => {
     const { result, prompts } = invoke([
-        new Error('schema mismatch'),
-        new Error('schema mismatch'),
-        new Error('schema mismatch')
+        parseFailure('schema mismatch'),
+        parseFailure('schema mismatch'),
+        parseFailure('schema mismatch')
     ])
 
     const resolved = await result

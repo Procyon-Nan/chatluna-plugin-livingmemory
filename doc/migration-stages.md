@@ -1,6 +1,6 @@
 # 实施阶段划分
 
-状态：草案。更新日期：2026-11-04。总进度见 [迁移方案](migration-plan.md)。
+状态：草案。更新日期：2026-11-05。总进度见 [迁移方案](migration-plan.md)。
 
 本文把 M01—M09 的工作项按"可独立验证"重新切成实施阶段。阶段编号只描述推进顺序，不替代迁移方案中的任务编号；每个阶段的验收仍对应 Mxx-Vy 项。
 
@@ -12,7 +12,7 @@
 | S2 ✅ | 后端适配：实现 `MemoryBackend` 全套方法与注册 | M01-L1、M03 | 原生页面可选到后端，原生工具可增删改查 | 否 |
 | S3 ✅ | 采集层：消息池、回填、去重、游标、纪元 | M05 | 各引擎消息进入同一池 | 是，M05-C1/C2 |
 | S4 ✅ | 模型与工具：langchain 换 `ctx.ai`，zod 换 Schema，工具改注册 | M04 | 单次提取与召回可用真实模型跑通 | 否 |
-| S5 | 工作流：提取、召回、Dream、画像、人设 | M06、M07 | 业务闭环可用，与 v1 行为对照 | 部分，M06-C1 |
+| S5 ✅ | 工作流：提取、召回、Dream、画像、人设 | M06、M07 | 业务闭环可用，与 v1 行为对照 | 部分，M06-C1 |
 | S6 | 调度与任务：让出原生调度、稳定任务 ID、卸载取消 | M01 | 自动流程只触发一次，两个页面任务一致 | 是，M01-C1/C2/C3 |
 | S7 | 管理与导入：WebUI、命令、配置、旧数据导入 | M08 | 管理端可用，旧数据进入新流程 | 否 |
 | S8 | 验收：跨引擎、生命周期、D11 行为对照 | M09 | 迁移完成 | — |
@@ -105,17 +105,29 @@ langchain 在 v1 中被 21 个文件引用，`ctx.ai` 提供 `chatluna.extract(s
 | 装配 | `src/service/app/memory_providers.ts` 接通仓储、后端与索引；`src/service.ts` 启动向量索引，卸载时先停索引再注销 |
 | 测试 | 新增 `structured-output`、`memory-tools`、`logging`、`update-snapshot-tool` 与 5 个向量索引测试；迁移 `legacy-embedding-migration`、`vector-index-dream-ann`、`vector-index-service`；全套 153 个用例中 152 通过、1 个仅 Windows 的目录切换用例跳过；`tsc --noEmit` 无报错 |
 
-**暂未实现**：
-
-| 能力 | 现状 | 补齐阶段 |
-| --- | --- | --- |
-| 提取/召回/Dream 工作流调用工具 | 工具已注册，但尚无工作流驱动它们 | S5 |
-| `searchHybrid` 的生产接入 | 索引已提供混合检索，`providers.searchMemories` 仍走仓储关键词打分 | S5 |
-| 预设级串行写入队列 | `providers` 未接 `SerialTaskQueue`，并发写入未串行化 | S5 |
+**暂未实现**：本阶段遗留的三项（工作流驱动工具、`searchHybrid` 生产接入、预设级串行写队列）已在 S5 补齐。
 
 ### S5 工作流
 
 迁移 `src/service/workflows/`（4701 行）：提取协调器、召回协调器、Dream 聚类与语义图谱、Dream session 与 worker、结构化输出。保留 v1 的窗口、分块、交流边界与失败处理，详见 [提取窗口与分块 Note](../.agent/note/proposed/architecture/2026-11-03-extraction-window-and-chunking.md)。
+
+**已完成**（2026-11-05）。落地内容与验收依据：
+
+| 项 | 结果 |
+| --- | --- |
+| 内部工具循环 | 新增 `workflows/tool_call.ts` 与 `workflows/tool_loop.ts`，自行驱动 `ctx.chatluna.chat`：一次模型调用 → 解析零个或多个工具调用 → 执行 → 追加结果。召回与 Dream 共用同一实现，差异由 `maxModelCalls`、`multipleToolCalls`、`conclusiveTools`、`prepareMessages`、`onRound` 等选项表达 |
+| 不使用 v2 Agent | `AgentRegistry` 的 `AGENT_INJECT` 要求 9 个服务全部在场，本插件只注入 4 个；`chat-observer` 会索引每个带 `conversationKey` 的 agent，内部会话会污染用户消息池。Dream 的批次状态机、逐轮推进消息与历史压缩也无法用 turn driver 表达 |
+| 提取 | `workflows/extraction/` 保留 v1 的窗口、吸收预算、锚定筛选、旁听切片与连续失败三次放弃；失败处理区分「未达上限中断本次排干」与「达上限记任务并推进游标」 |
+| 召回 | `workflows/recall/` 的代理式召回改为 `LivingMemoryToolLoop`，模型调用上限 6 次，检索、更新快照、pass 三个工具以闭包持有作用域 |
+| Dream | `workflows/dream/` 完整迁移聚类、语义图谱、会话与 Worker；会话工具改为 `LivingMemoryLoopTool`，批次状态、跳过条件与历史压缩沿用 v1 |
+| 画像与人设 | `service/user_profile.ts` 与 `service/memory/preset_persona.ts` 经 `chatluna.extract` 取结构化结果；人设卡片新增 `resolvePresetAssistantLabel`，v2 的 Character 引擎直接用自己的预设 id，不再做后缀裁剪 |
+| 结构化输出 | 只有解析与校验失败（`extract` 抛 `ProtocolError`）进入三次修正重试；模型请求本身失败原样抛出。此前实现把模型错误也纳入重试，导致人设卡片的 `invoke-failed` 分支不可达 |
+| 写路径统一 | `app/memory_providers.ts` 删除自有写入实现，改为全部委托 `LivingMemoryMutationService`：预设级串行队列、落库后同步索引、索引失败转警告的语义只在那一处实现 |
+| 装配 | `src/service.ts` 装配变更服务、混合检索、人设卡片、用户画像与三个协调器；启停顺序沿用 v1（先停 Dream 与画像，再停 Worker 与索引） |
+| Worker 打包 | `scripts/build-workers.mjs` 增加 `dream-semantic-worker` 入口 |
+| 测试 | 迁移并适配 `agentic-recall`、`extraction-coordinator`、`recall-coordinator`、`indexed-recall`、`indexed-memory-mutations`、`dream-*`、`post-extraction-dream`、`user-profile`、`preset-persona` 等 20 个文件；`tests/setup.ts` 增加 `it.each`、`vi.fn`、`expect`（含 `objectContaining`）兼容层。全套 338 个用例中 337 通过、1 个仅 Windows 的目录切换用例跳过；`tsc --noEmit` 无报错 |
+
+**测试适配中的接口差异**：`MessageLogRegistry.register` 的第二参数由 v1 的「绑定 + bot」改为 `ConversationHistorySource`，回填改由框架历史接口读取；`chatluna.rerank(query, documents, options)` 返回与输入同序的 `scores`，替代 v1 langchain Reranker 的 `(index, relevanceScore)` 对；会话工具直接返回对象，不再返回 JSON 字符串。
 
 ### S6 调度与任务
 

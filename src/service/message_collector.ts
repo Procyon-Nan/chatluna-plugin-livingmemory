@@ -37,7 +37,7 @@ export class MessageCollector {
     return this.registry.lastN(conversationKey, count)
   }
 
-  after(conversationKey: string, seq: number) {
+  afterSeq(conversationKey: string, seq: number) {
     return this.registry.afterSeq(conversationKey, seq)
   }
 

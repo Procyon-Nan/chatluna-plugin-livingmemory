@@ -17,3 +17,4 @@ export const ensureWorkersBuilt = () => {
     }
     return workerBuild
 }
+export const dreamWorkerPath = resolve(projectRoot, 'lib', 'dream-semantic-worker.mjs')

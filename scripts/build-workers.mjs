@@ -12,7 +12,8 @@ import { rolldown } from 'rolldown'
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outputDirectory = resolve(projectRoot, 'lib')
 const entries = [
-    ['vector-index-worker', 'src/service/vector_index/worker/entry.ts', ['@electric-sql/pglite', '@electric-sql/pglite-pgvector']]
+    ['vector-index-worker', 'src/service/vector_index/worker/entry.ts', ['@electric-sql/pglite', '@electric-sql/pglite-pgvector']],
+    ['dream-semantic-worker', 'src/service/workflows/dream/worker/entry.ts', ['@electric-sql/pglite', '@electric-sql/pglite-pgvector']]
 ]
 
 await mkdir(outputDirectory, { recursive: true })

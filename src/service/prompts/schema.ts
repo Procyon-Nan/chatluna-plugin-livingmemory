@@ -27,6 +27,16 @@ export const requiredText = (description: string) =>
         .required()
         .description(description)
 
+/** 可省略的文本。字段缺省时不参与校验；一旦提交，仍要求去空白后非空。 */
+export const optionalText = (description: string) =>
+    Schema.transform(Schema.string(), (value: string) => {
+        const text = value.trim()
+        if (text.length === 0) {
+            throw new Error('expected a non-empty string')
+        }
+        return text
+    }).description(description)
+
 const memoryTypeDoc = [
     `记忆类型，取以下之一（${memoryEntryTypes.join('|')}）：`,
     '- identity：用户或是你自己的稳定身份信息，如身份、角色、长期属性。',

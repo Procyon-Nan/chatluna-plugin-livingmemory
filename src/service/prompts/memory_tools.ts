@@ -1,5 +1,5 @@
 import { Schema } from '@chatluna/schema'
-import { generatedMemorySchema, memoryFieldDocs, requiredText } from './schema.ts'
+import { generatedMemorySchema, memoryFieldDocs, optionalText, requiredText } from './schema.ts'
 
 const memorySearchMaxTextCount = 3
 const memorySearchMaxKeywordCount = 3
@@ -12,10 +12,10 @@ export const snapshotMaxLineLength = 100
  * 的字段说明都并入 `description`（见 `doc/framework-requirements.md` 第 7 项）。
  * `withParameterDocs` 把参数说明逐项接在工具描述之后。
  */
-export interface LivingMemoryToolDoc {
+export interface LivingMemoryToolDoc<T = any> {
     name: string
     description: string
-    schema: Schema
+    schema: Schema<T>
 }
 
 const withParameterDocs = (
@@ -248,7 +248,7 @@ export const memoryCheckedTool: LivingMemoryToolDoc = {
     })
 }
 
-export const extractionResultTool: LivingMemoryToolDoc = {
+export const extractionResultTool = {
     name: 'living_memory_extraction_result',
     description: withParameterDocs(
         ['记忆提取结果提交工具，当你需要提交从聊天记录中提取到的长期记忆时使用此工具。'],
@@ -263,9 +263,9 @@ export const extractionResultTool: LivingMemoryToolDoc = {
             .description('本次提取的长期记忆；提取数量为零时提交空数组。'),
         reason: requiredText('提取这些记忆/不提取记忆的简短原因。')
     })
-}
+} satisfies LivingMemoryToolDoc
 
-export const userProfileResultTool: LivingMemoryToolDoc = {
+export const userProfileResultTool = {
     name: 'living_memory_user_profile_result',
     description: withParameterDocs(
         ['人物画像更新工具，当你需要提交人物画像的更新或保留结果时使用此工具。'],
@@ -273,7 +273,7 @@ export const userProfileResultTool: LivingMemoryToolDoc = {
             ['action', 'update 表示生成或更新人物画像；keep 表示保留已有画像。'],
             [
                 'content',
-                '完整的新人物画像正文，长度不超过 300 个字符；action 为 update 时必须填写。'
+                '完整的新人物画像正文，长度不超过 300 个字符；action 为 update 时必须填写，action 为 keep 时可省略。'
             ],
             ['reason', '更新或保留人物画像的简短原因。']
         ]
@@ -282,12 +282,14 @@ export const userProfileResultTool: LivingMemoryToolDoc = {
         action: Schema.union(['update', 'keep'])
             .required()
             .description('update 表示生成或更新人物画像；keep 表示保留已有画像'),
-        content: requiredText('完整的新人物画像正文，长度不超过 300 个字符。'),
+        content: optionalText(
+            '完整的新人物画像正文，长度不超过 300 个字符；action 为 update 时必须填写'
+        ),
         reason: requiredText('更新或保留人物画像的简短原因')
     })
-}
+} satisfies LivingMemoryToolDoc
 
-export const personaCardResultTool: LivingMemoryToolDoc = {
+export const personaCardResultTool = {
     name: 'living_memory_persona_card_result',
     description: withParameterDocs(
         ['人设卡片删减工具，当你需要按行删减预设原文内容时使用此工具。'],
@@ -298,4 +300,4 @@ export const personaCardResultTool: LivingMemoryToolDoc = {
             .required()
             .description('要删除的行号列表，编号从 0 开始；保留全部内容时提交空数组。')
     })
-}
+} satisfies LivingMemoryToolDoc

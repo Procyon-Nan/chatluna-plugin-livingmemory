@@ -30,3 +30,23 @@
 - pending: 新增 `src/service/app/memory_providers.ts` 接通仓储、后端与向量索引，保持「主数据已提交、索引失败只记警告」的 v1 语义。
 - pending: `src/service.ts` 改为在启动时注册后端、采集与工具并启动向量索引，卸载时先停索引再注销；此前向量索引未启动，记忆写入会因索引未就绪而失败。`src/index.ts` 相应改为调用 `start()`。
 - pending: 新增 `structured-output`、`memory-tools`、`logging`、`update-snapshot-tool`、`vector-index-worker`、`vector-index-hybrid-query`、`vector-index-status-store`、`vector-index-rebuild`、`vector-index-directory-switch` 测试；迁移 `legacy-embedding-migration`、`vector-index-dream-ann`、`vector-index-service`；vitest 的 `vi.spyOn` 改为 `node:test` 的 `mock.method`。全套 153 个用例中 152 个通过，1 个仅 Windows 的目录切换用例跳过；`tsc --noEmit` 无报错。
+## 2026-11-05 version:0.0.0
+
+- pending: 完成 S5 工作流。新增 `src/service/workflows/tool_call.ts`（工具契约与调用结果渲染）与 `src/service/workflows/tool_loop.ts`（内部工具循环），以 `ctx.chatluna.chat` 自行驱动；召回与 Dream 共用该实现，差异由调用次数上限、多工具调用策略、结论工具、消息准备与轮次回调等选项表达。
+- pending: 内部工作流不使用 v2 的 `ctx.agents`：`AGENT_INJECT` 要求 9 个服务全部在场，本插件只注入 4 个；`chat-observer` 会索引每个带 `conversationKey` 的 agent，内部会话会污染用户消息池；Dream 的批次状态机、逐轮推进消息与历史压缩也无法用 turn driver 表达。
+- pending: 迁移 `src/service/workflows/extraction/`，保留 v1 的窗口阈值、吸收预算、锚定筛选、旁听切片与连续失败三次放弃；失败处理区分「未达上限中断本次排干」与「达上限记任务并推进游标」。
+- pending: 迁移 `src/service/workflows/recall/`，代理式召回改用内部工具循环，单次召回模型调用上限 6 次；混合检索经 `ctx.chatluna.rerank(query, documents, options)` 重排，按与输入同序的 `scores` 取各查询短语最大值。
+- pending: 迁移 `src/service/workflows/dream/`，含聚类、语义图谱、会话与 Worker（`dream-semantic-worker.mjs`）；Dream 会话工具改为纯执行器，批次状态、跳过条件与历史压缩沿用 v1。
+- pending: 新增 `src/service/memory/preset_persona.ts` 人设卡片服务与 `src/service/prompts/persona_card.ts` 提示词；新增 `resolvePresetAssistantLabel`，v2 的 Character 引擎直接用自己的预设 id，不再做「（Character）」后缀裁剪。
+- pending: 新增 `src/service/user_profile.ts` 用户画像服务，经 `chatluna.extract` 取结构化结果；画像门槛按实际读取到的活跃记忆数判定，`keep` 结果记录本次审阅输入以避免重复询问模型。
+- pending: 修正 `src/service/workflows/structured_output.ts` 的重试范围：只有解析与校验失败（`extract` 抛 `ProtocolError`）进入三次修正重试，模型请求本身失败原样抛出。此前实现把模型错误一并重试，导致人设卡片的 `invoke-failed` 分支不可达。
+- pending: `src/service/app/memory_providers.ts` 删除自有写入实现，改写为全部委托 `LivingMemoryMutationService`；预设级串行队列、落库后同步索引、索引失败转警告的语义只在变更服务一处实现。
+- pending: `src/service.ts` 完成工作流装配：变更服务、混合检索、人设卡片、用户画像、Dream 服务与协调器、召回协调器、提取协调器全部接入；启停顺序沿用 v1，先停 Dream 与画像，再停语义分组 Worker 与向量索引。
+- pending: `scripts/build-workers.mjs` 增加 `dream-semantic-worker` 入口；`src/service/message_collector.ts` 的 `after` 更名为 `afterSeq`，与注册表读取面同名。
+- pending: 修正 Dream 会话工具与 v1 的行为差异：更新与删除在「事实已落库、仅索引同步失败」时按已处理记录并返回警告；删除 0 条时抛 `MemoryInputError`；`checked_memory` 按去重后的 ID 记录覆盖并回传 `checkedMemoryIds`。
+- pending: `tests/setup.ts` 增加 `expect` 兼容层（`toBe`、`toEqual`、`toContain`、`toHaveLength`、`not`、`objectContaining`），支撑从 vitest 直接迁移的测试体。
+- pending: 迁移并适配 `agentic-recall`、`extraction-coordinator`、`recall-coordinator`、`indexed-recall`、`indexed-memory-mutations`、`dream-candidates`、`dream-clustering`、`dream-refinement`、`dream-repository`、`dream-session`、`dream-worker`、`dream-workflows`、`post-extraction-dream`、`user-profile`、`preset-persona` 等测试；`extraction-coordinator` 的回填夹具改用 `ConversationHistorySource`，`indexed-recall` 的重排夹具改用 `chatluna.rerank`。
+- pending: 全套 338 个用例中 337 通过、1 个仅 Windows 的目录切换用例跳过，`tsc --noEmit` 无报错。
+- pending: 同步 `AGENTS.md` 目录树、`doc/migration-stages.md` 的 S5 交付物与阶段标记、`doc/migration-plan.md` 的执行清单与进度记录。
+- pending: 新增 `.agent/note/implemented/architecture/2026-11-05-internal-tool-loop.md`，记录召回与 Dream 自行驱动模型调用的工具循环，以及不接入 v2 Agent 层的三条依据（服务依赖、观测层污染、批次状态机）；同步 `AGENTS.md` 文档索引。
+- pending: `package.json` 补齐源码实际 import 的 `@chatluna/*` 包声明：新增 `ai-runtime`、`memory`、`message`、`preset`、`schema`、`tool`、`utils` 七项 peer 依赖。此前只声明 `ai`、`core`、`cordis` 与数据库插件，模板根目录 `yarn yakumo build` 会在 rolldown 的外部依赖校验处以 `Missing dependency` 失败。
