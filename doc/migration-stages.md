@@ -14,10 +14,11 @@
 | S4 ✅ | 模型与工具：langchain 换 `ctx.ai`，zod 换 Schema，工具改注册 | M04 | 单次提取与召回可用真实模型跑通 | 否 |
 | S5 ✅ | 工作流：提取、召回、Dream、画像、人设 | M06、M07 | 业务闭环可用，与 v1 行为对照 | 部分，M06-C1 |
 | S6 ✅ | 调度与任务：让出原生调度、稳定任务 ID、卸载取消 | M01 | 自动流程只触发一次，两个页面任务一致 | 是，M01-C1/C2/C3 |
+| S6.5 ✅ | 采集与触发收尾：修加载阻塞、采集改拉取、接入会话钩子 | M05、M06 | 插件正常加载，回复后触发提取，注入出现在本轮请求 | 否 |
 | S7 | 管理与导入：WebUI、命令、配置、旧数据导入 | M08 | 管理端可用，旧数据进入新流程 | 否 |
 | S8 | 验收：跨引擎、生命周期、D11 行为对照 | M09 | 迁移完成 | — |
 
-S1、S2 与框架侧无关，可立即开始。S3 依赖统一采集与交付归属接口，S6 依赖调度归属与任务受理接口，对应需求见 [框架侧接口需求](framework-requirements.md)。
+S1、S2 与框架侧无关，可立即开始。S3 依赖统一采集与交付归属接口，S6 依赖调度归属与任务受理接口，对应需求见 [框架侧接口需求](framework-requirements.md)。S6.5 不需要框架侧新增接口：采集走 `chat_observer` 的现有拉取面，注入与触发走 `ctx.agents.prepareStep` 与 `chatluna/agent-turn`。
 
 ## 各阶段交付物
 
@@ -149,7 +150,22 @@ langchain 在 v1 中被 21 个文件引用，`ctx.ai` 提供 `chatluna.extract(s
 
 **框架侧未就绪时的行为**：`scheduling` 与任务面是插件侧的声明与读取入口，框架未读取时原生调度仍会运行——此时同一输入可能触发两次提取。该状态只出现在框架接口落地前，验收要求以 M01-V1 为准。
 
-**未纳入本阶段**：召回快照与画像注入到各引擎的上下文接入（M06-C1）属于执行时注入点，与调度归属分属不同接口；随框架侧 `prepareStep` / `chatluna/prompt-submit` 接入方案确定后处理。
+**未纳入本阶段**：召回快照与画像注入到各引擎的上下文接入（M06-C1）属于执行时注入点，与调度归属分属不同接口；已在 S7 之前的采集与触发收尾中落地，见下节。
+
+### S6.5 采集与触发收尾
+
+S3 与 S5 各自完成单元级验证但拼不到一起：插件整体不加载，召回与提取也没有触发点。本节收尾这两处缺口，依据见 [会话钩子与采集层 Note](../.agent/note/proposed/architecture/2026-11-05-session-hooks-and-collector.md)。
+
+**已完成**（2026-11-05）。
+
+| 项 | 结果 |
+| --- | --- |
+| 加载阻塞 | `src/index.ts` 的 `inject` 列有 v2 不存在的 `chatluna_collector`，cordis 在依赖缺失时把 fiber 置为 `INACTIVE`，`apply` 从未执行。改为实际存在的 `chatluna`、`memory`、`database`、`chat_observer`、`agents` |
+| 采集层 | `MessageCollector` 的数据源换成 `ctx.chat_observer` 的 `recentOfConversation` 与 `identityOfConversation`，由触发点按需拉取；跳过机器人 `self` 回声，回复改由 `recordReplies` 在轮次结束时从 `agent.session.messages()` 记一次 |
+| 会话历史 | 新增 `transcript/message_log/session_history.ts`：会话 `ChatMessage` → 日志条目，跳过带 `form` 的注入消息。`recallWindow` 在池内不足时用它补足——观察层回填不进 `observed` 缓冲 |
+| 会话钩子 | 新增 `session_hooks.ts`：`prepareStep(order 870)` 同步消息池、触发召回并注入快照与画像（只在该轮第一步）；`chatluna/agent-turn` 在 `completed` 时记录回复并调度提取 |
+| 群名 | 提取来源标签取 `ctx.chat.environmentOf(sessionId)?.guildName`，与提示词渲染同源；取不到时用群号代替 |
+| 测试 | 新增 `session-hooks`；`message-collector` 改为 `chat_observer` 形状的替身并补充会话历史补窗用例。全套 365 个用例中 364 通过、1 个仅 Windows 的目录切换用例跳过；`tsc --noEmit` 无报错，构建与 Worker 打包成功 |
 
 ### S7 管理与导入
 

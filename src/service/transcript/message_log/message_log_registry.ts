@@ -89,6 +89,11 @@ export class MessageLogRegistry {
     return this.conversations.get(conversationId)?.warm ?? false
   }
 
+  /** 该会话是否已建池。 */
+  has(conversationId: string): boolean {
+    return this.conversations.has(conversationId)
+  }
+
   /** 捕获下一条实时消息之前的边界，回填完成后读取最终序号。 */
   captureCursor(conversationId: string): () => number {
     const entry = this.conversations.get(conversationId)!

@@ -7,6 +7,10 @@ import type {} from 'cordis'
  * 这些契约对应 `doc/framework-requirements.md` 中的 M05-C1、M05-C2、M02-C1 与
  * M06-C1。上游落地后，把这里的本地声明删掉、改为从 `@chatluna/*` 导入即可；
  * 形状保持与需求文档一致，是为了让那次替换只是一行 import 的变化。
+ *
+ * 采集不在这里声明服务：`chat_observer` 已经提供了可用的拉取接口，采集层
+ * 直接依赖它的 `recentOfConversation` 与 `identityOfConversation`。只有
+ * 「消息已入池」事件仍是缺口，见 `2026-11-05-session-hooks-and-collector.md`。
  */
 
 /** 一条进入统一采集的消息（M05-C1）。 */
@@ -64,21 +68,6 @@ export type ConversationChangeEvent = ConversationChange & {
 }
 
 /**
- * 插件从 ChatLuna v2 取得的公共入口。实现由框架侧提供，插件只依赖该形状。
- */
-export interface ChatLunaCollector {
-  /** 订阅统一采集事件（M05-C1）。 */
-  observe(listener: (message: ObservedMessageEvent) => void): () => void
-  /** 订阅实际交付事件（M05-C2）。 */
-  delivered(listener: (reply: DeliveredReply) => void): () => void
-  /** 订阅会话与预设变化（M02-C1）。 */
-  changed(listener: (event: ConversationChangeEvent) => void): () => void
-  readonly history: HistoryReader
-  /** 无活跃 Agent 时也成立的会话归属查询。 */
-  attribution(conversationKey: string): { sessionId: string; presetId: string } | undefined
-}
-
-/**
  * 后端自动流程归属声明（M01-C1）。
  *
  * `true` 表示该自动入口由后端负责：原生不再建游标、不建定时器、不做阈值判断，
@@ -95,8 +84,3 @@ export interface MemoryBackendScheduling {
   readonly recall?: boolean
 }
 
-declare module 'cordis' {
-  interface Context {
-    chatluna_collector: ChatLunaCollector
-  }
-}

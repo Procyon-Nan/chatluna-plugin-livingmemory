@@ -1,6 +1,6 @@
 # M05：消息池维护方案
 
-设计状态：**草案**。实施状态：**S3 采集层已落地**。验收状态：**待验证**。
+设计状态：**草案**。实施状态：**S3 采集层已落地，S6.5 改为拉取 `chat_observer`**。验收状态：**待真实宿主验证**。
 
 更新日期：2026-11-03。总进度见 [迁移方案](migration-plan.md)。
 
@@ -40,6 +40,8 @@
 - `chat/core/src/session.ts` 的发送事件携带成功发送的消息 ID 和来源分类；具体执行归属与历史分支关联还需要在公共契约中补齐。
 
 以上路径均位于 `packages/`。建议以现有公共接入和 observer 为基础，提供 LivingMemory 可订阅的规范化消息接口。接口需要覆盖旁听、实际交付和 Web/API 入口；具体事件名称、字段及接入位置继续细化。
+
+**实施结果（S6.5）**：观察层没有「消息已入池」的公共事件，因此采集改为拉取式——`MessageCollector.sync` 在会话钩子里调用 `recentOfConversation` 读取通道缓冲，按消息号去重后入池；机器人自身的 `self` 回声跳过，回复由 `recordReplies` 从 `agent.session.messages()` 记录一次。观察层的回填不写入 `observed` 缓冲，召回窗口因此由 `recallWindow` 在池内不足时用会话历史补足（`transcript/message_log/session_history.ts`）。仍待框架侧补充的只有推送事件，用于旁听消息在没有任何后续轮次时也能入池。
 
 ## v2 维护草案
 

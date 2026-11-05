@@ -8,9 +8,10 @@
 
 **当前事实**
 
-- `chat/observer/src/service.ts` 在 `message`、`middleware`、`chat/before-receive`、`chat/receive`、`send` 上被动观察，只对外暴露拉取式 `recentOfConversation(key, limit)` 与 `channelOf`，没有“消息已入池”的公共事件。
+- `chat/observer/src/service.ts` 在 `message`、`middleware`、`chat/before-receive`、`chat/receive`、`send` 上被动观察，只对外暴露拉取式 `recentOfConversation(key, limit)`、`identityOfConversation(key)` 与 `channelOf`，没有“消息已入池”的公共事件。
 - `ObservedMessage` 含 `id`、`cid`、`routeId`、`platformMessageId`、`time`、`userId`、`name`、`self`、`backfilled`、`content`，不含会话键、历史 session 和实际预设。
 - 没有活跃 Agent 时消息仍会被 `_onMessage` 记入通道缓冲，但消费方无法得到通知。
+- 回填由观察层自己完成（`_backfill`），以 `when: 'quiet'` 送进 agent 会话，**不写入 `channel.observed`**；`recentOfConversation` 因此只能读到实时消息。
 
 **需要补充**
 
@@ -176,12 +177,14 @@ readonly scheduling = { extract: true, dream: true, recall: true }
 
 | 项 | 插件侧 | 框架侧 |
 | --- | --- | --- |
-| 1 统一消息采集 | 已按契约形状实现（S3） | 待补 |
-| 2 交付归属 | 已按契约形状实现（S3） | 待补 |
-| 3 会话与预设变化 | 已按契约形状实现（S3） | 待补 |
+| 1 统一消息采集 | 已改用 `chat_observer` 拉取（S7），只剩入池事件待补 | 待补 |
+| 2 交付归属 | 回复改从 `agent.session` 末条 assistant 取（S7），不再依赖交付事件 | 待补 |
+| 3 会话与预设变化 | 按历史头变化丢弃整池（S7） | 待补 |
 | 4 调度归属 | 已声明 `scheduling`（S6） | 待补：原生读取该字段并让出调度 |
 | 5 任务受理、状态与取消 | 已实现 `cancelled`、`getJob`、`cancelJob`、`watchJobs`（S6） | 待补：`runJob` 接受预派 `jobId` 与信号、`extract` 接受信号、取消入口 |
 | 6 原生任务页读取后端任务 | 已实现投影与订阅面（S6） | 待补：`listJobs` 合并后端任务、`memory.jobs.run` 识别后端任务 |
 | 7 工具 schema 说明字段 | 已把说明并入工具描述规避（S4） | 待补 |
 
 插件侧实现在 `src/contracts/framework.ts` 声明形状，框架落地后改为从 `@chatluna/*` 导入；`src/service/app/job_view.ts`、`job_surface.ts` 与 `LivingMemoryBackend.scheduling` 是第 4—6 项对应的落点。
+
+第 1 项的实际影响已经缩小：采集改走 `chat_observer` 的拉取接口后，插件能在没有该事件的情况下维护消息池；缺口只剩“未触发回复且无后续轮次的旁听消息不会被感知”与“回填不进入观测缓冲，召回窗口需从 `agent.session` 补足”。第 2 项同理——回复正文改从 `agent.session.messages()` 的末条 assistant 取，交付事件只影响分句发送时的逐段消息号归并。

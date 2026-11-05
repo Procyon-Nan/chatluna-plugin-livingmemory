@@ -26,6 +26,7 @@ import { LivingMemoryDreamJobRunner } from './service/workflows/dream/job_runner
 import { LivingMemoryDreamCoordinator } from './service/workflows/dream/coordinator.ts'
 import { LivingMemoryJobTracker } from './service/workflows/job_tracker.ts'
 import { LivingMemoryJobSurface } from './service/app/job_surface.ts'
+import { LivingMemorySessionHooks } from './service/session_hooks.ts'
 import type { LivingMemoryConfig } from './contracts/workflows.ts'
 
 declare module 'cordis' {
@@ -84,6 +85,7 @@ export default class LivingmemoryService extends Service {
     readonly jobs: LivingMemoryJobSurface
     readonly providers: LivingMemoryMemoryProviders
     readonly logger: LivingMemoryLogger
+    private readonly sessionHooks: LivingMemorySessionHooks
     private readonly dreamWorker: LivingMemoryDreamWorkerClient
     private readonly dream: LivingMemoryDreamService
     private config: LivingMemoryServiceConfig
@@ -95,7 +97,7 @@ export default class LivingmemoryService extends Service {
         this.logger = new LivingMemoryLogger(ctx.logger('livingmemory'), () => this.config.debug)
         this.repository = new LivingMemoryRepository(ctx)
         this.backend = new LivingMemoryBackend(this.repository)
-        this.collector = new MessageCollector(ctx.chatluna_collector)
+        this.collector = new MessageCollector(ctx.chat_observer)
         this.vectorIndex = new LivingMemoryVectorIndexService(ctx, config, this.repository, this.logger)
         this.mutations = new LivingMemoryMutationService(
             this.repository,
@@ -194,6 +196,15 @@ export default class LivingmemoryService extends Service {
             cancelJob: (jobId) => this.cancelJob(jobId),
             logger: this.logger
         })
+        this.sessionHooks = new LivingMemorySessionHooks(ctx, {
+            collector: this.collector,
+            recall: this.recallCoordinator,
+            extraction: this.extractionCoordinator,
+            userProfiles: this.userProfiles,
+            repository: this.repository,
+            logger: this.logger,
+            config
+        })
     }
 
     /**
@@ -220,10 +231,11 @@ export default class LivingmemoryService extends Service {
         return await this.repository.cancelJob(jobId, 'cancel requested')
     }
 
-    /** 注册后端、采集订阅与记忆工具；插件卸载时随 effect 一并注销。 */
+    /** 注册后端、采集订阅、会话钩子与记忆工具；插件卸载时随 effect 一并注销。 */
     private register(): Disposable {
         const unregister = this.ctx.memory.backend(this.backend.id, () => this.backend)
         const stopCollecting = this.collector.start()
+        const stopHooks = this.sessionHooks.register()
         const tools = registerLivingMemoryTools(this.ctx, this.providers, {
             enabled: this.config.enabledMemoryTools,
             createToolMaxMemories: this.config.memoryCreateToolMaxMemories,
@@ -231,6 +243,7 @@ export default class LivingmemoryService extends Service {
         })
         return () => {
             for (const dispose of tools) dispose()
+            stopHooks()
             stopCollecting()
             unregister()
         }

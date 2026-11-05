@@ -58,3 +58,10 @@
 - pending: 提取与召回协调器增加 `stop()`：卸载时停止接收新触发、取消在途模型调用并等待任务结算。取消不记失败任务、不推进游标、不提交尚未落库的结果；召回的执行器与提取器顺带补上 `AbortSignal` 参数。
 - pending: `src/service.ts` 新增任务取消路由与 `jobs` 暴露：Dream 交由协调器中止并等结算，`index` 任务返回不可取消（运行在维护队列内，标记终态会与运行器收尾互相覆盖），提取与召回残留的未结束行直接置终态。卸载顺序改为先并行停止 Dream、召回、提取与画像，再停止语义分组 Worker 与向量索引。
 - pending: 新增 `tests/job-surface.spec.ts` 覆盖任务投影与任务面，并补充 `job-repository`（取消、拒绝已结束任务、订阅通知）、`dream-workflows`（单任务取消、停止按失败收尾、拒绝已结束任务）、`extraction-coordinator`、`recall-coordinator` 与 `backend` 的取消与调度声明用例；全套 354 个用例中 353 通过、1 个仅 Windows 的目录切换用例跳过，`tsc --noEmit` 无报错。
+- pending: 修正插件整体不加载的问题。`src/index.ts` 的 `inject` 列有 `chatluna_collector`，该服务在 ChatLuna v2 中不存在（模板依赖与 v2 源码中匹配数为 0），cordis 在依赖缺失时把 fiber 置为 `INACTIVE`，`apply` 从未执行；移除该依赖并改列实际存在的 `chat_observer` 与 `agents`。
+- pending: `src/service/message_collector.ts` 改为拉取式采集：数据源换成 `ctx.chat_observer` 的 `recentOfConversation` 与 `identityOfConversation`，由触发点按需同步；跳过机器人自身的 `self` 回声，回复改由 `recordReplies` 在轮次结束时从 `agent.session.messages()` 的末条 assistant 记录一次，避免同一段内容双份入池。
+- pending: 新增 `src/service/transcript/message_log/session_history.ts`，把会话中的 `ChatMessage` 转成日志条目，跳过带 `form` 的系统注入消息；`MessageCollector.recallWindow` 在池内条目不足时用它补足召回窗口——观察层的回填历史不进入 `observed` 缓冲，冷启动首轮只能从会话历史取。
+- pending: 新增 `src/service/session_hooks.ts`，把 v1 的 `chatluna/before-chat` 与 `chatluna/after-chat` 接到 v2：`ctx.agents.prepareStep(order 870)` 负责同步消息池、触发召回并注入快照与画像，只在该轮第一步执行；`chatluna/agent-turn` 在 `reason` 为 `completed` 时记录回复并调度提取。提取来源标签的群名取 `ctx.chat.environmentOf(sessionId)?.guildName`，取不到时用群号代替。
+- pending: `src/service.ts` 构造采集层时注入 `ctx.chat_observer`，注册会话钩子并随插件卸载注销；`src/contracts/framework.ts` 删除本插件自行声明的 `ChatLunaCollector`，保留其余框架需求形状。
+- pending: 新增 `tests/session-hooks.spec.ts`，重写 `tests/message-collector.spec.ts` 为 `chat_observer` 形状的测试替身并补充会话历史补窗用例；`message_log_registry.ts` 增加 `has()`。全套 365 个用例中 364 通过、1 个仅 Windows 的目录切换用例跳过，`tsc --noEmit` 无报错，`yarn yakumo build` 与 Worker 打包成功。
+- pending: 同步 `AGENTS.md` 目录树与文档索引、`doc/framework-requirements.md` 第 1 项与实施状态表、`.agent/note/proposed/architecture/2026-11-05-session-hooks-and-collector.md` 的落地记录与风险。

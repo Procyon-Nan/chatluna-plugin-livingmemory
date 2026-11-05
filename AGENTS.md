@@ -31,7 +31,7 @@
 
 ## 代码结构
 
-本项目为 `chatluna-plugin-livingmemory`，位于 ChatLuna v2 模板项目的 `external/livingmemory/`，由模板项目提供开发运行环境。当前处于 S6 调度与任务完成、S7 管理与导入待开始的阶段。
+本项目为 `chatluna-plugin-livingmemory`，位于 ChatLuna v2 模板项目的 `external/livingmemory/`，由模板项目提供开发运行环境。当前处于 S6.5 采集与触发收尾完成、S7 管理与导入待开始的阶段。
 
 ```text
 livingmemory/
@@ -50,7 +50,8 @@ livingmemory/
 │   ├── service/
 │   │   ├── backend.ts          # v2 MemoryBackend 实现，映射到 v1 仓储
 │   │   ├── user_profile.ts     # 人物画像生成、审阅与注入渲染
-│   │   ├── message_collector.ts # 统一采集层：订阅框架事件，维护每会话消息池
+│   │   ├── message_collector.ts # 统一采集层：拉取 chat_observer 通道缓冲，维护每会话消息池
+│   │   ├── session_hooks.ts    # 会话钩子：prepareStep 注入与召回、agent-turn 记录回复并触发提取
 │   │   ├── app/                # 应用层组装：记忆读写提供者、变更服务、查询投影、任务视图与任务面
 │   │   ├── logging/            # 诊断日志构造、凭据脱敏与模型调用记录
 │   │   ├── memory/             # 字段规范化、说话人身份、主题标题推导、来源消息、人设卡片
@@ -60,7 +61,7 @@ livingmemory/
 │   │   ├── persistence/        # 表定义、条目/快照/任务/画像/人设仓储与事务
 │   │   ├── prompts/            # 提示词骨架：结构化 schema、工具参数说明、记忆渲染
 │   │   ├── shared/             # 串行任务队列与通用工具
-│   │   ├── transcript/         # 消息日志、回填、转写与 ChatBlock 到日志文本的规范化
+│   │   ├── transcript/         # 消息日志、回填、会话历史转换、转写与 ChatBlock 到日志文本的规范化
 │   │   ├── vector_index/       # PGlite + pgvector 索引：维护、重建、对账、状态与 Worker
 │   │   │   └── worker/         # 索引进程内实现：schema、查询、变更、Dream 近邻
 │   │   └── workflows/          # 工作流：工具循环、结构化输出、任务跟踪
@@ -116,6 +117,7 @@ livingmemory/
 | [.agent/note/proposed/architecture/2026-11-04-extraction-inflight-lifecycle.md](.agent/note/proposed/architecture/2026-11-04-extraction-inflight-lifecycle.md) | v1 在途自动提取的状态失效、原作用域提交和 v2 卸载生命周期契约提案 |
 | [.agent/note/proposed/architecture/2026-11-04-vector-index-retention.md](.agent/note/proposed/architecture/2026-11-04-vector-index-retention.md) | 保留 v1 向量索引能力，只把 embedding 调用层替换为 v2 `ctx.ai.embed` 的提案 |
 | [.agent/note/proposed/architecture/2026-11-04-test-migration-strategy.md](.agent/note/proposed/architecture/2026-11-04-test-migration-strategy.md) | v1 测试按模块随源码迁移的三档处置与文件清单提案 |
+| [.agent/note/proposed/architecture/2026-11-05-session-hooks-and-collector.md](.agent/note/proposed/architecture/2026-11-05-session-hooks-and-collector.md) | v1 两个中间件在 v2 的等价钩子、采集层改用 `chat_observer` 拉取、召回窗口与会话历史的补足规则 |
 | [.agent/note/implemented/architecture/2026-11-05-internal-tool-loop.md](.agent/note/implemented/architecture/2026-11-05-internal-tool-loop.md) | 召回与 Dream 自行驱动模型调用的工具循环，以及不接入 v2 Agent 层的依据 |
 
 迁移讨论持续更新方案文档，分别标记已确认事项、设计草案与待讨论问题。后续按实际讨论内容拆分专题文档，并同步本索引。
