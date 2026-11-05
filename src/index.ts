@@ -173,7 +173,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .default(DEFAULT_CONFIG.enableAutoDream),
         extractionIncludeOverheard: Schema.boolean()
             .description(
-                '开启时从首条普通消息开始累计，达到阈值即提取；关闭时在 bot 回复后围绕完整交流提取。'
+                '旁听提取：控制 bot 未参与的闲聊是否计入记忆提取。每次对话及其前方一个提取窗口内的消息总是提取；开启后窗口之外的闲聊也一并提取，关闭时丢弃。'
             )
             .default(DEFAULT_CONFIG.extractionIncludeOverheard),
         enableExtractionWhitelist: Schema.boolean()

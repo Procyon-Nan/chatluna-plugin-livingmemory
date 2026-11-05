@@ -71,7 +71,7 @@ ChatLuna v2 的长期记忆插件。从对话中提取记忆、按需召回并�
 | --- | --- | --- | --- |
 | `extractionWindowMessages` | number | `60` | 未提取消息达到该条数时提取（0—360）；`0` 关闭 |
 | `enableAutoDream` | boolean | `true` | 提取保存新记忆后自动整理 |
-| `extractionIncludeOverheard` | boolean | `false` | 从首条普通消息累计，而非完整交流后提取 |
+| `extractionIncludeOverheard` | boolean | `false` | 旁听提取：bot 未参与的闲聊是否计入提取；关闭时只提取对话与其前方一个窗口内的消息 |
 | `enableExtractionWhitelist` | boolean | `false` | 只对白名单会话自动提取 |
 | `extractionWhitelist` | string[] | `[]` | 白名单：群聊填群号，私聊填对方用户号 |
 

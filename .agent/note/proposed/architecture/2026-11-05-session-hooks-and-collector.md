@@ -84,6 +84,7 @@ v2 把 v1 的两个中间件拆成了四个接入点，逐条核对如下。
 - **轮询入池有延迟**：`prepareStep` 每步拉一次缓冲，消息在两次拉取之间不可见。原生 memory 也是这个粒度，判定为可接受；如果某条消息在会话结束前都没有触发下一步，它不会入池。
 - `prepareStep` 内等待召回会把模型调用加进热路径。召回有 6 次调用上限与间隔门禁，正常情况下只在小部分轮次触发；真实延迟需要跑起来之后测。
 - `chat_observer` 不提供“消息已入池”事件，旁听场景下插件对消息的感知完全依赖轮询，与 M05 已确认的“未触发回复的消息也要入池”在实现上仍有差距。
+- **旁听提取没有独立的触发点**：v1 的旁听模式在 `character_middleware.ts` 的 `message_collect` 里逐条消息 `captureCursor` 并 `queueExtraction`，因此能在 bot 未被触发时按阈值提取。v2 的提取触发只有 `chatluna/agent-turn`（`reason === 'completed'`）一处，旁听消息本身不产生触发。`extractionIncludeOverheard` 因此在 v2 只剩切块阶段的语义——关闭时剥掉核心窗口之外的闲聊，开启时保留并允许末尾纯用户段成块；「从首条消息开始累计」的触发行为不再成立。配置说明按 `790c89c` 恢复后的语义口径重写，不再描述 v1 的 Character 触发。
 - **机器人回声的双份记录**：观察层把机器人实际发出的消息记成 `self` 回声（渲染后文本），本轮回复从 `agent.session.messages()` 取（模型输出文本），两者不是同一条记录。处理方式是不采集 `self` 回声，回复只在轮次结束时记一次。
 - **群名来源**：`AgentOptions.location` 只有群号。提取来源标签的群名取 `ctx.chat.environmentOf(sessionId)?.guildName`——`chat` 打开 agent 时从 `session.event.guild.name` 写入，与提示词渲染同源；取不到时用群号代替展示名。
 

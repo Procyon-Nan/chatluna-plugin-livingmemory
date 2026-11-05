@@ -82,3 +82,5 @@
 - pending: `recallIntervalMessages` 的 schema 说明补回 v1 的「会话首次对话时立即召回」：`src/service/workflows/recall/coordinator.ts` 的 `anchorSeqByScope` 初始无锚点，首轮必然执行召回，行为与 v1 一致，此前只是描述遗漏。
 - pending: `tests/session-hooks.spec.ts` 的配置夹具改为从 `DEFAULT_CONFIG` 取未覆盖的项，避免默认值变更后夹具仍锁在旧数值上。
 - pending: `doc/migration-plan.md` 标记 M08-D1 完成并记录三项调整与沿用清单，`doc/migration-stages.md` 的 S8 补上配置默认值核对项，并把跨引擎运行与界面验收标注为由用户执行。全套 412 个用例中 411 通过、1 个仅 Windows 的目录切换用例跳过；`vector-index-service.spec.ts` 在并行压测下出现过一次 PGlite WASM 崩溃，单独运行 3 次与全套重跑均通过。
+- pending: 重写 `extractionIncludeOverheard` 的配置说明。原说明沿用了 v1 最新 HEAD 的 Character 触发描述（「从首条普通消息开始累计，达到阈值即提取；关闭时在 bot 回复后围绕完整交流提取」），而 v2 的提取触发只有 `chatluna/agent-turn` 的 `reason === 'completed'` 一处，没有逐消息触发，「从首条消息累计」在 v2 不成立。改为 v1 `790c89c` 恢复后的语义口径：开关控制 bot 未参与的闲聊是否计入提取，每次对话及其前方一个提取窗口内的消息总是提取，窗口之外的闲聊开启时保留、关闭时丢弃。`README.md` 的配置表同步该条目。
+- pending: `.agent/note/proposed/architecture/2026-11-05-session-hooks-and-collector.md` 的风险清单补充旁听提取缺少独立触发点：v1 在 Character 的 `message_collect` 里逐条消息排队提取，v2 只有 `chatluna/agent-turn` 一处触发，该配置因此只剩切块语义。
