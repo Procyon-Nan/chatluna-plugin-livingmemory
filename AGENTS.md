@@ -118,7 +118,7 @@ livingmemory/
 | [.agent/note/proposed/architecture/2026-11-04-v1-behavior-preservation.md](.agent/note/proposed/architecture/2026-11-04-v1-behavior-preservation.md) | v1 全部业务行为作为迁移基线，以及 v2 适配层的职责边界 |
 | [.agent/note/proposed/architecture/2026-11-04-extraction-inflight-lifecycle.md](.agent/note/proposed/architecture/2026-11-04-extraction-inflight-lifecycle.md) | v1 在途自动提取的状态失效、原作用域提交和 v2 卸载生命周期契约提案 |
 | [.agent/note/proposed/architecture/2026-11-04-vector-index-retention.md](.agent/note/proposed/architecture/2026-11-04-vector-index-retention.md) | 保留 v1 向量索引能力，只把 embedding 调用层替换为 v2 `ctx.ai.embed` 的提案 |
-| [.agent/note/proposed/architecture/2026-11-04-test-migration-strategy.md](.agent/note/proposed/architecture/2026-11-04-test-migration-strategy.md) | v1 测试按模块随源码迁移的三档处置与文件清单提案 |
+| [.agent/note/implemented/architecture/2026-11-04-test-migration-strategy.md](.agent/note/implemented/architecture/2026-11-04-test-migration-strategy.md) | v1 测试按模块随源码迁移的三档处置、48 个文件的最终落点与并入关系 |
 | [.agent/note/proposed/architecture/2026-11-05-session-hooks-and-collector.md](.agent/note/proposed/architecture/2026-11-05-session-hooks-and-collector.md) | v1 两个中间件在 v2 的等价钩子、采集层改用 `chat_observer` 拉取、召回窗口与会话历史的补足规则 |
 | [.agent/note/implemented/architecture/2026-11-05-internal-tool-loop.md](.agent/note/implemented/architecture/2026-11-05-internal-tool-loop.md) | 召回与 Dream 自行驱动模型调用的工具循环，以及不接入 v2 Agent 层的依据 |
 | [.agent/note/implemented/architecture/2026-11-05-reject-stringified-structured-output.md](.agent/note/implemented/architecture/2026-11-05-reject-stringified-structured-output.md) | 拒绝字符串化的结构化输出、改为回给模型重写，以及该处与 v1 的有意差异 |

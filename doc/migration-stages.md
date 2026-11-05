@@ -196,13 +196,30 @@ S3 与 S5 各自完成单元级验证但拼不到一起：插件整体不加载�
 
 跨引擎运行、生命周期验证、D11 行为对照，以及发布产物检查。
 
+**进行中**（2026-11-05）。已完成的核对项：
+
+| 项 | 结果 |
+| --- | --- |
+| 测试迁移台账 | 48 个 v1 文件中 42 个同名迁移、4 个并入既有测试、2 个删除；v2 另有 9 个新增文件。并入与删除的行为承接关系记录在 `implemented/architecture/2026-11-04-test-migration-strategy.md` |
+| 业务行为对照 | B01—B14 的断言在对应测试中逐项落地；与 v1 的唯一有意差异是 D14（结构化输出不做字符串化解码） |
+| 生命周期 | 启动顺序、启动维护、失败时的资源释放由 `maintenance.spec.ts` 与 `service.ts` 的显式顺序覆盖 |
+| 发布产物 | `yarn yakumo build` 产出 `lib/` 与 `dist/client.js`，Worker 打包产出两个 `*.mjs` |
+
+尚未完成的核对项：
+
+| 项 | 阻塞原因 |
+| --- | --- |
+| 跨引擎实际运行 | 需要在装有 `agent`、`coding`、`character` 三种引擎的宿主里各跑一轮对话，观察采集、注入与提取；当前只有单元与集成测试 |
+| 界面人工验收 | 需要启动 WebUI 逐个确认六个面板、写操作权限与刷新行为 |
+| M08-D1 默认值 | v2 的新安装默认值尚未按 D10 重新确定，当前沿用 v1 取值 |
+
 ## 向量索引
 
 `src/service/vector_index/`（4708 行）保留 v1 实现，只替换 embedding 调用层，作为独立工作线并入 S1—S5，不单列阶段。依据见 [向量索引保留 Note](../.agent/note/proposed/architecture/2026-11-04-vector-index-retention.md)。
 
 ## 测试处置
 
-按模块随源码一起迁移，不设"最后统一补测试"的阶段。三档处置与文件清单见 [测试迁移策略 Note](../.agent/note/proposed/architecture/2026-11-04-test-migration-strategy.md)。
+按模块随源码一起迁移，不设"最后统一补测试"的阶段。三档处置与文件清单见 [测试迁移策略 Note](../.agent/note/implemented/architecture/2026-11-04-test-migration-strategy.md)。
 
 ## 提交粒度
 

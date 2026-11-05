@@ -76,3 +76,5 @@
 - pending: 迁移 `tests/preset-import-export.spec.ts`（7 个用例，断言未改动）与 `tests/extraction-prompt.spec.ts`（6 个用例），补上测试迁移策略中标记为「原样迁移」但此前未落地的两个文件。
 - pending: 结构化输出不再解码模型传成 JSON 字符串的数组字段。v1 的 `normalizeStringifiedArrayField` 会先解码再校验，v2 改用 `chatluna.extract` 后拿不到原始值，且用户确认不保留该路径：格式错误回给模型重写，三次仍不合格时记解析失败并丢弃本批（D14）。`invokeStructuredOutput` 的 `stringifiedArrayField` 只用于纠正提示，注释写明不再解码。
 - pending: 新增 `.agent/note/implemented/architecture/2026-11-05-reject-stringified-structured-output.md` 记录该决策与 v1 的有意差异；`doc/migration-plan.md` 增加 D14 并同步确认日期，`AGENTS.md` 补文档索引。全套 406 个用例中 405 通过、1 个仅 Windows 的目录切换用例跳过，`tsc --noEmit` 无报错。
+- pending: 新增 `tests/session-history.spec.ts` 共 6 个用例，覆盖会话历史到召回窗口条目的转换、注入消息跳过、非文本与非对话角色跳过、身份回退与去重键；对应 v1 `chatluna-transcript-adapter` 的断言。
+- pending: 核对测试迁移策略的全部处置并写入实测结果：48 个 v1 文件中 42 个同名迁移、4 个并入既有测试（`memory-create-tool`、`chat-middleware`、`character-middleware`、`chatluna-transcript-adapter`）、2 个删除（`client-dashboard`、`living-memory-service-lifecycle`），v2 另有 9 个新增文件。Note 移入 `implemented/` 并更新 `AGENTS.md` 与 `doc/migration-stages.md` 的引用路径。全套 412 个用例中 411 通过、1 个仅 Windows 的目录切换用例跳过，`tsc --noEmit` 无报错。

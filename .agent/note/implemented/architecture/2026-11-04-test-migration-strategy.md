@@ -1,6 +1,6 @@
 # Agent Note: 按模块迁移 v1 测试，不整体重写
 
-Status: proposed
+Status: implemented
 
 ## Problem
 
@@ -57,3 +57,25 @@ D11 已确认 v1 全部业务行为作为迁移基线。测试是该基线唯一
 - v1 的测试大量使用 `vi.mock` 与手工构造的 Repository 替身，改装配时会暴露对 v1 内部结构的耦合，部分断言需要跟着类型变化调整。
 - PGlite 的测试使用真实 WASM 数据库和临时目录，在 CI 与 WSL 下的路径和句柄行为需要单独确认。
 - 48 个测试文件中保留 46 个，插件仓库的测试体量与源码体量相当，维护成本随迁移一起留下。
+## 迁移结果（2026-11-05）
+
+48 个 v1 文件的最终处置与落点。除下表说明外，断言与期望值相对 v1 没有业务性改动。
+
+| 处置 | 数量 | 文件 |
+| --- | --- | --- |
+| 同名迁移 | 42 | 「原样迁移」与「改造后迁移」中未在下行列出的文件，均以同名 `.spec.ts` 落地 |
+| 并入既有测试 | 4 | `memory-create-tool` → `memory-tools`；`chat-middleware` → `message-collector`；`character-middleware` → `extraction-coordinator`、`recall-coordinator`、`message-log-registry`、`message-collector`；`chatluna-transcript-adapter` → `session-history` |
+| 删除 | 2 | `client-dashboard`、`living-memory-service-lifecycle` |
+
+并入文件覆盖的行为：
+
+- `memory-create-tool`：工具 schema、批量上限、字段校验、提交后索引失败与作用域拒绝，断言全部在 `memory-tools.spec.ts` 内。
+- `chat-middleware`：平台消息号去重、空正文丢弃、昵称取值。v2 由 `chat_observer` 提供观察结果，入池规则不再依赖中间件，断言落在 `message-collector.spec.ts`。
+- `character-middleware`：卸载清理由两个协调器的 `clearByConversation` 与 `stop` 承接；召回历史排除当前消息由 `message-log-registry` 的 `loadRecallHistory` 承接；回复段的实际发出判定由 `message-collector` 的 `recordReplies` 承接。
+- `chatluna-transcript-adapter`：会话历史转换、注入消息跳过、身份回退与去重键，落在 `session-history.spec.ts`。
+
+删除文件覆盖的行为由这些能力承接：`client-dashboard` 的界面行为由 `webui.spec.ts` 的数据面断言与 S8 的界面验收承接；`living-memory-service-lifecycle` 的启动顺序由 `maintenance.spec.ts` 的启动维护用例与 `src/service.ts` 的显式顺序承接。v2 的 `ctx.effect` 与 dispose 语义与 v1 不同，装配顺序测试不再逐事件断言。
+
+v2 新增、v1 无对应的文件：`backend`、`job-surface`、`session-history`、`session-hooks`、`update-snapshot-tool`、`admin-service`、`webui`、`legacy-import`、`maintenance`。
+
+`extraction-prompt` 按 D14 调整处置：v1 的「接受字符串化数组」用例改为断言拒绝并产生纠正提示，其余断言保持。
