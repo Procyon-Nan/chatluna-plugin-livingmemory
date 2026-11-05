@@ -70,6 +70,8 @@ interface CoordinatorHarness {
     }[]
     getExtractorCalls: () => number
     getExtractorInputs: () => string[]
+    /** 协调器传给提取器的取消信号；最后一次调用为准。 */
+    getExtractorSignal: () => AbortSignal | undefined
     queued: string[][]
     warnings: unknown[][]
 }
@@ -84,6 +86,7 @@ const createHarness = (
     const captured = createCapturedLogger(false)
     let extractorCalls = 0
     const extractorInputs: string[] = []
+    let extractorSignal: AbortSignal | undefined
 
     const formatter = {
         toExtractionPayload: ((
@@ -131,9 +134,10 @@ const createHarness = (
         }) as never
     }
     const extractor = {
-        extract: async (input: string) => {
+        extract: async (input: string, _context: unknown, _logger: unknown, signal?: AbortSignal) => {
             extractorCalls += 1
             extractorInputs.push(input)
+            extractorSignal = signal
             return await (extract?.() ??
                 Promise.resolve(createExtractionResult()))
         }
@@ -201,6 +205,7 @@ const createHarness = (
         queued,
         getExtractorCalls: () => extractorCalls,
         getExtractorInputs: () => extractorInputs,
+        getExtractorSignal: () => extractorSignal,
         warnings: captured.warnings
     }
 }
@@ -880,5 +885,50 @@ describe('LivingMemoryExtractionCoordinator', () => {
         expect(harness.getExtractorCalls()).toBe(1)
         expect(harness.getExtractorInputs()[0]).toContain('q')
         expect(harness.getExtractorInputs()[0]).not.toContain('new-q')
+    })
+
+    it('cancels an in-flight drain without recording a failed job or committing memories', async () => {
+        const harness = createHarness({
+            window: 2,
+            extract: async () => {
+                const signal = harness.getExtractorSignal()!
+                await new Promise((resolve, reject) =>
+                    signal.addEventListener('abort', () => reject(signal.reason), {
+                        once: true
+                    })
+                )
+                return createExtractionResult({
+                    extracted: [createExtractedMemory()]
+                })
+            }
+        })
+        // 首次入队建立游标，随后累积到窗口以上触发排干。
+        await queueExtraction(harness)
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', 'q1'),
+            entry('assistant', 'a1'),
+            entry('user', 'q2'),
+            entry('assistant', 'a2')
+        ])
+        await queueExtraction(harness)
+        await waitFor(() => harness.getExtractorCalls() === 1, 'drain started')
+        expect(harness.getExtractorSignal()?.aborted).toBe(false)
+
+        await harness.coordinator.stop()
+
+        // 取消不写失败任务、不提交记忆
+        expect(harness.jobStore.jobs).toEqual([])
+        expect(harness.appended).toEqual([])
+
+        // 停止后不再接收新触发
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', 'q3'),
+            entry('assistant', 'a3'),
+            entry('user', 'q4'),
+            entry('assistant', 'a4')
+        ])
+        await queueExtraction(harness)
+        await new Promise((resolve) => setTimeout(resolve, 20))
+        expect(harness.getExtractorCalls()).toBe(1)
     })
 })

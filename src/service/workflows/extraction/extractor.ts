@@ -48,8 +48,10 @@ export class LivingMemoryExtractor {
     async extract(
         input: string,
         context: LivingMemoryExtractionContext,
-        logger: LivingMemoryLogger
+        logger: LivingMemoryLogger,
+        signal?: AbortSignal
     ): Promise<LivingMemoryExtractionResult> {
+        signal?.throwIfAborted()
         if (!isModelConfigured(this.mainModel)) {
             return {
                 extracted: [],
@@ -77,6 +79,7 @@ export class LivingMemoryExtractor {
             schema: extractionResultTool.schema,
             systemPrompt: prompt.systemPrompt,
             inputPrompt: prompt.inputPrompt,
+            ...(signal === undefined ? {} : { signal }),
             validateResult: ({ memories }) => {
                 try {
                     for (const memory of memories) {

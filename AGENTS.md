@@ -31,7 +31,7 @@
 
 ## 代码结构
 
-本项目为 `chatluna-plugin-livingmemory`，位于 ChatLuna v2 模板项目的 `external/livingmemory/`，由模板项目提供开发运行环境。当前处于 S5 工作流完成、S6 调度与任务待开始的阶段。
+本项目为 `chatluna-plugin-livingmemory`，位于 ChatLuna v2 模板项目的 `external/livingmemory/`，由模板项目提供开发运行环境。当前处于 S6 调度与任务完成、S7 管理与导入待开始的阶段。
 
 ```text
 livingmemory/
@@ -51,7 +51,7 @@ livingmemory/
 │   │   ├── backend.ts          # v2 MemoryBackend 实现，映射到 v1 仓储
 │   │   ├── user_profile.ts     # 人物画像生成、审阅与注入渲染
 │   │   ├── message_collector.ts # 统一采集层：订阅框架事件，维护每会话消息池
-│   │   ├── app/                # 应用层组装：记忆读写提供者、变更服务、查询投影
+│   │   ├── app/                # 应用层组装：记忆读写提供者、变更服务、查询投影、任务视图与任务面
 │   │   ├── logging/            # 诊断日志构造、凭据脱敏与模型调用记录
 │   │   ├── memory/             # 字段规范化、说话人身份、主题标题推导、来源消息、人设卡片
 │   │   │   ├── origins/        # 来源消息的规范化与迁移

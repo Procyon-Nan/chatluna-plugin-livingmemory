@@ -204,6 +204,13 @@ export const planExtractionChunks = (
 export class LivingMemoryExtractionCoordinator {
     private readonly stateByScope = new Map<string, ExtractionScopeState>()
     private readonly runningScopeKeys = new Set<string>()
+    /**
+     * 卸载时取消全部在途排干：停止接收新触发、中止模型调用、等待任务收尾。
+     * 会话清理与预设切换不走这里，它们只使消费状态失效（见
+     * `2026-11-04-extraction-inflight-lifecycle.md`）。
+     */
+    private readonly controller = new AbortController()
+    private readonly tasks = new Set<Promise<void>>()
 
     constructor(
         private readonly config: LivingMemoryExtractionConfig,
@@ -227,6 +234,7 @@ export class LivingMemoryExtractionCoordinator {
         initialCursor?: () => number
     ) {
         if (this.config.extractionWindowMessages === 0) return
+        if (this.controller.signal.aborted) return
         if (!this.isExtractionWhitelisted(scope)) return
 
         const key = scopeKey(scope)
@@ -285,14 +293,36 @@ export class LivingMemoryExtractionCoordinator {
             workflow: 'extraction',
             runId: randomUUID()
         })
-        this.drain(key, state, scope, options, runLogger).catch((error) => {
-            runLogger.summary(
-                '记忆提取失败',
-                (fields) => formatLogScope(fields),
-                'warn',
-                error
-            )
-        })
+        const task = this.drain(key, state, scope, options, runLogger).catch(
+            (error) => {
+                if (this.controller.signal.aborted) {
+                    runLogger.summary(
+                        '记忆提取已取消',
+                        (fields) => formatLogScope(fields)
+                    )
+                    return
+                }
+                runLogger.summary(
+                    '记忆提取失败',
+                    (fields) => formatLogScope(fields),
+                    'warn',
+                    error
+                )
+            }
+        )
+        this.tasks.add(task)
+        void task.finally(() => this.tasks.delete(task))
+    }
+
+    /**
+     * 停止接收新触发并取消在途排干。
+     *
+     * 取消不写失败任务、不推进游标：模型已经返回、尚未提交的结果由 `run()` 的
+     * 提交点决定，取消信号只保证不再进入下一次提交与后续块。
+     */
+    async stop() {
+        this.controller.abort(new Error('记忆提取服务正在停止。'))
+        await Promise.allSettled([...this.tasks])
     }
 
     clearAll() {
@@ -345,6 +375,8 @@ export class LivingMemoryExtractionCoordinator {
 
         try {
             while (true) {
+                // 卸载取消：立即结束排干，不再进入下一块。
+                this.controller.signal.throwIfAborted()
                 // 会话清理已移除或重建状态：旧游标立即失效，终止本次排干；
                 // 正在执行的单次模型调用照常完成，后续消息由新状态的
                 // 下一次触发接管。
@@ -368,7 +400,12 @@ export class LivingMemoryExtractionCoordinator {
         } finally {
             this.runningScopeKeys.delete(key)
             const pending = this.stateByScope.get(key)
-            if (pending && pending !== state && !pending.resolveInitialCursor) {
+            if (
+                pending &&
+                pending !== state &&
+                !pending.resolveInitialCursor &&
+                !this.controller.signal.aborted
+            ) {
                 this.schedule(key, pending)
             }
         }
@@ -423,6 +460,8 @@ export class LivingMemoryExtractionCoordinator {
             state.failStreak = 0
             return true
         } catch (error) {
+            // 取消不是提取失败：不计失败次数、不写失败任务、不推进游标。
+            this.controller.signal.throwIfAborted()
             return this.handleChunkFailure(
                 state,
                 scope,
@@ -505,8 +544,11 @@ export class LivingMemoryExtractionCoordinator {
                 presetPrompt,
                 speakers: payload.speakers
             },
-            logger
+            logger,
+            this.controller.signal
         )
+        // 模型已返回但取消已到：结果不再提交，也不记失败任务。
+        this.controller.signal.throwIfAborted()
         if (result.skippedReason != null) {
             logger.diagnosticSummary(() => ({
                 event: '跳过记忆提取',

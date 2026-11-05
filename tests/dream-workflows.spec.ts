@@ -309,6 +309,93 @@ it('serializes starts, recovers stale jobs and aborts and drains running jobs on
     assert.throws(() => coordinator.start(scope.presetId), /正在停止/)
 })
 
+it('cancels one running dream job without stopping the coordinator', async () => {
+    const store = createJobStore()
+    const runner = new LivingMemoryDreamJobRunner(
+        {
+            run: async (_preset, _id, _logger, signal) => {
+                await new Promise<void>((resolve) =>
+                    signal!.addEventListener('abort', () => resolve(), {
+                        once: true
+                    })
+                )
+                signal!.throwIfAborted()
+                return createDreamRunResult()
+            }
+        },
+        new LivingMemoryJobTracker(store),
+        logger
+    )
+    const coordinator = new LivingMemoryDreamCoordinator(
+        runner,
+        { ...store, countActiveEntries: async () => 30 },
+        logger
+    )
+    assert.equal((await coordinator.start(scope.presetId)).started, true)
+    await waitFor(() => store.jobs[0]?.status === 'running', 'running dream')
+
+    const cancelled = await coordinator.cancelJob(store.jobs[0].id)
+    assert.equal(cancelled?.status, 'cancelled')
+    assert.match(cancelled?.error ?? '', /Dream 已取消/u)
+    assert.ok(cancelled?.finishedAt)
+
+    // 协调器仍在运行：取消只作用于被取消的任务。
+    assert.equal((await coordinator.start(scope.presetId)).started, true)
+    await coordinator.stop()
+})
+
+it('records a dream interrupted by coordinator stop as failed, not cancelled', async () => {
+    const store = createJobStore()
+    const runner = new LivingMemoryDreamJobRunner(
+        {
+            run: async (_preset, _id, _logger, signal) => {
+                await new Promise<void>((resolve) =>
+                    signal!.addEventListener('abort', () => resolve(), {
+                        once: true
+                    })
+                )
+                signal!.throwIfAborted()
+                return createDreamRunResult()
+            }
+        },
+        new LivingMemoryJobTracker(store),
+        logger
+    )
+    const coordinator = new LivingMemoryDreamCoordinator(
+        runner,
+        { ...store, countActiveEntries: async () => 30 },
+        logger
+    )
+    await coordinator.start(scope.presetId)
+    await waitFor(() => store.jobs[0]?.status === 'running', 'running dream')
+
+    await coordinator.stop()
+    assert.equal(store.jobs[0].status, 'failed')
+    assert.match(store.jobs[0].error ?? '', /Dream 服务正在停止/u)
+})
+
+it('refuses to cancel a dream job it does not own or that already finished', async () => {
+    const store = createJobStore()
+    const coordinator = new LivingMemoryDreamCoordinator(
+        new LivingMemoryDreamJobRunner(
+            { run: async () => createDreamRunResult() },
+            new LivingMemoryJobTracker(store),
+            logger
+        ),
+        { ...store, countActiveEntries: async () => 30 },
+        logger
+    )
+    assert.equal(await coordinator.cancelJob('missing'), undefined)
+
+    await coordinator.start(scope.presetId)
+    await waitFor(
+        () => store.jobs[0]?.status === 'completed',
+        'finished dream'
+    )
+    assert.equal(await coordinator.cancelJob(store.jobs[0].id), undefined)
+    await coordinator.stop()
+})
+
 it('does not start below 30 active memories and releases the starting lock after skipping', async () => {
     const store = createJobStore()
     let count = 29

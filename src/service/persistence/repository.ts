@@ -371,6 +371,21 @@ export class LivingMemoryRepository
         return this.jobs.listJobsByPreset(presetId)
     }
 
+    getJob(id: string): Promise<MemoryJobRecord | undefined> {
+        return this.jobs.getJob(id)
+    }
+
+    cancelJob(
+        id: string,
+        reason: string
+    ): Promise<MemoryJobRecord | undefined> {
+        return this.jobs.cancelJob(id, reason)
+    }
+
+    watchJobs(listener: (job: MemoryJobRecord) => void): () => void {
+        return this.jobs.watchJobs(listener)
+    }
+
     markStaleRunningJobsAsFailed(
         options: { presetId?: string; kind?: MemoryJobKind } = {},
         reason = 'recovered: stale running job'

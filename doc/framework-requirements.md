@@ -1,6 +1,6 @@
 # ChatLuna v2 框架侧接口需求
 
-状态：草案。更新日期：2026-11-04。
+状态：草案。更新日期：2026-11-05。
 
 本文把 [迁移方案](migration-plan.md) 中由 ChatLuna v2 承担的接口项单独列出，供框架侧实施。每项给出当前源码事实、需要补充的契约和验收条件。路径相对于 v2 源码 `packages/`。
 
@@ -68,6 +68,16 @@
 - `memory/core/src/consolidate.ts` 自行管理空闲定时器、数量阈值与夜间区间，在 `chatluna/memory-change` 与 30 秒轮询中触发；后端 `dream()` 也在这条链路内被调用。
 - `memory/core/src/service.ts` 的 `onExtract`/`onDream` 各只保存一个处理器。
 
+**LivingMemory 侧已就绪**
+
+`LivingMemoryBackend` 提供一个只读字段，声明三项自动入口的归属：
+
+```ts
+readonly scheduling = { extract: true, dream: true, recall: true }
+```
+
+`true` 表示该入口由后端负责。插件侧契约在 `src/contracts/framework.ts` 的 `MemoryBackendScheduling`，与下方建议形状一致；框架落地后改为从 `@chatluna/memory` 导入。
+
 **需要补充**
 
 1. `MemoryBackend` 增加声明字段（如 `scheduling?: { extract?: boolean; dream?: boolean; recall?: boolean }`），为 `true` 时原生对应自动入口整体让出：不建游标、不建定时器、不做阈值判断。
@@ -101,6 +111,13 @@
 - 取消后不推进游标、不重试，尚未提交的结果不落库；已提交主数据不回滚。
 - 插件卸载时原生等待在途任务收尾，再释放后端实例。
 
+**LivingMemory 侧已就绪**
+
+- 任务状态增加 `cancelled`；取消原因写入 `error`，已产生的进度文本保留在 `detail`。
+- 提取、召回、Dream 三个协调器都有 `stop()`：停止接收新触发、取消在途模型调用、等待结算。Dream 另支持按任务取消，`DreamJobCancelledError` 区分「用户取消」与「服务停止」——前者记 `cancelled`，后者沿用 v1 记 `failed`。
+- 取消不写失败任务、不推进消费游标、不提交尚未落库的结果；已提交的主数据不回滚。
+- 后端侧已具备投影与订阅（`src/service/app/job_view.ts`、`job_surface.ts`）。**需要框架补的是入口**：`MemoryService` 没有读取后端任务的通道，页面的 `memory.jobs.run` 依赖 `listJobs()` 前后差集，后端任务因此永远不在其中。
+
 ## 6. 原生任务页面读取后端任务（M01-C3）
 
 **当前事实**
@@ -117,6 +134,22 @@
 
 - LivingMemory 自动任务出现在原生任务列表，状态、错误与统计与专用页面一致。
 - `memory.jobs.run` 对后端任务返回同一个判定的新任务。
+
+**LivingMemory 侧已就绪**
+
+投影后的任务形状：
+
+| 字段 | 来源 |
+| --- | --- |
+| `id` / `presetId` / `kind` / `status` / `error` | 任务审计行原样 |
+| `scope` | `{ presetId, conversationId }` |
+| `trigger` | Dream 的 `post-extraction:*` 输入 → `window`，其余 Dream → `manual`；提取与召回 → `window`；索引 → `manual` |
+| `startedAt` / `finishedAt` | 毫秒时间戳；`pending` 行以 `createdAt` 顶替 `startedAt` |
+| `stats` / `operations` | 留空。v1 把统计写在 `detail` 文本里，操作明细由 Dream 会话记录持有 |
+
+后端订阅入口为 `LivingMemoryJobSurface.watch(listener)`，框架接到 `chatluna/memory-job` 后即可驱动页面刷新；`list`、`get`、`cancel` 三者同理。页面上的「撤销」对后端任务不可用（`operations` 为空），这是有意保留的差异：v1 没有逐条差异撤销能力。
+
+取消按任务类型分流：`dream` 中止在途运行并等任务行落入 `cancelled`；`index` 运行在向量索引的维护队列内、没有逐任务中止信号，取消返回 `undefined` 而不是标记终态（否则会与运行器的收尾写入互相覆盖）；`extract`/`recall` 只在失败时落任务行，残留的未结束行没有在途执行，直接置终态。框架侧遇到 `undefined` 时向页面报告「该任务不可取消」。
 
 ## 7. 工具参数 schema 保留字段说明（M04）
 
@@ -138,3 +171,17 @@
 ## 依赖关系
 
 1 → 3 是 M05/M02 的前置；4 → 5 → 6 是 M01 的实施顺序。7 独立，影响 M04 的工具契约保真。M06 的重新计数依赖 1、2、3 全部落地。
+
+## 实施状态
+
+| 项 | 插件侧 | 框架侧 |
+| --- | --- | --- |
+| 1 统一消息采集 | 已按契约形状实现（S3） | 待补 |
+| 2 交付归属 | 已按契约形状实现（S3） | 待补 |
+| 3 会话与预设变化 | 已按契约形状实现（S3） | 待补 |
+| 4 调度归属 | 已声明 `scheduling`（S6） | 待补：原生读取该字段并让出调度 |
+| 5 任务受理、状态与取消 | 已实现 `cancelled`、`getJob`、`cancelJob`、`watchJobs`（S6） | 待补：`runJob` 接受预派 `jobId` 与信号、`extract` 接受信号、取消入口 |
+| 6 原生任务页读取后端任务 | 已实现投影与订阅面（S6） | 待补：`listJobs` 合并后端任务、`memory.jobs.run` 识别后端任务 |
+| 7 工具 schema 说明字段 | 已把说明并入工具描述规避（S4） | 待补 |
+
+插件侧实现在 `src/contracts/framework.ts` 声明形状，框架落地后改为从 `@chatluna/*` 导入；`src/service/app/job_view.ts`、`job_surface.ts` 与 `LivingMemoryBackend.scheduling` 是第 4—6 项对应的落点。

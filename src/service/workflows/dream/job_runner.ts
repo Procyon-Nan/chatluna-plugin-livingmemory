@@ -1,16 +1,21 @@
 import type { DreamRunInput } from './types.ts'
+import { DreamJobCancelledError } from './types.ts'
 import type { MemoryScope } from '../../../contracts/memory.ts'
 import type { LivingMemoryLogger } from '../../logging/logger.ts'
-import { formatErrorDetails } from '../../shared/utils.ts'
+import { formatErrorDetails, toError } from '../../shared/utils.ts'
 import type { LivingMemoryJobTracker } from '../job_tracker.ts'
 import type { LivingMemoryDreamService } from './service.ts'
+
+/** 中止原因是否为用户显式取消。 */
+const isJobCancelled = (signal: AbortSignal) =>
+    signal.reason instanceof DreamJobCancelledError
 
 export class LivingMemoryDreamJobRunner {
     constructor(
         private readonly dream: Pick<LivingMemoryDreamService, 'run'>,
         private readonly jobTracker: Pick<
             LivingMemoryJobTracker,
-            'markRunning' | 'markCompleted' | 'markFailed'
+            'markRunning' | 'markCompleted' | 'markFailed' | 'markCancelled'
         >,
         private readonly logger: LivingMemoryLogger
     ) {}
@@ -70,6 +75,19 @@ export class LivingMemoryDreamJobRunner {
             if (result.error) lines.push(`原因：${result.error}`)
             logger.summary(outcome.event, lines, outcome.level)
         } catch (error) {
+            // 用户取消不是失败：记 cancelled 而不是 failed，错误列写取消原因。
+            // 协调器停止导致的中止仍按失败收尾，与 v1 一致。
+            if (signal?.aborted === true && isJobCancelled(signal)) {
+                await this.jobTracker.markCancelled(
+                    jobId,
+                    'Dream 已取消：' + toError(signal.reason).message
+                )
+                logger.summary(
+                    'Dream 已取消',
+                    `预设：${scope.presetId}; 任务：${jobId}`
+                )
+                return
+            }
             let jobStateUpdateError: string | undefined
             try {
                 await this.jobTracker.markFailed(jobId, error, detail)

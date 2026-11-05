@@ -13,7 +13,7 @@
 | S3 ✅ | 采集层：消息池、回填、去重、游标、纪元 | M05 | 各引擎消息进入同一池 | 是，M05-C1/C2 |
 | S4 ✅ | 模型与工具：langchain 换 `ctx.ai`，zod 换 Schema，工具改注册 | M04 | 单次提取与召回可用真实模型跑通 | 否 |
 | S5 ✅ | 工作流：提取、召回、Dream、画像、人设 | M06、M07 | 业务闭环可用，与 v1 行为对照 | 部分，M06-C1 |
-| S6 | 调度与任务：让出原生调度、稳定任务 ID、卸载取消 | M01 | 自动流程只触发一次，两个页面任务一致 | 是，M01-C1/C2/C3 |
+| S6 ✅ | 调度与任务：让出原生调度、稳定任务 ID、卸载取消 | M01 | 自动流程只触发一次，两个页面任务一致 | 是，M01-C1/C2/C3 |
 | S7 | 管理与导入：WebUI、命令、配置、旧数据导入 | M08 | 管理端可用，旧数据进入新流程 | 否 |
 | S8 | 验收：跨引擎、生命周期、D11 行为对照 | M09 | 迁移完成 | — |
 
@@ -133,6 +133,24 @@ langchain 在 v1 中被 21 个文件引用，`ctx.ai` 提供 `chatluna.extract(s
 
 需要 M01-C1 的调度让出声明、M01-C2 的任务受理与取消、M01-C3 的原生页面接入。
 
+**已完成**（2026-11-05）。插件侧能力全部落地；框架侧入口按 [框架侧接口需求](framework-requirements.md) 第 4—6 项实施。
+
+| 项 | 结果 |
+| --- | --- |
+| 调度声明 | `LivingMemoryBackend.scheduling = { extract: true, dream: true, recall: true }`；契约形状由 `src/contracts/framework.ts` 的 `MemoryBackendScheduling` 声明，框架读取该字段后关闭原生的窗口提取、空闲/数量/夜间 Dream 与窗口召回，保留手动入口 |
+| 任务状态 | `memoryJobStatuses` 增加 `cancelled`；取消原因写入 `error`，已产生的进度文本保留在 `detail` |
+| 任务仓储 | 新增 `getJob`、`cancelJob`（只接受 `pending`/`running`）与 `watchJobs`；每次任务行变化通知订阅方 |
+| 任务投影 | 新增 `src/service/app/job_view.ts`：审计行投影为原生 `MemoryJob`，补齐 `scope`、毫秒时间戳与由输入推导的 `trigger`；统计与操作明细留空，v1 把它们写在 `detail` 文本里 |
+| 任务面 | 新增 `src/service/app/job_surface.ts`：`list`、`get`、`cancel`、`watch`，供框架把后端任务并入 `listJobs` 与 `chatluna/memory-job` |
+| Dream 取消 | 协调器按任务持有 `AbortController` 与结算 Promise；`cancelJob(jobId)` 中止该次运行、等任务行落到终态、等预设队列释放后返回。用户取消抛 `DreamJobCancelledError` 记 `cancelled`，协调器停止仍按失败收尾。预设锁的释放移入队列任务内部，取消返回后可立即重启同一预设 |
+| 提取与召回取消 | 两个协调器增加 `stop()`：停止接收新触发、取消在途模型调用、等待结算；取消不记失败任务、不推进游标、不提交未落库结果。提取器与召回执行器补上 `AbortSignal` 参数 |
+| 卸载顺序 | 先并行停止 Dream、召回、提取与画像，再停止语义分组 Worker 与向量索引 |
+| 测试 | 新增 `job-surface`；补充 `job-repository`、`dream-workflows`、`extraction-coordinator`、`recall-coordinator`、`backend` 的取消与调度声明用例。全套 354 个用例中 353 通过、1 个仅 Windows 的目录切换用例跳过；`tsc --noEmit` 无报错 |
+
+**框架侧未就绪时的行为**：`scheduling` 与任务面是插件侧的声明与读取入口，框架未读取时原生调度仍会运行——此时同一输入可能触发两次提取。该状态只出现在框架接口落地前，验收要求以 M01-V1 为准。
+
+**未纳入本阶段**：召回快照与画像注入到各引擎的上下文接入（M06-C1）属于执行时注入点，与调度归属分属不同接口；随框架侧 `prepareStep` / `chatluna/prompt-submit` 接入方案确定后处理。
+
 ### S7 管理与导入
 
 迁移 `src/plugins/`（1417 行）与 `client/`。v1 使用 koishi-console，v2 使用 `@chatluna/ui-client`。旧数据导入覆盖记忆、来源、画像、人设与快照，对应 D05。
@@ -157,6 +175,6 @@ langchain 在 v1 中被 21 个文件引用，`ctx.ai` 提供 `chatluna.extract(s
 
 | 阶段 | 阻塞项 | 对应框架侧子项 |
 | --- | --- | --- |
-| S6 | 后端无法声明调度归属 | M01-C1 |
-| S6 | 任务 ID 不可预派，`extract` 无取消信号 | M01-C2、M06-C1 |
-| S6 | 原生任务页只读 `listJobs` | M01-C3 |
+| S6 | 原生不读取后端 `scheduling`，插件声明后原生调度仍会运行 | M01-C1 |
+| S6 | `runJob` 不可预派任务 ID，`extract` 无取消信号 | M01-C2、M06-C1 |
+| S6 | 原生任务页只读 `listJobs`，后端任务面未接入 | M01-C3 |

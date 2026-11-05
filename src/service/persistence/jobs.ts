@@ -9,6 +9,8 @@ import type { JobRepository } from '../../contracts/workflows.ts'
 import { formatErrorDetails } from '../shared/utils.ts'
 
 export class LivingMemoryJobRepository implements JobRepository {
+    private readonly watchers = new Set<(job: MemoryJobRecord) => void>()
+
     constructor(private readonly ctx: Context) {}
 
     /** 驱动就绪后才有 `database` 服务；仓储实例只在驱动加载后创建。 */
@@ -74,6 +76,7 @@ export class LivingMemoryJobRepository implements JobRepository {
         }
 
         await this.database.create('living_memory_job', job)
+        this.notify(job)
         return job
     }
 
@@ -82,6 +85,10 @@ export class LivingMemoryJobRepository implements JobRepository {
         patch: Partial<MemoryJobRecord>
     ): Promise<void> {
         await this.database.set('living_memory_job', { id }, patch)
+        // 进度写入按批发生：没有订阅方时不回读整行。
+        if (this.watchers.size === 0) return
+        const job = await this.getJob(id)
+        if (job !== undefined) this.notify(job)
     }
 
     async listJobsByPreset(presetId: string): Promise<MemoryJobRecord[]> {
@@ -90,6 +97,56 @@ export class LivingMemoryJobRepository implements JobRepository {
         })
 
         return jobs.sort((left, right) => +right.createdAt - +left.createdAt)
+    }
+
+    async getJob(id: string): Promise<MemoryJobRecord | undefined> {
+        const [job] = await this.database.get('living_memory_job', { id })
+        return job
+    }
+
+    /**
+     * 置为取消态并返回取消后的行。只有 pending/running 可取消：已完成或已失败
+     * 的任务没有可撤销的工作，直接返回 undefined 让调用方区分结果。
+     *
+     * 取消原因写 `error`，保留 `detail` 里已产生的进度文本。
+     */
+    async cancelJob(
+        id: string,
+        reason: string
+    ): Promise<MemoryJobRecord | undefined> {
+        const job = await this.getJob(id)
+        if (
+            job === undefined ||
+            (job.status !== 'pending' && job.status !== 'running')
+        ) {
+            return undefined
+        }
+        const now = new Date()
+        const patch = {
+            status: 'cancelled' as const,
+            error: reason,
+            finishedAt: now,
+            updatedAt: now
+        }
+        await this.database.set('living_memory_job', { id }, patch)
+        const cancelled = { ...job, ...patch }
+        this.notify(cancelled)
+        return cancelled
+    }
+
+    /**
+     * 订阅任务行变化。与 `ctx.on('chatluna/memory-job')` 同义，但只覆盖本插件
+     * 写入的审计表；框架侧事件在后端任务接入时合并（M01-C3）。
+     */
+    watchJobs(listener: (job: MemoryJobRecord) => void): () => void {
+        this.watchers.add(listener)
+        return () => {
+            this.watchers.delete(listener)
+        }
+    }
+
+    private notify(job: MemoryJobRecord) {
+        for (const watcher of this.watchers) watcher(job)
     }
 
     async markStaleRunningJobsAsFailed(

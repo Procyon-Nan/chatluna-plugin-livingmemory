@@ -35,6 +35,12 @@ export class LivingMemoryRecallCoordinator {
      * 召回失败时清除，使下次触发立即重试。
      */
     private readonly anchorSeqByScope = new Map<string, number>()
+    /**
+     * 卸载时取消在途召回：停止接收新触发、中止模型调用、等待任务收尾。
+     * 召回不写任务行（只在失败时记一条），因此取消不产生额外记录。
+     */
+    private readonly controller = new AbortController()
+    private readonly tasks = new Set<Promise<void>>()
 
     constructor(
         private readonly config: LivingMemoryRecallCoordinatorConfig,
@@ -50,6 +56,7 @@ export class LivingMemoryRecallCoordinator {
         loadHistoryMessages: () => Promise<LivingMemoryTranscriptMessage[]>
     ) {
         if (this.config.recallIntervalMessages === 0) return
+        if (this.controller.signal.aborted) return
         if (!isModelConfigured(this.config.subModel)) {
             this.logger.diagnosticSummary(() => ({
                 event: '跳过记忆召回',
@@ -94,9 +101,21 @@ export class LivingMemoryRecallCoordinator {
             workflow: 'recall',
             runId: randomUUID()
         })
-        this.run(scope, currentMessage, loadHistoryMessages, runLogger)
+        const task = this.run(
+            scope,
+            currentMessage,
+            loadHistoryMessages,
+            runLogger
+        )
             .catch((error) => {
                 this.anchorSeqByScope.delete(lockKey)
+                if (this.controller.signal.aborted) {
+                    runLogger.summary(
+                        '记忆召回已取消',
+                        (fields) => formatLogScope(fields)
+                    )
+                    return
+                }
                 runLogger.summary(
                     '记忆召回失败',
                     (fields) => formatLogScope(fields),
@@ -107,6 +126,14 @@ export class LivingMemoryRecallCoordinator {
             .finally(() => {
                 this.recallLockByConversation.delete(lockKey)
             })
+        this.tasks.add(task)
+        void task.finally(() => this.tasks.delete(task))
+    }
+
+    /** 停止接收新触发并取消在途召回；卸载时在释放消息池之前等待返回。 */
+    async stop() {
+        this.controller.abort(new Error('记忆召回服务正在停止。'))
+        await Promise.allSettled([...this.tasks])
     }
 
     clearAll() {
@@ -152,8 +179,11 @@ export class LivingMemoryRecallCoordinator {
                         [item]
                     )
                 },
-                logger
+                logger,
+                this.controller.signal
             )
+            // 模型已返回但取消已到：快照不再更新，也不记失败任务。
+            this.controller.signal.throwIfAborted()
             if (updatedSnapshot == null) {
                 logger.summary(
                     '召回结束',
@@ -171,6 +201,8 @@ export class LivingMemoryRecallCoordinator {
                 ].join('\n')
             )
         } catch (error) {
+            // 取消不是召回失败：不写失败任务。
+            this.controller.signal.throwIfAborted()
             await this.repository.createFailedJob(
                 scope,
                 'recall',

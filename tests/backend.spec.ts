@@ -112,3 +112,14 @@ it('round-trips through the v2 export shape', async () => {
         assert.equal(imported.items[0]!.presetId, 'preset-2')
     })
 })
+
+it('declares every automatic workflow so the native scheduler yields', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const backend = new LivingMemoryBackend(repository)
+        assert.deepEqual(backend.scheduling, {
+            extract: true,
+            dream: true,
+            recall: true
+        })
+    })
+})

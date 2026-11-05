@@ -20,7 +20,8 @@ import {
 
 type AgenticRun = (
     historyMessages: LivingMemoryTranscriptMessage[],
-    runLogger: LivingMemoryLogger
+    runLogger: LivingMemoryLogger,
+    signal?: AbortSignal
 ) => Promise<AgenticMemorySnapshotItem | null>
 
 const defaultRun: AgenticRun = async () => createSnapshotItem('记得')
@@ -53,9 +54,10 @@ const createCoordinator = (options: {
                 historyMessages,
                 _snapshotLines,
                 saveSnapshot,
-                runLogger: LivingMemoryLogger
+                runLogger: LivingMemoryLogger,
+                signal?: AbortSignal
             ) => {
-                const snapshot = await run(historyMessages, runLogger)
+                const snapshot = await run(historyMessages, runLogger, signal)
                 if (snapshot !== null) await saveSnapshot(snapshot)
                 return snapshot
             }
@@ -338,4 +340,33 @@ it('gates recall by message gap since the last executed recall', async () => {
     await coordinator.queue(scope, currentMessage, async () => [])
     await new Promise((resolve) => setTimeout(resolve, 20))
     assert.equal(snapshots.length, 2)
+})
+
+it('cancels an in-flight recall without recording a failed job', async () => {
+    const jobStore = createJobStore()
+    let signalSeen: AbortSignal | undefined
+    const coordinator = createCoordinator({
+        repository: { createFailedJob: jobStore.createFailedJob },
+        run: async (_history, _logger, signal) => {
+            signalSeen = signal
+            await new Promise((resolve, reject) =>
+                signal!.addEventListener('abort', () => reject(signal!.reason), {
+                    once: true
+                })
+            )
+            return createSnapshotItem('记得')
+        }
+    })
+    // 先让运行器拿到取消信号：队列在下一轮事件循环才启动运行。
+    const queued = coordinator.queue(scope, currentMessage, async () => [])
+    await waitFor(() => signalSeen !== undefined, 'recall running')
+    void queued
+
+    await coordinator.stop()
+    assert.deepEqual(jobStore.jobs, [])
+
+    // 停止后不再接收新触发
+    await coordinator.queue(scope, currentMessage, async () => [])
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    assert.deepEqual(jobStore.jobs, [])
 })

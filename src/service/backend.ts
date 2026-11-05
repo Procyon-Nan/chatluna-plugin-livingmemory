@@ -14,6 +14,7 @@ import type {
   MemorySourceOrigin
 } from '@chatluna/memory'
 import type { MemoryEntryRecord, MemoryMutationInput, MemoryUpdatePatch } from '../contracts/memory.ts'
+import type { MemoryBackendScheduling } from '../contracts/framework.ts'
 import { titleOf } from './memory/entry_identity.ts'
 import { createPresetImportId } from './persistence/normalizers.ts'
 import type { LivingMemoryRepository } from './persistence/repository.ts'
@@ -28,6 +29,15 @@ import type { LivingMemoryRepository } from './persistence/repository.ts'
 export class LivingMemoryBackend implements MemoryBackend {
   readonly id = 'livingmemory'
   readonly label = 'LivingMemory'
+  /**
+   * 自动流程归属（M01-C1）：三个入口都由插件自己的协调器驱动，原生对应入口
+   * 让出调度。原生手动入口（`ctx.memory.extract`、`ctx.memory.dream`）不受影响。
+   */
+  readonly scheduling: MemoryBackendScheduling = {
+    extract: true,
+    dream: true,
+    recall: true
+  }
 
   private readonly listeners = new Set<(change: MemoryChange) => void>()
 

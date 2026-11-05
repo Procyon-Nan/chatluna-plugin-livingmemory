@@ -50,3 +50,11 @@
 - pending: 同步 `AGENTS.md` 目录树、`doc/migration-stages.md` 的 S5 交付物与阶段标记、`doc/migration-plan.md` 的执行清单与进度记录。
 - pending: 新增 `.agent/note/implemented/architecture/2026-11-05-internal-tool-loop.md`，记录召回与 Dream 自行驱动模型调用的工具循环，以及不接入 v2 Agent 层的三条依据（服务依赖、观测层污染、批次状态机）；同步 `AGENTS.md` 文档索引。
 - pending: `package.json` 补齐源码实际 import 的 `@chatluna/*` 包声明：新增 `ai-runtime`、`memory`、`message`、`preset`、`schema`、`tool`、`utils` 七项 peer 依赖。此前只声明 `ai`、`core`、`cordis` 与数据库插件，模板根目录 `yarn yakumo build` 会在 rolldown 的外部依赖校验处以 `Missing dependency` 失败。
+- pending: 完成 S6 调度与任务。`src/service/backend.ts` 新增只读 `scheduling: { extract, dream, recall } = true`，声明三项自动流程由插件的协调器负责，原生对应入口让出调度（M01-C1）；契约形状在 `src/contracts/framework.ts` 的 `MemoryBackendScheduling` 声明，框架落地后改为从 `@chatluna/memory` 导入。
+- pending: `src/contracts/memory.ts` 的任务状态增加 `cancelled` 终态；`src/service/persistence/jobs.ts` 新增 `getJob`、`cancelJob` 与 `watchJobs`，`cancelJob` 只接受 `pending`/`running`，写入取消原因并保留已产生的进度文本，任务行每次变化都通知订阅方。
+- pending: 新增 `src/service/app/job_view.ts`，把迁移保留的任务审计行投影为原生 `MemoryJob`：保留 id、预设、状态与错误，补齐 `scope`、毫秒时间戳与由任务输入推导的 `trigger`；统计与操作明细留空，两者原本写在 `detail` 文本里。
+- pending: 新增 `src/service/app/job_surface.ts`，提供 `list`、`get`、`cancel` 与 `watch`，供框架把后端任务并入原生任务页与 `chatluna/memory-job` 事件（M01-C3）；任务状态仍只有审计表一份，投影不引入第二份状态。
+- pending: Dream 取消：协调器按任务持有 `AbortController` 与结算 Promise，`cancelJob(jobId)` 中止该次运行、等任务行落到终态并等预设队列释放后返回；用户取消与协调器停止用 `DreamJobCancelledError` 区分，前者记 `cancelled`，后者仍按失败收尾。预设锁的释放从 `.finally()` 移入队列任务内部，取消返回后可立即重启同一预设。
+- pending: 提取与召回协调器增加 `stop()`：卸载时停止接收新触发、取消在途模型调用并等待任务结算。取消不记失败任务、不推进游标、不提交尚未落库的结果；召回的执行器与提取器顺带补上 `AbortSignal` 参数。
+- pending: `src/service.ts` 新增任务取消路由与 `jobs` 暴露：Dream 交由协调器中止并等结算，`index` 任务返回不可取消（运行在维护队列内，标记终态会与运行器收尾互相覆盖），提取与召回残留的未结束行直接置终态。卸载顺序改为先并行停止 Dream、召回、提取与画像，再停止语义分组 Worker 与向量索引。
+- pending: 新增 `tests/job-surface.spec.ts` 覆盖任务投影与任务面，并补充 `job-repository`（取消、拒绝已结束任务、订阅通知）、`dream-workflows`（单任务取消、停止按失败收尾、拒绝已结束任务）、`extraction-coordinator`、`recall-coordinator` 与 `backend` 的取消与调度声明用例；全套 354 个用例中 353 通过、1 个仅 Windows 的目录切换用例跳过，`tsc --noEmit` 无报错。

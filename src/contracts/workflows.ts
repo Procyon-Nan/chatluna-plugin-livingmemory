@@ -208,6 +208,14 @@ export interface JobRepository {
     ): Promise<MemoryJobRecord>
     updateJob(id: string, patch: Partial<MemoryJobRecord>): Promise<void>
     listJobsByPreset(presetId: string): Promise<MemoryJobRecord[]>
+    getJob(id: string): Promise<MemoryJobRecord | undefined>
+    /** 只有 pending 与 running 可取消；返回取消后的行，不可取消时返回 undefined。 */
+    cancelJob(
+        id: string,
+        reason: string
+    ): Promise<MemoryJobRecord | undefined>
+    /** 订阅任务行变化；返回注销函数。 */
+    watchJobs(listener: (job: MemoryJobRecord) => void): () => void
     markStaleRunningJobsAsFailed(
         options?: { presetId?: string; kind?: MemoryJobKind },
         reason?: string

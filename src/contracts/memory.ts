@@ -2,7 +2,7 @@ export const memoryEntryTypes = ['identity', 'preference', 'fact', 'plan', 'cont
 
 export const memoryJobKinds = ['recall', 'extract', 'dream', 'index'] as const
 
-export const memoryJobStatuses = ['pending', 'running', 'completed', 'partial', 'failed'] as const
+export const memoryJobStatuses = ['pending', 'running', 'completed', 'partial', 'failed', 'cancelled'] as const
 
 export const memoryEntryStatuses = ['active', 'archived'] as const
 

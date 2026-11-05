@@ -229,8 +229,10 @@ export class LivingMemoryAgenticRecallExecutor {
         historyMessages: LivingMemoryTranscriptMessage[],
         snapshotLines: readonly string[],
         saveSnapshot: (item: AgenticMemorySnapshotItem) => Promise<void>,
-        runLogger: LivingMemoryLogger = this.logger
+        runLogger: LivingMemoryLogger = this.logger,
+        signal?: AbortSignal
     ): Promise<AgenticMemorySnapshotItem | null> {
+        signal?.throwIfAborted()
         const prompt = this.buildRecallPrompt(
             scope,
             currentMessage,
@@ -259,7 +261,8 @@ export class LivingMemoryAgenticRecallExecutor {
             logger: runLogger,
             stage: 'agentic-decision',
             maxModelCalls: agenticRecallMaxModelCalls,
-            conclusiveTools: [memoryPassTool.name, memoryUpdateSnapshotTool.name]
+            conclusiveTools: [memoryPassTool.name, memoryUpdateSnapshotTool.name],
+            ...(signal === undefined ? {} : { signal })
         })
         const result = await loop.run()
         if (result.conclusion === null) {
