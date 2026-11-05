@@ -35,9 +35,9 @@ export interface StructuredOutputOptions<T> {
     /** 上下文级校验：返回字符串表示拒绝原因，返回 undefined 表示接受。 */
     validateResult?: (value: T) => string | undefined
     /**
-     * 模型把数组字段序列化成字符串时的纠正提示。v1 用它指导模型改传
-     * JSON 数组；v2 的 JSON schema 约束直接由 provider 执行，保留该字段
-     * 是为了让有同样坏习惯的模型在重试时得到同一条指引。
+     * 模型把数组字段序列化成字符串时，纠正提示里点名该字段。v1 会先解码
+     * 这份字符串再接受结果；v2 不做解码——格式错误回给模型重写，连续三次
+     * 仍不合格时记解析失败并丢弃本批，避免把模型的错误结果写进记忆。
      */
     stringifiedArrayField?: string
     logging?: StructuredOutputLogging

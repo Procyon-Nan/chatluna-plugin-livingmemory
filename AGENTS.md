@@ -121,6 +121,7 @@ livingmemory/
 | [.agent/note/proposed/architecture/2026-11-04-test-migration-strategy.md](.agent/note/proposed/architecture/2026-11-04-test-migration-strategy.md) | v1 测试按模块随源码迁移的三档处置与文件清单提案 |
 | [.agent/note/proposed/architecture/2026-11-05-session-hooks-and-collector.md](.agent/note/proposed/architecture/2026-11-05-session-hooks-and-collector.md) | v1 两个中间件在 v2 的等价钩子、采集层改用 `chat_observer` 拉取、召回窗口与会话历史的补足规则 |
 | [.agent/note/implemented/architecture/2026-11-05-internal-tool-loop.md](.agent/note/implemented/architecture/2026-11-05-internal-tool-loop.md) | 召回与 Dream 自行驱动模型调用的工具循环，以及不接入 v2 Agent 层的依据 |
+| [.agent/note/implemented/architecture/2026-11-05-reject-stringified-structured-output.md](.agent/note/implemented/architecture/2026-11-05-reject-stringified-structured-output.md) | 拒绝字符串化的结构化输出、改为回给模型重写，以及该处与 v1 的有意差异 |
 
 迁移讨论持续更新方案文档，分别标记已确认事项、设计草案与待讨论问题。后续按实际讨论内容拆分专题文档，并同步本索引。
 
