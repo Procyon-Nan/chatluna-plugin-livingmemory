@@ -240,7 +240,7 @@ M00 完成依据：脚手架的 9 个文件已生成；`chatluna.yml` 已注册�
 
 | 位置 | 当前行为 | 迁移时需要明确的规则 |
 | --- | --- | --- |
-| v1 `src/index.ts:181` | `extractionWindowMessages` 默认 30，范围 0—200，0 表示关闭自动提取 | 建议沿用现有窗口参数与关闭语义；v2 默认值留到 M08-D1 确定 |
+| v1 `src/index.ts:181` | `extractionWindowMessages` 默认 30，范围 0—200，0 表示关闭自动提取 | 沿用窗口参数与关闭语义；v2 默认值改为 60，范围 0—360（M08-D1） |
 | v1 `extraction/coordinator.ts:224`、`259` | 状态按预设与会话保存，阈值计算读取该会话游标后的全部消息 | 每次切换建立新起点，再按归属筛选并计算阈值 |
 | v1 `extraction/coordinator.ts:170` | 按 assistant 连续段闭合交流，旁听模式允许消费末尾用户段 | 按预设生效区间与请求关系识别交流，避免把不同区间的输入和回复拼成一轮 |
 | v1 `extraction/coordinator.ts:337`、`480` | 清理状态会阻止排干循环继续取块；已开始的模型调用仍可完成并写入原作用域 | 旧批次的结束回调与新计数状态分开；在途调用结束方式继续细化 |
@@ -281,7 +281,7 @@ v1 服务停止会停止 Dream、画像和向量索引，但提取协调器没�
 | 环节 | 建议行为 |
 | --- | --- |
 | 计数 | 使用本次启用起点及处理进度之后、归属当前消费范围的消息条数；用户消息与实际交付的助手回复均可计入，历史回填按 M06-D1 排除 |
-| 阈值配置 | 保留 `extractionWindowMessages`，0 关闭自动提取；同一参数继续用于触发阈值与分块预算。v2 默认值待 M08-D1 确定 |
+| 阈值配置 | 保留 `extractionWindowMessages`，0 关闭自动提取；同一参数继续用于触发阈值与分块预算。v2 默认值 60，范围 0—360（M08-D1） |
 | 围绕完整交流提取 | 在实际回复完成后检查阈值，沿用 v1 的完整交流分段与附近聊天筛选；尚未闭合的末尾输入留待后续处理 |
 | 旁听提取 | 消息入池后检查阈值，允许纯用户消息形成提取块；超长段沿用现有切分逻辑。该消费模式从统一消息池读取，跨引擎复用 |
 | 分块 | 沿用 `planExtractionChunks` 的筛选、装包和交流边界；阈值决定开始处理的时机，实际一批的条数由分块结果决定 |
@@ -340,9 +340,14 @@ v1 每次触发会重新读取未消费消息并分块。v2 重试期间在内�
 
 ## M08：配置默认值收尾
 
-已确认将默认值调整留到功能与迁移契约明确后处理。页面、工具、命令与配置结构已在 S7 落地。
+页面、工具、命令与配置结构已在 S7 落地；默认值在 2026-11-05 集中确定。
 
-- [ ] **M08-D1**：集中确定 v2 配置默认值，涵盖提取阈值、已确认失败策略的次数参数、消息池容量及其他工作流参数；区分 v1 默认值、用户显式配置与 v2 新安装默认值。当前 `DEFAULT_CONFIG` 沿用 v1 的全部取值，尚未按 v2 重新确定。
+- [x] **M08-D1**：集中确定 v2 配置默认值。三项相对 v1 调整，其余沿用 v1：
+  - `memorySearchToolMaxResults` 30 → 15。
+  - `recallIntervalMessages` 10 → 20。
+  - `extractionWindowMessages` 30 → 60，范围 0—200 → 0—360。
+  - 其余项沿用 v1 取值：`enableSnapshotInjection`、`enableUserProfileGeneration`、`enableDreamUserProfileGeneration`、`enableAutoDream` 为 `true`；`enableUserProfileInjection`、`enableConversationIsolation`、`extractionIncludeOverheard`、`enableExtractionWhitelist`、`debug` 为 `false`；`recallHistoryMessages` 20、`snapshotMaxLines` 5、`userProfileMinMemoryCount` 3、`userProfileMemoryLimit` 20、`memorySearchMinSimilarity` 0、`memoryCreateToolMaxMemories` 10、`extractionWhitelist` 空数组；四个模型项为 `无`；`enabledMemoryTools` 为检索、来源、创建三项。
+  - 旧配置没有自动导入通道，用户在配置界面重填；填入显式值时以显式值为准，不受上述默认值影响。
 - [x] **M08-L1 · LivingMemory**：按确认结果落实配置 schema 与说明，并明确旧配置导入时显式值的处理。schema 分六组，默认值统一取自 `DEFAULT_CONFIG`；旧配置没有自动导入通道，用户在配置界面重填。
 - [ ] **M08-V1**：核对新安装默认值、手动设置值与旧配置导入结果；文档、服务端配置及管理界面的值和含义一致。
 

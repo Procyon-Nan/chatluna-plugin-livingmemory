@@ -78,3 +78,7 @@
 - pending: 新增 `.agent/note/implemented/architecture/2026-11-05-reject-stringified-structured-output.md` 记录该决策与 v1 的有意差异；`doc/migration-plan.md` 增加 D14 并同步确认日期，`AGENTS.md` 补文档索引。全套 406 个用例中 405 通过、1 个仅 Windows 的目录切换用例跳过，`tsc --noEmit` 无报错。
 - pending: 新增 `tests/session-history.spec.ts` 共 6 个用例，覆盖会话历史到召回窗口条目的转换、注入消息跳过、非文本与非对话角色跳过、身份回退与去重键；对应 v1 `chatluna-transcript-adapter` 的断言。
 - pending: 核对测试迁移策略的全部处置并写入实测结果：48 个 v1 文件中 42 个同名迁移、4 个并入既有测试（`memory-create-tool`、`chat-middleware`、`character-middleware`、`chatluna-transcript-adapter`）、2 个删除（`client-dashboard`、`living-memory-service-lifecycle`），v2 另有 9 个新增文件。Note 移入 `implemented/` 并更新 `AGENTS.md` 与 `doc/migration-stages.md` 的引用路径。全套 412 个用例中 411 通过、1 个仅 Windows 的目录切换用例跳过，`tsc --noEmit` 无报错。
+- pending: 按 M08-D1 调整配置默认值：`memorySearchToolMaxResults` 30 → 15、`recallIntervalMessages` 10 → 20、`extractionWindowMessages` 30 → 60 且范围由 0—200 改为 0—360；其余项沿用 v1 取值。`src/service.ts` 的 `DEFAULT_CONFIG` 与 `src/index.ts` 的 schema 同步，`README.md` 配置表随之更新。
+- pending: `recallIntervalMessages` 的 schema 说明补回 v1 的「会话首次对话时立即召回」：`src/service/workflows/recall/coordinator.ts` 的 `anchorSeqByScope` 初始无锚点，首轮必然执行召回，行为与 v1 一致，此前只是描述遗漏。
+- pending: `tests/session-hooks.spec.ts` 的配置夹具改为从 `DEFAULT_CONFIG` 取未覆盖的项，避免默认值变更后夹具仍锁在旧数值上。
+- pending: `doc/migration-plan.md` 标记 M08-D1 完成并记录三项调整与沿用清单，`doc/migration-stages.md` 的 S8 补上配置默认值核对项，并把跨引擎运行与界面验收标注为由用户执行。全套 412 个用例中 411 通过、1 个仅 Windows 的目录切换用例跳过；`vector-index-service.spec.ts` 在并行压测下出现过一次 PGlite WASM 崩溃，单独运行 3 次与全套重跑均通过。

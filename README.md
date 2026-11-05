@@ -42,7 +42,7 @@ ChatLuna v2 的长期记忆插件。从对话中提取记忆、按需召回并�
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `enabledMemoryTools` | string[] | 检索、来源、创建三项 | 向 ChatLuna 注册的记忆工具 |
-| `memorySearchToolMaxResults` | number | `30` | 单次检索最多返回条数（1—60） |
+| `memorySearchToolMaxResults` | number | `15` | 单次检索最多返回条数（1—60） |
 | `memorySearchMinSimilarity` | number | `0` | 最低余弦相似度；`0` 表示不限制 |
 | `memoryCreateToolMaxMemories` | number | `10` | 单次创建工具最多创建条数（1—60） |
 
@@ -61,7 +61,7 @@ ChatLuna v2 的长期记忆插件。从对话中提取记忆、按需召回并�
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `enableConversationIsolation` | boolean | `false` | 只检索当前会话与全局记忆 |
-| `recallIntervalMessages` | number | `10` | 每累计多少条新消息召回一次；`0` 关闭 |
+| `recallIntervalMessages` | number | `20` | 每累计多少条新消息召回一次，会话首次对话时立即召回；`0` 关闭 |
 | `recallHistoryMessages` | number | `20` | 召回取用的上下文消息条数 |
 | `snapshotMaxLines` | number | `5` | 记忆快照的最大行数 |
 
@@ -69,7 +69,7 @@ ChatLuna v2 的长期记忆插件。从对话中提取记忆、按需召回并�
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `extractionWindowMessages` | number | `30` | 未提取消息达到该条数时提取；`0` 关闭 |
+| `extractionWindowMessages` | number | `60` | 未提取消息达到该条数时提取（0—360）；`0` 关闭 |
 | `enableAutoDream` | boolean | `true` | 提取保存新记忆后自动整理 |
 | `extractionIncludeOverheard` | boolean | `false` | 从首条普通消息累计，而非完整交流后提取 |
 | `enableExtractionWhitelist` | boolean | `false` | 只对白名单会话自动提取 |

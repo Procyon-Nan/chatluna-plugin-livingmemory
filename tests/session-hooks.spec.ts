@@ -5,6 +5,7 @@ import type { ChatObserverService } from '@chatluna/chat-observer'
 import { ChatMessage, contentText } from '@chatluna/message'
 import { MessageCollector } from '../src/service/message_collector.ts'
 import { LivingMemorySessionHooks } from '../src/service/session_hooks.ts'
+import { DEFAULT_CONFIG } from '../src/service.ts'
 import { createCapturedLogger } from './workflow-test-utils.ts'
 import type { ConversationLogEntryInput } from '../src/service/transcript/message_log/types.ts'
 import type { LivingMemoryTranscriptMessage, MemoryScope } from '../src/contracts/memory.ts'
@@ -190,9 +191,13 @@ const createHarness = (
         config: {
             enableSnapshotInjection: config.enableSnapshotInjection ?? true,
             enableUserProfileInjection: config.enableUserProfileInjection ?? false,
-            recallIntervalMessages: config.recallIntervalMessages ?? 10,
-            recallHistoryMessages: config.recallHistoryMessages ?? 20,
-            extractionWindowMessages: config.extractionWindowMessages ?? 30,
+            // 未显式覆盖时取插件默认值，使默认值变更不会让这些用例失去意义。
+            recallIntervalMessages:
+                config.recallIntervalMessages ?? DEFAULT_CONFIG.recallIntervalMessages,
+            recallHistoryMessages:
+                config.recallHistoryMessages ?? DEFAULT_CONFIG.recallHistoryMessages,
+            extractionWindowMessages:
+                config.extractionWindowMessages ?? DEFAULT_CONFIG.extractionWindowMessages,
             extractionIncludeOverheard: config.extractionIncludeOverheard ?? false
         }
     })

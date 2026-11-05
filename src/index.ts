@@ -143,7 +143,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .max(200)
             .step(1)
             .description(
-                '每累计该条数的新消息（含 bot 未回复的闲聊）自动召回一次记忆。设为 0 时关闭自动召回。'
+                '每累计该条数的新消息（含 bot 未回复的闲聊）自动召回一次记忆，会话首次对话时立即召回。设为 0 时关闭自动召回。'
             )
             .default(DEFAULT_CONFIG.recallIntervalMessages),
         recallHistoryMessages: Schema.number()
@@ -162,7 +162,7 @@ export const Config: Schema<Config> = Schema.intersect([
     Schema.object({
         extractionWindowMessages: Schema.number()
             .min(0)
-            .max(200)
+            .max(360)
             .step(1)
             .description(
                 '未提取的消息累计达到该条数时自动提取一次记忆。设为 0 时关闭自动提取。'
