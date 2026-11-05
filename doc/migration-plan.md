@@ -34,13 +34,13 @@ M00 完成依据：脚手架的 9 个文件已生成；`chatluna.yml` 已注册�
 
 ## 项目与参考路径
 
-| 项目 | 路径 | 用途 |
+| 项目 | 位置 | 用途 |
 | --- | --- | --- |
-| LivingMemory v2 | `C:\Users\31899\dev\chatlunav2-dev\boilerplate\external\livingmemory` | 当前插件仓库，包名 `chatluna-plugin-livingmemory` |
-| LivingMemory v1 | `C:\Users\31899\dev\koishi-dev\external\chatluna-livingmemory` | 现有功能、数据格式与业务行为的迁移依据 |
-| ChatLuna v2 模板 | `C:\Users\31899\dev\chatlunav2-dev\boilerplate` | 插件开发与运行环境 |
-| ChatLuna v2 文档 | `C:\Users\31899\dev\chatlunav2-dev\doc` | 插件开发、服务接口与框架说明 |
-| ChatLuna v2 源码 | `C:\Users\31899\dev\chatlunav2-dev\v2-mirror` | 调用链核对与框架侧适配 |
+| LivingMemory v2 | 本仓库，包名 `chatluna-plugin-livingmemory` | 当前插件 |
+| LivingMemory v1 | https://github.com/Procyon-Nan/koishi-plugin-chatluna-livingmemory | 现有功能、数据格式与业务行为的迁移依据 |
+| ChatLuna v2 模板 | https://github.com/ChatLunaLab/boilerplate.git（本仓库位于其 `external/livingmemory`） | 插件开发与运行环境 |
+| ChatLuna v2 文档 | https://github.com/ChatLunaLab/doc.git | 插件开发、服务接口与框架说明 |
+| ChatLuna v2 源码 | https://github.com/ChatLunaLab/v2-mirror.git | 调用链核对与框架侧适配 |
 
 ## 已确认事项
 

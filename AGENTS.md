@@ -5,9 +5,9 @@
 - 临时文件、脚本、截图与验证产物统一放入 `tmp/`。交付前执行构建、类型检查和针对主要业务闭环的集成验证，按实际结果更新交付文档。
 
 ## 参考
-- chatluna v2 开发文档：`C:\Users\31899\dev\chatlunav2-dev\doc`
-- chatluna v2 源代码：`C:\Users\31899\dev\chatlunav2-dev\v2-mirror`
-- chatluna v1 下的 livingmemory 插件源代码：`C:\Users\31899\dev\koishi-dev\external\chatluna-livingmemory`
+- chatluna v2 开发文档：https://github.com/ChatLunaLab/doc.git
+- chatluna v2 源代码：https://github.com/ChatLunaLab/v2-mirror.git
+- chatluna v1 下的 livingmemory 插件源代码：https://github.com/Procyon-Nan/koishi-plugin-chatluna-livingmemory
 
 ## 代码与设计
 

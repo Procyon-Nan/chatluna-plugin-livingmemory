@@ -4,6 +4,10 @@
     "description": "ChatLuna plugin livingmemory",
     "type": "module",
     "license": "AGPL-3.0-only",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Procyon-Nan/chatluna-plugin-livingmemory.git"
+    },
     "keywords": [
         "chatluna-plugin"
     ],
