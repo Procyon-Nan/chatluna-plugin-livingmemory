@@ -26,6 +26,10 @@ import { LivingMemoryDreamJobRunner } from './service/workflows/dream/job_runner
 import { LivingMemoryDreamCoordinator } from './service/workflows/dream/coordinator.ts'
 import { LivingMemoryJobTracker } from './service/workflows/job_tracker.ts'
 import { LivingMemoryJobSurface } from './service/app/job_surface.ts'
+import { LivingMemoryMaintenance } from './service/app/maintenance.ts'
+import { LivingMemoryAdminService } from './service/app/admin_service.ts'
+import { livingMemoryCommands } from './service/app/commands.ts'
+import { livingMemoryWebUI } from './service/app/webui.ts'
 import { LivingMemorySessionHooks } from './service/session_hooks.ts'
 import type { LivingMemoryConfig } from './contracts/workflows.ts'
 
@@ -83,6 +87,8 @@ export default class LivingmemoryService extends Service {
     readonly extractionCoordinator: LivingMemoryExtractionCoordinator
     readonly dreamCoordinator: LivingMemoryDreamCoordinator
     readonly jobs: LivingMemoryJobSurface
+    readonly admin: LivingMemoryAdminService
+    readonly maintenance: LivingMemoryMaintenance
     readonly providers: LivingMemoryMemoryProviders
     readonly logger: LivingMemoryLogger
     private readonly sessionHooks: LivingMemorySessionHooks
@@ -205,6 +211,37 @@ export default class LivingmemoryService extends Service {
             logger: this.logger,
             config
         })
+        this.admin = new LivingMemoryAdminService(ctx, {
+            config,
+            repository: this.repository,
+            mutations: this.mutations,
+            searchEngine: this.searchEngine,
+            presetPersona: this.presetPersona,
+            userProfiles: this.userProfiles,
+            dreamCoordinator: this.dreamCoordinator,
+            vectorIndex: this.vectorIndex,
+            logger: this.logger,
+            listPresetIds: async () =>
+                ctx.presets.list().map((preset) => preset.id),
+            cleanupConversation: (conversationId) =>
+                this.cleanupConversation(conversationId)
+        })
+        this.maintenance = new LivingMemoryMaintenance(ctx, {
+            repository: this.repository,
+            mutations: this.mutations,
+            logger: this.logger
+        })
+    }
+
+    /**
+     * 清理单个会话在本插件内的状态：快照按会话删除，召回与提取游标按会话
+     * 失效，消息池整池丢弃。记忆条目本身不删——它们属于预设，不随会话消失。
+     */
+    private async cleanupConversation(conversationId: string) {
+        await this.repository.deleteSnapshotsByConversation(conversationId)
+        this.recallCoordinator.clearByConversation(conversationId)
+        this.extractionCoordinator.clearByConversation(conversationId)
+        this.collector.reset(conversationId)
     }
 
     /**
@@ -236,6 +273,8 @@ export default class LivingmemoryService extends Service {
         const unregister = this.ctx.memory.backend(this.backend.id, () => this.backend)
         const stopCollecting = this.collector.start()
         const stopHooks = this.sessionHooks.register()
+        this.registerCommands()
+        this.registerWebUI()
         const tools = registerLivingMemoryTools(this.ctx, this.providers, {
             enabled: this.config.enabledMemoryTools,
             createToolMaxMemories: this.config.memoryCreateToolMaxMemories,
@@ -250,28 +289,76 @@ export default class LivingmemoryService extends Service {
     }
 
     /**
+     * 命令只在宿主装了 `koishi` 服务时注册，卸载随插件的 effect 一并完成。
+     * 不把 `koishi` 列进插件 `inject`：命令是可选能力，缺它不应让整插件不加载。
+     */
+    private registerCommands() {
+        const admin = this.admin
+        this.ctx.plugin({
+            name: 'livingmemory-commands',
+            inject: ['koishi'],
+            apply: (ctx: Context) => livingMemoryCommands(ctx, admin)
+        })
+    }
+
+    /**
+     * 管理页只在宿主装了 `chatluna_webui` 时注册。子插件的形式与命令一致：
+     * 界面是可选能力，缺它不应让整插件不加载。
+     */
+    private registerWebUI() {
+        const ui = {
+            admin: this.admin,
+            repository: this.repository,
+            jobs: this.jobs,
+            logger: this.logger
+        }
+        this.ctx.plugin({
+            name: 'livingmemory-webui',
+            inject: ['chatluna_webui'],
+            apply: (ctx: Context) => {
+                ctx.chatluna_webui.addEntry({
+                    baseUrl: import.meta.url,
+                    source: '../client/index.ts',
+                    bundle: '../dist/client.js'
+                })
+                livingMemoryWebUI(ctx, ui)
+            }
+        })
+    }
+
+    /**
      * 注册上述能力并启动向量索引与 Dream 工作线程。索引的就绪状态决定记忆写入
      * 能否通过 `assertPresetReady`，因此启动失败按插件加载失败处理。
+     *
+     * 顺序沿用 v1：先做启动维护（改写记忆行与任务行），再启动索引读回修复后的
+     * 数据；索引就绪后排队一次归档清理。
      */
     async start(): Promise<Disposable> {
+        await this.maintenance.runStartup()
         const disposer = this.register()
-        await this.vectorIndex.start()
+        const stopMaintenance = this.maintenance.schedule()
         try {
+            await this.vectorIndex.start()
             await this.dreamWorker.start()
         } catch (error) {
             await this.dreamWorker.stop()
             await this.vectorIndex.stop()
+            stopMaintenance()
             disposer()
             throw error
         }
+        this.maintenance.queueStartupArchivedCleanup()
+        await this.maintenance.settled()
         return async () => {
             // 先停止接收新任务并取消在途运行，再释放 Worker 与索引。
+            stopMaintenance()
             await Promise.all([
                 this.dreamCoordinator.stop(),
                 this.recallCoordinator.stop(),
                 this.extractionCoordinator.stop(),
                 this.userProfiles.stop()
             ])
+            await this.maintenance.settled()
             this.vectorIndex.beginStop()
             try {
                 await this.dreamWorker.stop()

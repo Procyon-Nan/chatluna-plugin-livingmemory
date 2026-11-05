@@ -52,6 +52,10 @@ import {
 import type { LivingMemoryTransaction } from './types.ts'
 import { SerialTaskQueue } from '../shared/serial_task_queue.ts'
 import { normalizeMemorySourceOrigins } from '../memory/origins/source_origins.ts'
+import {
+    normalizeMemoryTitle,
+    normalizeMemoryTopic
+} from '../memory/entry_identity.ts'
 
 const PRESET_IMPORT_BATCH_SIZE = 100
 const TRANSACTION_QUEUE_KEY = 'living-memory-transaction'
@@ -654,26 +658,41 @@ export class LivingMemoryRepository
             entry: LivingMemoryPresetExportEntry,
             speakerKeys: string[],
             sourceLabel: string | null
-        ) => ({
-            id: resolveEntryImportId(entry.id),
-            presetId: targetPresetId,
-            speakerKeys,
-            type: entry.type,
-            status: entry.status,
-            topic: entry.topic ?? entry.type,
-            title: entry.title ?? null,
-            fields: entry.fields ?? null,
-            content: entry.content,
-            keywords: entry.keywords,
-            summary: entry.summary,
-            sentiment: entry.sentiment,
-            importance: entry.importance,
-            sourceConversationId: entry.sourceConversationId,
-            sourceLabel,
-            sourceOrigins: normalizeMemorySourceOrigins(entry.sourceOrigins),
-            createdAt: new Date(entry.createdAt),
-            updatedAt: new Date(entry.updatedAt)
-        })
+        ) => {
+            const content = entry.content
+            return {
+                id: resolveEntryImportId(entry.id),
+                presetId: targetPresetId,
+                speakerKeys,
+                type: entry.type,
+                status: entry.status,
+                // v2 之前导出的文件没有 topic/title：按写入侧的同一规则补齐，
+                // 使导入行与新建行在读取侧无需再推导。
+                topic: normalizeMemoryTopic({
+                    type: entry.type,
+                    topic: entry.topic
+                }),
+                title: normalizeMemoryTitle(
+                    {
+                        title: entry.title ?? undefined,
+                        summary: entry.summary
+                    },
+                    content,
+                    entry.id
+                ),
+                fields: entry.fields ?? null,
+                content,
+                keywords: entry.keywords,
+                summary: entry.summary,
+                sentiment: entry.sentiment,
+                importance: entry.importance,
+                sourceConversationId: entry.sourceConversationId,
+                sourceLabel,
+                sourceOrigins: normalizeMemorySourceOrigins(entry.sourceOrigins),
+                createdAt: new Date(entry.createdAt),
+                updatedAt: new Date(entry.updatedAt)
+            }
+        }
         let entryRows: MemoryEntryRecord[]
         if (data.version === 1 || data.version === 2) {
             entryRows = data.entries.map((entry) =>

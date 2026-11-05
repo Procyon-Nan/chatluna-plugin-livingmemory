@@ -15,7 +15,7 @@
 | S5 ✅ | 工作流：提取、召回、Dream、画像、人设 | M06、M07 | 业务闭环可用，与 v1 行为对照 | 部分，M06-C1 |
 | S6 ✅ | 调度与任务：让出原生调度、稳定任务 ID、卸载取消 | M01 | 自动流程只触发一次，两个页面任务一致 | 是，M01-C1/C2/C3 |
 | S6.5 ✅ | 采集与触发收尾：修加载阻塞、采集改拉取、接入会话钩子 | M05、M06 | 插件正常加载，回复后触发提取，注入出现在本轮请求 | 否 |
-| S7 | 管理与导入：WebUI、命令、配置、旧数据导入 | M08 | 管理端可用，旧数据进入新流程 | 否 |
+| S7 ✅ | 管理与导入：WebUI、命令、配置、旧数据导入 | M08 | 管理端可用，旧数据进入新流程 | 否 |
 | S8 | 验收：跨引擎、生命周期、D11 行为对照 | M09 | 迁移完成 | — |
 
 S1、S2 与框架侧无关，可立即开始。S3 依赖统一采集与交付归属接口，S6 依赖调度归属与任务受理接口，对应需求见 [框架侧接口需求](framework-requirements.md)。S6.5 不需要框架侧新增接口：采集走 `chat_observer` 的现有拉取面，注入与触发走 `ctx.agents.prepareStep` 与 `chatluna/agent-turn`。
@@ -170,6 +170,27 @@ S3 与 S5 各自完成单元级验证但拼不到一起：插件整体不加载�
 ### S7 管理与导入
 
 迁移 `src/plugins/`（1417 行）与 `client/`。v1 使用 koishi-console，v2 使用 `@chatluna/ui-client`。旧数据导入覆盖记忆、来源、画像、人设与快照，对应 D05。
+
+**已完成**（2026-11-05）。落地内容与验收依据：
+
+| 项 | 结果 |
+| --- | --- |
+| 配置 | `src/index.ts` 的六组 schema（基础、模型、工具、用户画像、召回、提取），默认值统一取 `DEFAULT_CONFIG`；补上 `apply` 未把用户配置传给服务的问题 |
+| 管理服务 | `src/service/app/admin_service.ts` 组合仓储、变更、检索、人设、画像、Dream 与索引的读写；预设列表取目录与库中存量的并集 |
+| 配置自检 | `src/service/app/config_status.ts` 沿用 v1 三条规则（召回模型、嵌入模型、提取模型），并入 `MemoryServiceStatus` |
+| 命令 | `src/service/app/commands.ts` 的 `/livingmemory <预设> delete <text\|user\|profile> <值>`，确认后归档记忆或删除画像；`-c` 选项因 v2 Character 引擎直接使用预设 id 而移除 |
+| 管理页数据面 | `src/service/app/webui.ts` 提供 `livingmemory.{scopes,entries,profiles,personas,snapshots,jobs,status}` 七个 state 与 13 个 action，写操作要求权限 4 |
+| 管理页 | `client/page.tsx` 六个面板：记忆检索编辑与归档、画像编辑重生成、人设卡片、快照、任务（含 Dream 与索引维护）、召回测试；`/livingmemory` 挂在 capabilities 分组 |
+| 旧数据导入 | `importPreset` 覆盖记忆、来源、画像与说话人卡片；补充缺省 `topic`/`title` 的推导，使 v1 版本 1—5 的导出文件导入后与新建行一致 |
+| 启动与每日维护 | `src/service/app/maintenance.ts` 接回四项数据修复、全局中断任务回收、过期任务清理与到期归档记忆清理；此前这些方法没有任何调用点 |
+| 快照与人设导出 | v1 的快照不进导出文件，人设卡片是预设级派生缓存，同样不进；两者沿用 v1 范围 |
+| 结果 | 新增 5 个测试文件共 28 个用例；全套 393 个用例中 392 通过、1 个仅 Windows 的目录切换用例跳过，`tsc` 与客户端 `tsc` 均无报错，模板 `yarn yakumo build` 与 Worker 打包成功 |
+
+**未覆盖**：
+
+| 项 | 现状 |
+| --- | --- |
+| 配置文件迁移 | v1 的 koishi 配置项按同名映射，v2 未提供自动读取旧配置文件的通道，需用户在配置中重填 |
 
 ### S8 验收
 

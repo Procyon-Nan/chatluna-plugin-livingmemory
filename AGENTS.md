@@ -31,7 +31,7 @@
 
 ## 代码结构
 
-本项目为 `chatluna-plugin-livingmemory`，位于 ChatLuna v2 模板项目的 `external/livingmemory/`，由模板项目提供开发运行环境。当前处于 S6.5 采集与触发收尾完成、S7 管理与导入待开始的阶段。
+本项目为 `chatluna-plugin-livingmemory`，位于 ChatLuna v2 模板项目的 `external/livingmemory/`，由模板项目提供开发运行环境。当前处于 S7 管理与导入完成、S8 验收待开始的阶段。
 
 ```text
 livingmemory/
@@ -52,7 +52,7 @@ livingmemory/
 │   │   ├── user_profile.ts     # 人物画像生成、审阅与注入渲染
 │   │   ├── message_collector.ts # 统一采集层：拉取 chat_observer 通道缓冲，维护每会话消息池
 │   │   ├── session_hooks.ts    # 会话钩子：prepareStep 注入与召回、agent-turn 记录回复并触发提取
-│   │   ├── app/                # 应用层组装：记忆读写提供者、变更服务、查询投影、任务视图与任务面
+│   │   ├── app/                # 应用层组装：管理服务与命令、WebUI 数据面、启动与每日维护、变更服务、查询投影与任务面
 │   │   ├── logging/            # 诊断日志构造、凭据脱敏与模型调用记录
 │   │   ├── memory/             # 字段规范化、说话人身份、主题标题推导、来源消息、人设卡片
 │   │   │   ├── origins/        # 来源消息的规范化与迁移
@@ -81,7 +81,9 @@ livingmemory/
 ├── scripts/
 │   └── build-workers.mjs       # 用 rolldown 打包 Vector 与语义分组 Worker 产物
 ├── client/
-│   ├── index.ts                # WebUI 客户端入口，当前注册国际化资源
+│   ├── index.ts                # WebUI 客户端入口：注册 `/livingmemory` 路由与语言资源
+│   ├── page.tsx                # 管理页：记忆、画像、人设、快照、任务、召回测试六个面板
+│   ├── contracts.ts            # 客户端侧的 States / Actions 类型增强
 │   └── locales/
 │       ├── zh.yml              # 中文界面文案
 │       └── en.yml              # 英文界面文案
@@ -105,7 +107,7 @@ livingmemory/
 
 | 文档 | 内容 |
 | --- | --- |
-| [README.md](README.md) | 插件简介与配置说明，当前为脚手架内容 |
+| [README.md](README.md) | 插件简介、配套服务、配置项表、命令与管理页入口 |
 | [doc/migration-plan.md](doc/migration-plan.md) | 迁移目标、确认事项、任务编号与依赖、设计/实施/验收进度、双方接口及职责草案、旧数据迁移范围 |
 | [doc/migration-stages.md](doc/migration-stages.md) | S1—S8 实施阶段划分、各阶段交付物、模块归属、向量索引与测试处置、提交粒度与阻塞项 |
 | [doc/message-pool.md](doc/message-pool.md) | M05 跨引擎统一采集、分池、回填、去重、内存游标、会话生命周期、冷启动与实施验收 |

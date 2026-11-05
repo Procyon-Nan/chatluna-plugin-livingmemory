@@ -83,6 +83,16 @@ export interface ExtractionPayload {
     }>
 }
 
+/** 配置里可选的记忆工具名；与服务端注册的工具定义同名。 */
+export type LivingMemoryToolName =
+    | 'living_memory_search'
+    | 'living_memory_get_messages'
+    | 'living_memory_create_memory'
+    | 'living_memory_update_memory'
+    | 'living_memory_merge_memories'
+    | 'living_memory_split_memory'
+    | 'living_memory_delete_memory'
+
 export interface LivingMemoryConfig {
     enableConversationIsolation: boolean
     enableSnapshotInjection: boolean
@@ -105,7 +115,7 @@ export interface LivingMemoryConfig {
     extractionWhitelist: string[]
     memorySearchToolMaxResults: number
     memorySearchMinSimilarity: number
-    enabledMemoryTools: string[]
+    enabledMemoryTools: LivingMemoryToolName[]
     memoryCreateToolMaxMemories: number
     debug: boolean
 }

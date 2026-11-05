@@ -1,1 +1,82 @@
-livingmemory.title: livingmemory
+title: 长期记忆
+description: 查看与管理记忆条目、后台任务和预设人设卡片
+preset.placeholder: 选择预设
+empty.noPreset: 还没有任何预设数据。先在对话里产生记忆，或从导出文件导入。
+
+tab.entries: 记忆
+tab.jobs: 任务
+tab.personas: 人设卡片
+
+status.active: 活跃
+status.archived: 已归档
+status.all: 全部
+
+type.all: 全部类型
+type.identity: 身份
+type.preference: 偏好
+type.fact: 事实
+type.plan: 计划
+type.context: 背景
+type.other: 其他
+
+entries.search: 搜索内容、摘要或关键词
+entries.total: 共 {count} 条
+entries.empty: 这里还没有记忆
+entries.untitled: 无标题
+entries.edit: 编辑
+entries.archive: 归档
+entries.purge: 彻底删除
+
+field.title: 标题
+field.keywords: 关键词（逗号分隔）
+field.content: 内容
+
+jobs.dream: 运行 Dream
+jobs.rebuildIndex: 重建向量索引
+jobs.empty: 还没有任务记录
+job.kind.extract: 提取
+job.kind.dream: Dream
+job.kind.recall: 召回
+job.kind.index: 索引
+job.status.pending: 排队中
+job.status.running: 运行中
+job.status.completed: 已完成
+job.status.partial: 部分完成
+job.status.failed: 失败
+job.status.cancelled: 已取消
+
+personas.empty: 还没有生成过预设人设卡片
+personas.stale: 预设已变更
+personas.reset: 重新生成
+personas.hint: 卡片由预设的 system 部分摘录生成；手工保存后不再被自动覆盖。
+
+persona.source.auto: 自动生成
+persona.source.manual: 手工编辑
+
+common.save: 保存
+common.cancel: 取消
+common.edit: 编辑
+common.prev: 上一页
+common.next: 下一页
+tab.profiles: 用户画像
+tab.snapshots: 快照
+
+profiles.empty: 还没有为这个预设生成过用户画像
+profiles.hint: 画像由模型从关联记忆提炼；保存后不再被自动生成覆盖。
+profiles.sourceCount: '关联 {count} 条记忆'
+profiles.regenerate: 重新生成
+profiles.delete: 删除
+
+snapshots.empty: 还没有召回快照
+snapshots.noQuery: 无查询
+snapshots.items: '命中 {count} 组'
+
+common.delete: 删除
+
+tab.search: 召回测试
+
+search.text: 搜索文本（第一人称描述）
+search.keywords: 关键词（逗号分隔，选填）
+search.run: 搜索
+search.empty: 未找到匹配的记忆
+search.scores: 'cosine {cosine} · 关键词 {keyword} · 加权 {boosted}'

@@ -1,1 +1,82 @@
-livingmemory.title: livingmemory
+title: Living Memory
+description: Browse and manage memory entries, background jobs and preset persona cards
+preset.placeholder: Select a preset
+empty.noPreset: No preset data yet. Produce memories in a conversation, or import an export file.
+
+tab.entries: Memories
+tab.jobs: Jobs
+tab.personas: Personas
+
+status.active: Active
+status.archived: Archived
+status.all: All
+
+type.all: All types
+type.identity: Identity
+type.preference: Preference
+type.fact: Fact
+type.plan: Plan
+type.context: Context
+type.other: Other
+
+entries.search: Search content, summary or keywords
+entries.total: '{count} entries'
+entries.empty: No memories here yet
+entries.untitled: Untitled
+entries.edit: Edit
+entries.archive: Archive
+entries.purge: Delete
+
+field.title: Title
+field.keywords: Keywords (comma separated)
+field.content: Content
+
+jobs.dream: Run Dream
+jobs.rebuildIndex: Rebuild vector index
+jobs.empty: No jobs recorded yet
+job.kind.extract: Extract
+job.kind.dream: Dream
+job.kind.recall: Recall
+job.kind.index: Index
+job.status.pending: Pending
+job.status.running: Running
+job.status.completed: Completed
+job.status.partial: Partial
+job.status.failed: Failed
+job.status.cancelled: Cancelled
+
+personas.empty: No preset persona cards have been generated
+personas.stale: Preset changed
+personas.reset: Regenerate
+personas.hint: The card is distilled from the preset's system section; once saved by hand it is no longer overwritten automatically.
+
+persona.source.auto: Generated
+persona.source.manual: Edited by hand
+
+common.save: Save
+common.cancel: Cancel
+common.edit: Edit
+common.prev: Previous
+common.next: Next
+tab.profiles: Profiles
+tab.snapshots: Snapshots
+
+profiles.empty: No user profile has been generated for this preset
+profiles.hint: The profile is distilled from linked memories; once saved it is no longer overwritten automatically.
+profiles.sourceCount: '{count} linked memories'
+profiles.regenerate: Regenerate
+profiles.delete: Delete
+
+snapshots.empty: No recall snapshot yet
+snapshots.noQuery: No query
+snapshots.items: '{count} matches'
+
+common.delete: Delete
+
+tab.search: Recall test
+
+search.text: Search text (first-person description)
+search.keywords: Keywords (comma separated, optional)
+search.run: Search
+search.empty: No memory matched
+search.scores: 'cosine {cosine} · keywords {keyword} · boosted {boosted}'
