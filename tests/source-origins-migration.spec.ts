@@ -47,11 +47,11 @@ const startDatabase = async (ctx: Context) => {
     await ctx.plugin(SQLiteDriver, { path: ':memory:' })
 }
 
-// SQLite 驱动用 `new URL(path, ctx.baseUrl)` 解析文件路径，baseUrl 必须是 file: URL。
+// SQLite 驱动按 URL 解析路径；Windows 绝对路径也必须转换，避免盘符被识别为协议。
 const startDatabaseAt = async (ctx: Context, path: string, baseDir: string) => {
     ctx.baseUrl = pathToFileURL(baseDir).href
     await ctx.plugin(Database)
-    await ctx.plugin(SQLiteDriver, { path })
+    await ctx.plugin(SQLiteDriver, { path: pathToFileURL(path).href })
 }
 
 const insertLegacyEntry = async (ctx: Context, entry: LegacyEntryInput) => {

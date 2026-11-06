@@ -1,5 +1,9 @@
 # 变更记录
 
+## 2026-11-06 version:0.0.0
+
+- pending: 修正旧 SQLite 数据迁移测试的文件路径传参，使用 `pathToFileURL` 将绝对路径转为文件 URL，避免 Windows 盘符被驱动解析为 URL 协议而导致启动失败；验证待执行。
+
 ## 2026-11-04 version:0.0.0
 
 - pending: 新增 `doc/framework-requirements.md`，按 M01-C1/C2/C3、M02-C1、M05-C1/C2、M06-C1 列出 ChatLuna v2 需补充的接口项、当前源码事实与验收条件；同步 `AGENTS.md` 目录树与文档索引。
