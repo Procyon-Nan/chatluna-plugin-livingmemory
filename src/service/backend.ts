@@ -13,8 +13,15 @@ import type {
   MemorySearchInput,
   MemorySourceOrigin
 } from '@chatluna/memory'
-import type { MemoryEntryRecord, MemoryMutationInput, MemoryUpdatePatch } from '../contracts/memory.ts'
+import type {
+  MemoryEntryRecord,
+  MemoryMutationInput,
+  MemoryUpdatePatch,
+  MemoryScope as LivingMemoryScope
+} from '../contracts/memory.ts'
 import type { MemoryBackendScheduling } from '../contracts/framework.ts'
+import type { LivingMemoryMutationService } from './app/mutation_service.ts'
+import { formatLogScope, type LivingMemoryLogger } from './logging/logger.ts'
 import { titleOf } from './memory/entry_identity.ts'
 import { createPresetImportId } from './persistence/normalizers.ts'
 import type { LivingMemoryRepository } from './persistence/repository.ts'
@@ -23,8 +30,12 @@ import type { LivingMemoryRepository } from './persistence/repository.ts'
  * LivingMemory 的 `ctx.memory` 后端。
  *
  * v1 的业务能力（消息池、提取、召回、Dream、画像、索引）仍由插件自身的工作流承担；
- * 这里只把 v2 定义的后端契约映射到 v1 的持久化仓储，使原生工具、管理界面与路由
- * 能够把 LivingMemory 当作普通后端使用。
+ * 这里把 v2 定义的后端契约映射到插件的持久化仓储与变更服务，使原生工具、管理界面
+ * 与路由能够把 LivingMemory 当作普通后端使用。
+ *
+ * 写操作全部委托 `LivingMemoryMutationService`：预设级串行队列、索引就绪预检与
+ * 落库后的索引同步只在该服务内实现。后端直接写仓储会让索引与主数据脱节，下一次
+ * 变更的条数校验随即失败并把预设标记为 dirty。
  */
 export class LivingMemoryBackend implements MemoryBackend {
   readonly id = 'livingmemory'
@@ -41,7 +52,11 @@ export class LivingMemoryBackend implements MemoryBackend {
 
   private readonly listeners = new Set<(change: MemoryChange) => void>()
 
-  constructor(private readonly repository: LivingMemoryRepository) {}
+  constructor(
+    private readonly repository: LivingMemoryRepository,
+    private readonly mutations: LivingMemoryMutationService,
+    private readonly logger: LivingMemoryLogger
+  ) {}
 
   async search(scope: MemoryScope, input: MemorySearchInput): Promise<readonly MemoryHit[]> {
     const entries = await this.listForScope(scope)
@@ -110,39 +125,55 @@ export class LivingMemoryBackend implements MemoryBackend {
   async create(scope: MemoryScope, input: readonly MemoryInput[]): Promise<readonly MemoryEntry[]> {
     const records: MemoryEntryRecord[] = []
     for (const item of input) {
-      records.push(await this.repository.createMemory(scopeOf(scope, scope.conversationId ?? ''), inputOf(item)))
+      records.push(await this.mutations.createMemory(scopeOf(scope), inputOf(item), speakerKeysOf(item)))
     }
-    this.emit('created', scope.presetId, records)
-    return records.map(toEntry)
+    const entries = records.map(toEntry)
+    this.emit('created', scope.presetId, entries)
+    return entries
   }
 
   async update(id: string, patch: MemoryPatch): Promise<MemoryEntry> {
-    const record = await this.repository.updateMemory(id, patchOf(patch))
-    if (record === null) throw new Error(`no such memory: ${id}`)
-    this.emit('updated', record.record.presetId, [record.record])
-    return toEntry(record.record)
+    const updated = await this.mutations.updateMemory(id, patchOf(patch))
+    if (updated === null) throw new Error(`no such memory: ${id}`)
+    const entry = toEntry(updated.record)
+    this.emit('updated', updated.record.presetId, [entry])
+    return entry
   }
 
   async merge(presetId: string, ids: readonly string[], into: MemoryInput): Promise<MemoryEntry> {
-    const merged = await this.repository.mergeMemories(presetId, [...ids], attributed(into))
-    this.emit('updated', presetId, [merged.memory, ...merged.archivedSources])
-    return toEntry(merged.memory)
+    const merged = await this.mutations.mergeActiveMemories(presetId, [...ids], attributed(into))
+    this.reportWarnings(presetId, merged.warnings)
+    const entry = toEntry(merged.memory)
+    this.emitIds('updated', presetId, [...ids, entry.id], [entry])
+    return entry
   }
 
   async split(presetId: string, id: string, into: readonly MemoryInput[]): Promise<readonly MemoryEntry[]> {
-    const split = await this.repository.splitMemory(presetId, id, into.map(attributed))
-    this.emit('updated', presetId, [...split.memories, split.archivedSource])
-    return split.memories.map(toEntry)
+    const split = await this.mutations.splitActiveMemory(presetId, id, into.map(attributed))
+    this.reportWarnings(presetId, split.warnings)
+    const entries = split.memories.map(toEntry)
+    this.emitIds('updated', presetId, [id, ...entries.map((entry) => entry.id)], entries)
+    return entries
   }
 
   async archive(presetId: string, ids: readonly string[]): Promise<void> {
-    const archived = await this.repository.archiveActiveEntries(presetId, [...ids])
-    this.emit('archived', presetId, archived)
+    const result = await this.mutations.archiveActiveMemories(presetId, [...ids])
+    if (result.archived === 0) return
+    const archived = (
+      await this.repository.getEntriesByPresetAndIds(presetId, [...ids])
+    ).filter((record) => record.status === 'archived')
+    this.emit('archived', presetId, archived.map(toEntry))
   }
 
   async remove(presetId: string, ids: readonly string[]): Promise<void> {
-    await this.repository.deleteEntries(presetId, [...ids])
-    this.emit('removed', presetId, [])
+    // 先取本预设内真实存在的 id：跨预设与已删除的 id 由变更服务幂等跳过，
+    // 通知里只应出现真正被删除的条目。
+    const known = await this.repository.getEntriesByPresetAndIds(presetId, [...ids])
+    if (known.length === 0) return
+    await this.mutations.deleteMemories(presetId, known.map((record) => record.id))
+    // 记录已删除，变更只携带 id：原生消费者会把 `entries` 的内容回写到自己的状态，
+    // 带上已删除的条目会让它们复活。
+    this.emitIds('removed', presetId, known.map((record) => record.id))
   }
 
   async sources(id: string): Promise<readonly MemorySourceOrigin[]> {
@@ -183,32 +214,32 @@ export class LivingMemoryBackend implements MemoryBackend {
   }
 
   /**
-   * v2 的导入语义是幂等合并：目标预设内已存在的 id 跳过；同 id 落在其他预设时
+   * v2 的导入语义是幂等合并：目标预设内已存在的条目跳过；同 id 落在其他预设时
    * 换发导入 id（v1 的跨预设导入同样如此），因为记录表以 id 为主键。
    * 含来源与画像的完整预设导入走 v1 自有的 `importPresetData`。
+   *
+   * 迁移 id 由「目标预设 + 源 id」确定性推导，所以「目标 id 已被占用」就是
+   * 「这批数据已经导入过」的判据；只看源 id 会让第二次导入重复写入同一个 id。
    */
-  async import(presetId: string, data: MemoryExport): Promise<void> {
+  async import(into: MemoryScope, data: MemoryExport): Promise<number> {
+    const written: MemoryEntryRecord[] = []
     for (const entry of data.entries) {
-      const existing = await this.repository.getEntryById(entry.id)
-      if (existing?.presetId === presetId) continue
-      await this.repository.createMemory(
-        { presetId, conversationId: entry.scope.conversationId ?? '' },
-        {
-          id: existing === undefined ? entry.id : createPresetImportId('entry', presetId, entry.id),
-          type: entry.type,
-          status: entry.status,
-          topic: entry.topic,
-          title: entry.title,
-          content: entry.content,
-          keywords: [...entry.keywords],
-          summary: entry.summary ?? null,
-          sentiment: entry.sentiment ?? null,
-          importance: entry.importance ?? null,
-          fields: entry.fields === undefined ? null : { ...entry.fields }
-        },
-        [...entry.speakerKeys]
-      )
+      const targetId = await this.resolveImportId(into.presetId, entry.id)
+      if (targetId === null) continue
+      written.push(await this.mutations.createMemory(scopeOf(into, entry.scope.conversationId ?? ''), importInputOf(entry, targetId), [...entry.speakerKeys]))
     }
+    if (written.length > 0) this.emit('created', into.presetId, written.map(toEntry))
+    return written.length
+  }
+
+  /** 返回可写入的 id；目标已有同名记录时返回 `null` 表示跳过。 */
+  private async resolveImportId(presetId: string, entryId: string): Promise<string | null> {
+    const existing = await this.repository.getEntryById(entryId)
+    const targetId =
+      existing === undefined || existing.presetId === presetId
+        ? entryId
+        : createPresetImportId('entry', presetId, entryId)
+    return (await this.repository.getEntryById(targetId)) === undefined ? targetId : null
   }
 
   /** 后端变更通知：原生服务据此刷新任务与状态界面。 */
@@ -224,14 +255,36 @@ export class LivingMemoryBackend implements MemoryBackend {
     return entries.map(toEntry).filter((entry) => sameScope(entry.scope, scope))
   }
 
-  private emit(kind: MemoryChange['kind'], presetId: string, records: readonly MemoryEntryRecord[]): void {
+  /**
+   * 合并与拆分的结果里包含「事实已提交、索引同步失败」的警告。后端契约没有
+   * 警告通道，写入本身已经成功，这里只把提示写进日志，由后台对账修复索引。
+   */
+  private reportWarnings(presetId: string, warnings: readonly string[]): void {
+    if (warnings.length === 0) return
+    this.logger.summary(
+      '记忆写入后索引同步失败',
+      [formatLogScope({ presetId }), ...warnings].join('; '),
+      'warn'
+    )
+  }
+
+  private emit(kind: MemoryChange['kind'], presetId: string, entries: readonly MemoryEntry[]): void {
+    this.emitIds(kind, presetId, entries.map((entry) => entry.id), entries)
+  }
+
+  private emitIds(
+    kind: MemoryChange['kind'],
+    presetId: string,
+    ids: readonly string[],
+    entries?: readonly MemoryEntry[]
+  ): void {
     if (this.listeners.size === 0) return
     const change: MemoryChange = {
       kind,
       backend: this.id,
       presetId,
-      ids: records.map((record) => record.id),
-      entries: records.map(toEntry)
+      ids,
+      ...(entries === undefined ? {} : { entries })
     }
     for (const listener of this.listeners) listener(change)
   }
@@ -270,12 +323,26 @@ function toEntry(record: MemoryEntryRecord): MemoryEntry {
   }
 }
 
-function scopeOf(scope: MemoryScope, conversationId: string): { presetId: string; conversationId: string } {
-  return { presetId: scope.presetId, conversationId }
+/**
+ * v2 的作用域允许缺省会话；插件侧把空会话当作「无会话上下文」落库，
+ * 这里统一补成空串，保持与手工创建记忆相同的语义。
+ */
+function scopeOf(scope: MemoryScope, conversationId = scope.conversationId ?? ''): LivingMemoryScope {
+  return {
+    presetId: scope.presetId,
+    conversationId,
+    ...(scope.platform === undefined ? {} : { platform: scope.platform }),
+    ...(scope.guildId === undefined ? {} : { guildId: scope.guildId }),
+    ...(scope.channelId === undefined ? {} : { channelId: scope.channelId }),
+    ...(scope.userId === undefined ? {} : { userId: scope.userId }),
+    ...(scope.speakerId === undefined ? {} : { speakerId: scope.speakerId }),
+    ...(scope.isDirect === undefined ? {} : { isDirect: scope.isDirect })
+  }
 }
 
 function inputOf(input: MemoryInput): MemoryMutationInput {
   return {
+    ...(input.id === undefined ? {} : { id: input.id }),
     type: input.type ?? 'other',
     topic: input.topic,
     title: input.title,
@@ -288,8 +355,32 @@ function inputOf(input: MemoryInput): MemoryMutationInput {
   }
 }
 
-function attached(input: MemoryInput) {
-  return { ...attributed(input), sourceOrigins: [] }
+/**
+ * 导入按原样保留条目字段：状态、时间之外的展示字段不做归一推导，
+ * 只把 v2 导出里缺省的可选项映射成仓储的空值形态。
+ */
+function importInputOf(entry: MemoryEntry, id: string): MemoryMutationInput {
+  return {
+    id,
+    type: entry.type,
+    status: entry.status,
+    topic: entry.topic,
+    title: entry.title,
+    content: entry.content,
+    keywords: [...entry.keywords],
+    summary: entry.summary ?? null,
+    sentiment: entry.sentiment ?? null,
+    importance: entry.importance ?? null,
+    fields: entry.fields === undefined ? null : { ...entry.fields }
+  }
+}
+
+/**
+ * 显式说话人优先；省略或为空时交由变更服务按 scope 推导，与仓储侧的
+ * 「键从 scope 来」保持同一条规则。
+ */
+function speakerKeysOf(input: MemoryInput): string[] | undefined {
+  return input.speakers === undefined || input.speakers.length === 0 ? undefined : [...input.speakers]
 }
 
 function attributed(input: MemoryInput) {

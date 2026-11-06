@@ -9,6 +9,7 @@ const indexSink = {
     clearPreset: async () => {},
     reconcilePreset: async () => ({ id: 'index-job' }),
     waitForMaintenance: async () => {},
+    assertPresetReady: () => {},
     startRebuild: () => {}
 }
 

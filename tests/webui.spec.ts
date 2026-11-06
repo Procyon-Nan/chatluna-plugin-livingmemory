@@ -61,6 +61,7 @@ const adminOf = (ctx: Context, repository: LivingMemoryRepository) =>
                 clearPreset: async () => {},
                 reconcilePreset: async () => {},
                 waitForMaintenance: async () => {},
+                assertPresetReady: () => {},
                 startRebuild: () => {}
             } as never,
             createCapturedLogger().logger

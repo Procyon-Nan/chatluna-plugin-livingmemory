@@ -14,6 +14,7 @@ const silentIndex = {
     clearPreset: async () => {},
     reconcilePreset: async () => {},
     waitForMaintenance: async () => {},
+    assertPresetReady: () => {},
     startRebuild: () => {}
 }
 

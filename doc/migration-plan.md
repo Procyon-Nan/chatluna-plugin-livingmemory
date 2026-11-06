@@ -391,6 +391,7 @@ v1 每次触发会重新读取未消费消息并分块。v2 重试期间在内�
 | 2026-11-05 | 实施 S6 | 调度与任务完成：后端声明 `scheduling`，任务状态增加 `cancelled`，任务仓储增加 `getJob`/`cancelJob`/`watchJobs`，新增原生任务投影与任务面；Dream 支持按任务取消并区分用户取消与服务停止，提取与召回协调器补齐 `stop()` 与取消信号，卸载按「先停业务协调器、再停 Worker 与索引」执行。全套 354 个用例 353 通过、1 个仅 Windows 用例跳过，`tsc --noEmit` 无报错 | 原生读取 `scheduling`、合并后端任务与 `listJobs` 仍待框架侧实施 |
 | 2026-11-05 | 实施 S6.5 | 采集与触发收尾：移除不存在的 `chatluna_collector` 依赖（它使插件整体 INACTIVE），采集改拉取 `chat_observer` 通道缓冲，新增会话历史转换补足召回窗口，新增 `session_hooks.ts` 接入 `prepareStep(order 870)` 与 `chatluna/agent-turn`。全套 365 个用例 364 通过、1 个仅 Windows 用例跳过，`tsc --noEmit` 与构建均通过 | 进入 S7；框架侧 M05-C1 只剩「消息已入池」事件，M05-C2 只剩分句交付的消息号归并 |
 | 2026-11-05 | 实施 S7 | 管理与导入完成：配置 schema 分六组，新增管理服务、配置自检、命令、WebUI 数据面与六个面板的页面；补齐 v1 的启动与每日维护（四项数据修复、中断任务回收、过期任务清理、归档衰减清理，此前均无调用点）；修正旧导出文件导入缺省 `topic`/`title` 的问题。全套 393 个用例 392 通过、1 个仅 Windows 用例跳过，服务端与客户端 `tsc` 及构建均通过 | 进入 S8；M08-D1 的默认值仍需按 v2 重新确定 |
+| 2026-11-06 | 实施 S7.5 | 后端写路径收口：`LivingMemoryBackend` 的七个写方法改委托 `LivingMemoryMutationService`，消除绕过索引同步的直写仓储路径；`import` 签名改为契约要求的 `(into: MemoryScope, data): Promise<number>` 并修正重复导入的幂等判据；`assertPresetReady` 扩展到全部交互式写入口，索引未就绪时写操作零副作用失败。全套 414 个用例 413 通过、1 个仅 Windows 用例跳过 | S8 验收；索引未就绪期间提取仍落库后由对账修复，属有意保留的差异 |
 
 ## 源码核对入口
 

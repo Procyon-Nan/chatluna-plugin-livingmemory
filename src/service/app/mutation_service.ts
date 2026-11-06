@@ -143,7 +143,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
     ) {
         return this.runPresetMutation(scope.presetId, async () => {
             // 落库前预检索引就绪状态：未就绪时立即失败且零副作用。
-            // 仅 createMemory 预检；appendExtractedMemories 的提取窗口
+            // 仅交互式写入预检；appendExtractedMemories 的提取窗口
             // 过期即失，宁可落库后进入 dirty 由对账修复，也不能丢轮次。
             this.vectorIndex.assertPresetReady(scope.presetId)
             // 显式键优先，省略时沿用仓储侧同一条 scope 推导规则，注册
@@ -174,6 +174,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             return null
         }
         return this.runPresetMutation(current.presetId, async () => {
+            this.vectorIndex.assertPresetReady(current.presetId)
             // 队列外读到的条目可能已被同预设清空/删除：进队列后重读确认，
             // 否则会为已不存在的目标补注册行，清空后的预设因孤儿注册行
             // 被 listDistinctPresetIds 重新列为存量。
@@ -191,6 +192,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
         patch: Omit<MemoryUpdatePatch, 'status'>
     ): Promise<MemoryEntryRecord | null> {
         return this.runPresetMutation(presetId, async () => {
+            this.vectorIndex.assertPresetReady(presetId)
             const current = await this.repository.getEntryById(id)
             if (
                 current === undefined ||
@@ -258,6 +260,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             return { archived: 0 }
         }
         return this.runPresetMutation(presetId, async () => {
+            this.vectorIndex.assertPresetReady(presetId)
             let snapshotsCleared = false
             const archived = await this.runBatchedMutation(
                 uniqueIds,
@@ -296,6 +299,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             throw new MemoryInputError('拆分结果至少需要两条记忆。')
         }
         return this.runPresetMutation(presetId, async () => {
+            this.vectorIndex.assertPresetReady(presetId)
             const source = await this.repository.getEntryById(sourceMemoryId)
             if (
                 source === undefined ||
@@ -337,6 +341,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             )
         }
         return this.runPresetMutation(presetId, async () => {
+            this.vectorIndex.assertPresetReady(presetId)
             const entries = await this.repository.getEntriesByPresetAndIds(
                 presetId,
                 sourceMemoryIds
@@ -401,6 +406,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             return null
         }
         return this.runPresetMutation(current.presetId, async () => {
+            this.vectorIndex.assertPresetReady(current.presetId)
             const record = await this.repository.deleteMemory(id)
             if (record === null) {
                 return null
@@ -420,6 +426,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             return { deleted: 0 }
         }
         return this.runPresetMutation(presetId, async () => {
+            this.vectorIndex.assertPresetReady(presetId)
             const deleted = await this.runBatchedMutation(
                 uniqueIds,
                 async (batchIds) => {
@@ -449,6 +456,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
 
     async deleteExpiredArchivedMemories(presetId: string, now: Date) {
         return this.runPresetMutation(presetId, async () => {
+            this.vectorIndex.assertPresetReady(presetId)
             const records = await this.repository.listArchivedEntriesBefore(
                 presetId,
                 new Date(now.getTime() - ARCHIVED_MEMORY_GRACE_PERIOD)
@@ -482,6 +490,11 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
         })
     }
 
+    /**
+     * 清空预设不做索引就绪预检：预检的目的是不让主数据与索引脱节，而清空本身
+     * 就是把两边一起重置，索引损坏时它正是恢复手段。导入同理，写入后走对账
+     * 重建索引，不依赖预检。
+     */
     async clearPresetData(presetId: string) {
         await this.runPresetMutation(presetId, async () => {
             await this.repository.clearAllByPreset(presetId)

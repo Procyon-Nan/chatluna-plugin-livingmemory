@@ -102,7 +102,6 @@ export default class LivingmemoryService extends Service {
         defineLivingMemoryTables(ctx)
         this.logger = new LivingMemoryLogger(ctx.logger('livingmemory'), () => this.config.debug)
         this.repository = new LivingMemoryRepository(ctx)
-        this.backend = new LivingMemoryBackend(this.repository)
         this.collector = new MessageCollector(ctx.chat_observer)
         this.vectorIndex = new LivingMemoryVectorIndexService(ctx, config, this.repository, this.logger)
         this.mutations = new LivingMemoryMutationService(
@@ -110,6 +109,8 @@ export default class LivingmemoryService extends Service {
             this.vectorIndex,
             this.logger
         )
+        // 后端写路径委托变更服务，必须在变更服务之后构造。
+        this.backend = new LivingMemoryBackend(this.repository, this.mutations, this.logger)
         this.searchEngine = new LivingMemorySearchEngine(
             ctx,
             config,

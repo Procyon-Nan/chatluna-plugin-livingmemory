@@ -1,14 +1,57 @@
 import assert from 'node:assert/strict'
 import type { MemoryScope } from '@chatluna/memory'
+import { LivingMemoryMutationService } from '../src/service/app/mutation_service.ts'
 import { LivingMemoryBackend } from '../src/service/backend.ts'
+import type { LivingMemoryLogger } from '../src/service/logging/logger.ts'
+import type {
+    MemoryIndexMutationBatch,
+    MemoryIndexMutationSink
+} from '../src/contracts/vector_index.ts'
+import type { LivingMemoryRepository } from '../src/service/persistence/repository.ts'
 import { withLivingMemoryRepository } from './persistence-test-utils.ts'
 
 const preset = 'preset-1'
 const scope: MemoryScope = { presetId: preset, conversationId: 'group:1' }
 
+/** 索引就绪的替身：写路径预检通过，索引同步只记录批次。 */
+class ReadyIndexStub implements MemoryIndexMutationSink {
+    readonly batches: MemoryIndexMutationBatch[] = []
+    ready = true
+
+    async waitForMaintenance() {}
+
+    assertPresetReady(targetPresetId: string) {
+        if (!this.ready) {
+            throw new Error(`vector index is not ready: preset=${targetPresetId}`)
+        }
+    }
+
+    async applyMutation(batch: MemoryIndexMutationBatch) {
+        this.batches.push(batch)
+    }
+
+    async clearPreset() {}
+
+    async reconcilePreset() {
+        throw new Error('unexpected reconcile')
+    }
+}
+
+const loggerStub = { summary: () => {} } as unknown as LivingMemoryLogger
+
+const createBackend = (repository: LivingMemoryRepository) => {
+    const index = new ReadyIndexStub()
+    const mutations = new LivingMemoryMutationService(
+        repository,
+        index,
+        loggerStub
+    )
+    return { backend: new LivingMemoryBackend(repository, mutations, loggerStub), index }
+}
+
 it('writes the v2-required topic and title when v1 input has neither', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
-        const backend = new LivingMemoryBackend(repository)
+        const { backend } = createBackend(repository)
         const [entry] = await backend.create({ presetId: preset }, [
             { type: 'preference', content: '喜欢喝乌龙茶', summary: '常喝乌龙茶' }
         ])
@@ -24,7 +67,7 @@ it('writes the v2-required topic and title when v1 input has neither', async () 
 
 it('lists by scope and reports facets over the whole preset', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
-        const backend = new LivingMemoryBackend(repository)
+        const { backend } = createBackend(repository)
         await backend.create(scope, [
             { type: 'fact', topic: 'people', content: 'a' },
             { type: 'preference', topic: 'taste', content: 'b' }
@@ -41,7 +84,7 @@ it('lists by scope and reports facets over the whole preset', async () => {
 
 it('searches only inside the requested scope', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
-        const backend = new LivingMemoryBackend(repository)
+        const { backend } = createBackend(repository)
         await backend.create(scope, [{ type: 'fact', content: '喜欢在雨天散步', keywords: ['雨天'] }])
         await backend.create({ presetId: preset }, [{ type: 'fact', content: '喜欢在晴天散步' }])
 
@@ -53,7 +96,7 @@ it('searches only inside the requested scope', async () => {
 
 it('archives and removes through the backend and notifies watchers', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
-        const backend = new LivingMemoryBackend(repository)
+        const { backend } = createBackend(repository)
         const changes: string[] = []
         backend.watch((change) => changes.push(`${change.kind}:${change.ids.length}`))
 
@@ -63,13 +106,13 @@ it('archives and removes through the backend and notifies watchers', async () =>
 
         await backend.remove(preset, [entry.id])
         assert.equal(await backend.get(entry.id), undefined)
-        assert.deepEqual(changes, ['created:1', 'archived:1', 'removed:0'])
+        assert.deepEqual(changes, ['created:1', 'archived:1', 'removed:1'])
     })
 })
 
 it('updates a single field without losing the derived title', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
-        const backend = new LivingMemoryBackend(repository)
+        const { backend } = createBackend(repository)
         const [entry] = await backend.create({ presetId: preset }, [
             { type: 'fact', content: '原文', summary: '原标题' }
         ])
@@ -84,7 +127,7 @@ it('updates a single field without losing the derived title', async () => {
 
 it('groups the index by topic and respects the budget', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
-        const backend = new LivingMemoryBackend(repository)
+        const { backend } = createBackend(repository)
         await backend.create({ presetId: preset }, [
             { type: 'fact', topic: 'people', content: 'a', summary: '甲' },
             { type: 'fact', topic: 'people', content: 'b', summary: '乙' },
@@ -99,13 +142,14 @@ it('groups the index by topic and respects the budget', async () => {
 
 it('round-trips through the v2 export shape', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
-        const backend = new LivingMemoryBackend(repository)
+        const { backend } = createBackend(repository)
         await backend.create(scope, [{ type: 'fact', topic: 'people', content: '导出内容' }])
         const data = await backend.export(preset)
         assert.equal(data.version, 1)
         assert.equal(data.entries.length, 1)
 
-        await backend.import('preset-2', data)
+        const count = await backend.import({ presetId: 'preset-2' }, data)
+        assert.equal(count, 1)
         const imported = await backend.list({ presetId: 'preset-2', status: 'all' })
         assert.equal(imported.items.length, 1)
         assert.equal(imported.items[0]!.content, '导出内容')
@@ -115,11 +159,53 @@ it('round-trips through the v2 export shape', async () => {
 
 it('declares every automatic workflow so the native scheduler yields', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
-        const backend = new LivingMemoryBackend(repository)
+        const { backend } = createBackend(repository)
         assert.deepEqual(backend.scheduling, {
             extract: true,
             dream: true,
             recall: true
         })
+    })
+})
+
+it('fails every write before committing when the index is not ready', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const { backend, index } = createBackend(repository)
+        const [entry] = await backend.create({ presetId: preset }, [
+            { type: 'fact', content: '索引就绪时写入' }
+        ])
+        const before = index.batches.length
+        index.ready = false
+
+        await assert.rejects(
+            backend.create({ presetId: preset }, [{ type: 'fact', content: '不应落库' }]),
+            /not ready/u
+        )
+        await assert.rejects(
+            backend.update(entry.id, { content: '也不应落库' }),
+            /not ready/u
+        )
+        await assert.rejects(backend.archive(preset, [entry.id]), /not ready/u)
+        await assert.rejects(backend.remove(preset, [entry.id]), /not ready/u)
+
+        assert.equal(index.batches.length, before)
+        const page = await backend.list({ presetId: preset, status: 'all' })
+        assert.equal(page.items.length, 1)
+        assert.equal(page.items[0]!.content, '索引就绪时写入')
+    })
+})
+
+it('reports how many entries an import wrote', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const { backend } = createBackend(repository)
+        await backend.create(scope, [
+            { type: 'fact', content: '第一条' },
+            { type: 'fact', content: '第二条' }
+        ])
+        const data = await backend.export(preset)
+
+        assert.equal(await backend.import({ presetId: 'preset-2' }, data), 2)
+        // 重复导入是幂等合并：目标预设内已有同 id 的条目不再写入。
+        assert.equal(await backend.import({ presetId: 'preset-2' }, data), 0)
     })
 })
