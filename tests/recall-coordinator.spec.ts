@@ -14,9 +14,11 @@ import {
     createJobStore,
     currentMessage,
     logger,
-    scope,
+    scope as baseScope,
     waitFor
 } from './workflow-test-utils.ts'
+
+const scope = { ...baseScope, sessionId: 'session-1' }
 
 type AgenticRun = (
     historyMessages: LivingMemoryTranscriptMessage[],
@@ -30,6 +32,7 @@ const createCoordinator = (options: {
     repository?: Partial<RecallWorkflowRepository>
     run?: AgenticRun
     tailSeq?: () => number
+    positions?: () => number[]
     recallIntervalMessages?: number
     subModel?: string
     logger?: LivingMemoryLogger
@@ -40,7 +43,16 @@ const createCoordinator = (options: {
             recallIntervalMessages: options.recallIntervalMessages ?? 1,
             subModel: options.subModel ?? 'test/sub-model'
         },
-        { tailSeq: options.tailSeq ?? (() => 100) },
+        {
+            head: async () => options.tailSeq?.() ?? 100,
+            after: async (_scope, after, before = Infinity) => {
+                const positions = options.positions?.() ?? Array.from({ length: options.tailSeq?.() ?? 100 }, (_, index) => index + 1)
+                return positions.filter((position) => position > after && position < before).map((position) => ({
+                    position, messageId: String(position), platform: 'onebot', content: 'chat',
+                    timestamp: 1_000, role: 'user' as const, backfilled: false
+                }))
+            }
+        },
         {
             createFailedJob: createJobStore().createFailedJob,
             upsertSnapshot: async () => {},
@@ -340,6 +352,57 @@ it('gates recall by message gap since the last executed recall', async () => {
     await coordinator.queue(scope, currentMessage, async () => [])
     await new Promise((resolve) => setTimeout(resolve, 20))
     assert.equal(snapshots.length, 2)
+})
+
+it('counts chat messages rather than sparse history positions for recall intervals', async () => {
+    const positions = [100]
+    let snapshots = 0
+    const coordinator = createCoordinator({
+        tailSeq: () => positions.at(-1)!,
+        positions: () => positions,
+        recallIntervalMessages: 2,
+        repository: { upsertSnapshot: async () => { snapshots += 1 } }
+    })
+
+    await coordinator.queue(scope, currentMessage, async () => [], 100)
+    await waitFor(() => snapshots === 1, 'first recall at position 100')
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    // 中间的 899 个日志位置可以属于工具与标记；这里只多了一条聊天。
+    positions.push(1000)
+    await coordinator.queue(scope, currentMessage, async () => [], 1000)
+    assert.equal(snapshots, 1)
+
+    positions.push(1500)
+    await coordinator.queue(scope, currentMessage, async () => [], 1500)
+    await waitFor(() => snapshots === 2, 'recall after two actual chats')
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    positions.push(3000)
+    await coordinator.queue(scope, currentMessage, async () => [], 3000)
+    assert.equal(snapshots, 2, 'the next interval starts at the last recalled chat')
+    await coordinator.stop()
+})
+
+it('starts a new recall interval on every preset switch including switching back', async () => {
+    let snapshots = 0
+    const coordinator = createCoordinator({
+        positions: () => [100],
+        recallIntervalMessages: 10,
+        repository: { upsertSnapshot: async () => { snapshots += 1 } }
+    })
+    const presetB = { ...scope, presetId: 'preset-b' }
+
+    for (const [index, active] of [scope, presetB, scope].entries()) {
+        coordinator.clearByConversation(scope.conversationId)
+        await coordinator.queue(active, currentMessage, async () => [], 100)
+        await waitFor(() => snapshots === index + 1, 'first recall after preset change')
+        await new Promise<void>((resolve) => setImmediate(resolve))
+    }
+
+    await coordinator.queue(scope, currentMessage, async () => [], 100)
+    assert.equal(snapshots, 3, 'unchanged scope still obeys its current interval')
+    await coordinator.stop()
 })
 
 it('cancels an in-flight recall without recording a failed job', async () => {

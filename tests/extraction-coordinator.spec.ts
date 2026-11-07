@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict'
 import type {
     AttributedMemoryItem,
     ExtractionMemoryWriter,
@@ -9,9 +10,7 @@ import {
     LivingMemoryExtractionCoordinator,
     planExtractionChunks
 } from '../src/service/workflows/extraction/coordinator.ts'
-import { MessageLogRegistry } from '../src/service/transcript/message_log/message_log_registry.ts'
-import type { ConversationHistorySource } from '../src/service/transcript/message_log/backfill.ts'
-import type { ConversationLogMessage } from '../src/service/transcript/message_log/types.ts'
+import type { ChatHistoryEntry, ChatHistoryScope } from '../src/service/chat_history.ts'
 import type { LivingMemoryExtractionResult } from '../src/service/workflows/extraction/extractor.ts'
 import {
     createCapturedLogger,
@@ -21,7 +20,7 @@ import {
     waitFor
 } from './workflow-test-utils.ts'
 
-const scope: MemoryScope = { ...baseScope, platform: 'onebot' }
+const scope: ChatHistoryScope = { ...baseScope, platform: 'onebot', sessionId: 'session-1' }
 
 const createExtractionResult = (
     overrides: Partial<LivingMemoryExtractionResult> = {}
@@ -49,8 +48,7 @@ interface CoordinatorHarnessOptions {
     includeOverheard?: boolean
     enableExtractionWhitelist?: boolean
     extractionWhitelist?: string[]
-    /** 历史回填来源；缺省表示该会话没有历史能力，建池即预热完成。 */
-    backfill?: ConversationHistorySource['read']
+    head?: () => Promise<number>
     extract?: () => Promise<LivingMemoryExtractionResult>
     createFailedJob?: ExtractionJobRepository['createFailedJob']
     appendExtractedMemories?: ExtractionMemoryWriter['appendExtractedMemories']
@@ -59,7 +57,7 @@ interface CoordinatorHarnessOptions {
 interface CoordinatorHarness {
     includeOverheard: boolean
     coordinator: LivingMemoryExtractionCoordinator
-    messageLog: MessageLogRegistry
+    messageLog: TestHistory
     jobStore: ReturnType<typeof createJobStore>
     appended: {
         scope: MemoryScope
@@ -168,15 +166,8 @@ const createHarness = (
                 }
             })
     }
-    const messageLog = new MessageLogRegistry()
-    // 无历史来源时会话建池即预热完成，与 v1 不提供 getMessageList 时一致。
-    if (options.backfill === undefined) {
-        messageLog.register(scope.conversationId)
-    } else {
-        messageLog.register(scope.conversationId, {
-            read: options.backfill
-        })
-    }
+    const messageLog = new TestHistory()
+    if (options.head !== undefined) messageLog.head = options.head
 
     const coordinator = new LivingMemoryExtractionCoordinator(
         {
@@ -210,30 +201,38 @@ const createHarness = (
     }
 }
 
-const entry = (
-    role: 'user' | 'assistant',
-    content: string
-): {
-    userId: string
-    name: string
-    content: string
-    timestamp: number
-    role: 'user' | 'assistant'
-    origin: 'live'
-} => ({
+/** 测试用框架读取面，稀疏 position 刻意夹入非聊天历史位置。 */
+class TestHistory {
+    readonly entries: ChatHistoryEntry[] = []
+    async head() { return this.entries.at(-1)?.position ?? -1 }
+    async after(_scope: ChatHistoryScope, position: number, before = Infinity) {
+        return this.entries.filter((entry) => entry.position > position && entry.position < before)
+    }
+    captureCursor() { return this.entries.at(-1)?.position ?? -1 }
+    append(_conversationId: string, messages: Omit<ChatHistoryEntry, 'position'>[]) {
+        for (const message of messages) {
+            this.entries.push({ ...message, position: (this.entries.at(-1)?.position ?? -1) + 7 })
+        }
+    }
+}
+
+const entry = (role: 'user' | 'assistant', content: string): Omit<ChatHistoryEntry, 'position'> => ({
+    messageId: content,
+    platform: 'onebot',
     userId: role === 'assistant' ? 'bot-self' : 'user-1',
     name: role === 'assistant' ? 'bot' : '用户A',
     content,
     timestamp: Date.now(),
     role,
-    origin: 'live'
+    backfilled: false,
+    presetId: scope.presetId
 })
 
 const queueExtraction = async (
     harness: CoordinatorHarness,
-    initialCursor?: () => number
+    initialCursor?: number,
+    eligiblePosition?: number
 ) => {
-    await harness.messageLog.warmup(scope.conversationId)
     await harness.coordinator.queue(
         scope,
         {
@@ -243,7 +242,8 @@ const queueExtraction = async (
                 sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
             })
         },
-        initialCursor
+        initialCursor,
+        eligiblePosition
     )
 }
 
@@ -254,15 +254,17 @@ const queueExtraction = async (
 const settleDrain = () => new Promise((resolve) => setTimeout(resolve, 20))
 
 describe('planExtractionChunks', () => {
-    const log = (roles: ('user' | 'assistant')[]): ConversationLogMessage[] =>
+    const log = (roles: ('user' | 'assistant')[]): ChatHistoryEntry[] =>
         roles.map((role, index) => ({
-            seq: index + 1,
+            position: index + 1,
+            messageId: `message-${index}`,
+            platform: 'onebot',
             userId: role === 'assistant' ? 'bot' : 'user',
             name: role,
             content: `${role}-${index}`,
             timestamp: 1_000,
             role,
-            origin: 'live'
+            backfilled: false
         }))
 
     it('closes segments at the last assistant of each run and leaves the unclosed tail', () => {
@@ -459,18 +461,18 @@ describe('LivingMemoryExtractionCoordinator', () => {
         async (includeOverheard) => {
             const harness = createHarness({ window: 4, includeOverheard })
             const initialCursor = includeOverheard
-                ? harness.messageLog.captureCursor(scope.conversationId)
+                ? harness.messageLog.captureCursor()
                 : undefined
             if (!includeOverheard) await queueExtraction(harness, initialCursor)
             const role = includeOverheard ? 'user' : 'assistant'
-            harness.messageLog.appendReply(scope.conversationId, [
+            harness.messageLog.append(scope.conversationId, [
                 entry('user', '问题'),
                 entry(role, '回答')
             ])
             await queueExtraction(harness, initialCursor)
             expect(harness.getExtractorCalls()).toBe(0)
 
-            harness.messageLog.appendReply(scope.conversationId, [
+            harness.messageLog.append(scope.conversationId, [
                 entry('user', '追问'),
                 entry(role, '补充')
             ])
@@ -487,7 +489,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
     it('skips extraction entirely when the window is zero', async () => {
         const harness = createHarness({ window: 0 })
         await queueExtraction(harness)
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', 'a'),
             entry('assistant', 'b')
         ])
@@ -498,7 +500,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
 
     it('initializes the cold cursor at the current tail without dumping history', async () => {
         const harness = createHarness({ window: 2 })
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', '旧消息'),
             entry('assistant', '旧回答')
         ])
@@ -506,7 +508,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
         await queueExtraction(harness)
         expect(harness.getExtractorCalls()).toBe(0)
 
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', '新消息'),
             entry('assistant', '新回答')
         ])
@@ -521,7 +523,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
     it('leaves an assistant-less tail unconsumed for the next drain', async () => {
         const harness = createHarness({ window: 2 })
         await queueExtraction(harness)
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', '问题'),
             entry('assistant', '回答'),
             entry('user', '只有闲聊')
@@ -532,7 +534,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
         expect(harness.getExtractorInputs()[0]).not.toContain('只有闲聊')
 
         // 追加闲聊不闭合段：不消费
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', '更多闲聊')
         ])
         await queueExtraction(harness)
@@ -543,7 +545,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
     it('absorbs a sub-half-window overshoot into one fuzzy chunk', async () => {
         const harness = createHarness({ window: 4 })
         await queueExtraction(harness)
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', 'q1'),
             entry('assistant', 'a1'),
             entry('user', 'q2'),
@@ -561,7 +563,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
     it('splits whole-exchange chunks only when the remainder exceeds half the window', async () => {
         const harness = createHarness({ window: 2 })
         await queueExtraction(harness)
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', 'q1'),
             entry('assistant', 'a1'),
             entry('user', 'q2'),
@@ -589,7 +591,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
             }
         })
         await queueExtraction(harness)
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', 'q1'),
             entry('assistant', 'a1'),
             entry('user', 'q2'),
@@ -598,9 +600,9 @@ describe('LivingMemoryExtractionCoordinator', () => {
 
         // 连续两次失败：游标不动，不记任务
         await queueExtraction(harness)
-        await waitFor(() => harness.getExtractorCalls() === 1, 'first failure')
+        await waitFor(() => harness.warnings.length === 1, 'first failure')
         await queueExtraction(harness)
-        await waitFor(() => harness.getExtractorCalls() === 2, 'second failure')
+        await waitFor(() => harness.warnings.length === 2, 'second failure')
         expect(harness.jobStore.jobs).toHaveLength(0)
 
         // 第三次失败达到上限：块 1 记任务放弃，同次排干继续块 2 并成功
@@ -614,8 +616,74 @@ describe('LivingMemoryExtractionCoordinator', () => {
         expect(harness.getExtractorInputs()[3]).toContain('q2')
     })
 
+    it('retries exactly the failed batch when new messages arrive before retry', async () => {
+        let calls = 0
+        const harness = createHarness({ window: 2, extract: async () => {
+            calls += 1
+            if (calls === 1) throw new Error('temporary model failure')
+            return createExtractionResult()
+        } })
+        await queueExtraction(harness)
+        harness.messageLog.append(scope.conversationId, [entry('user', 'fixed-q'), entry('assistant', 'fixed-a')])
+        await queueExtraction(harness)
+        await waitFor(() => harness.warnings.length > 0, 'first failed batch')
+        await settleDrain()
+        harness.messageLog.append(scope.conversationId, [entry('user', 'later-q'), entry('assistant', 'later-a')])
+        await queueExtraction(harness)
+        await waitFor(() => harness.getExtractorCalls() === 3, 'retry and later batch')
+        assert.equal(harness.getExtractorInputs()[0], harness.getExtractorInputs()[1])
+        assert.doesNotMatch(harness.getExtractorInputs()[1], /later-q/)
+        assert.match(harness.getExtractorInputs()[2], /later-q/)
+    })
+
+    it('does not read a later partially sent turn beyond the completed delivery head', async () => {
+        let release!: () => void
+        let calls = 0
+        const gate = new Promise<void>((resolve) => { release = resolve })
+        const harness = createHarness({ window: 2, extract: async () => {
+            calls += 1
+            if (calls === 1) await gate
+            return createExtractionResult()
+        } })
+        await queueExtraction(harness)
+        harness.messageLog.append(scope.conversationId, [
+            entry('user', 'q1'), entry('assistant', 'a1'), entry('user', 'q2'), entry('assistant', 'a2')
+        ])
+        const completedHead = harness.messageLog.captureCursor()
+        await queueExtraction(harness, undefined, completedHead)
+        await waitFor(() => calls === 1, 'first extraction running')
+        harness.messageLog.append(scope.conversationId, [entry('user', 'q3'), entry('assistant', 'partial-a3')])
+        release()
+        await waitFor(() => calls === 2, 'drain completed exchanges')
+        await settleDrain()
+        assert.equal(calls, 2)
+        assert.ok(harness.getExtractorInputs().every((input) => !input.includes('q3')))
+        harness.messageLog.append(scope.conversationId, [entry('assistant', 'final-a3')])
+        await queueExtraction(harness, undefined, harness.messageLog.captureCursor())
+        await waitFor(() => calls === 3, 'next fully sent exchange')
+        assert.match(harness.getExtractorInputs()[2], /partial-a3/)
+        assert.match(harness.getExtractorInputs()[2], /final-a3/)
+    })
+
+    it('retains the fixed batch when the extraction model is unavailable', async () => {
+        let calls = 0
+        const harness = createHarness({ window: 2, extract: async () => {
+            calls += 1
+            return createExtractionResult({ skippedReason: calls === 1 ? 'model-not-configured' : null })
+        } })
+        await queueExtraction(harness)
+        harness.messageLog.append(scope.conversationId, [entry('user', 'q'), entry('assistant', 'a')])
+        await queueExtraction(harness)
+        await waitFor(() => calls === 1, 'unavailable model')
+        await settleDrain()
+        await queueExtraction(harness)
+        await waitFor(() => calls === 2, 'configured model retry')
+        assert.equal(harness.getExtractorInputs()[0], harness.getExtractorInputs()[1])
+        assert.equal(harness.jobStore.jobs.length, 0)
+    })
+
     it('does not initialize the cursor for non-whitelisted scopes', async () => {
-        const whitelistedScope: MemoryScope = {
+        const whitelistedScope: ChatHistoryScope = {
             ...scope,
             guildId: 'guild-1'
         }
@@ -624,7 +692,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
             enableExtractionWhitelist: true,
             extractionWhitelist: ['guild-1']
         })
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', 'q'),
             entry('assistant', 'a')
         ])
@@ -634,11 +702,10 @@ describe('LivingMemoryExtractionCoordinator', () => {
         expect(harness.getExtractorCalls()).toBe(0)
 
         // 命中白名单后的首个事件：从当时刻起算，不倾泻之前的积压
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', 'q2'),
             entry('assistant', 'a2')
         ])
-        await harness.messageLog.warmup(whitelistedScope.conversationId)
         await harness.coordinator.queue(whitelistedScope, {
             includeOverheard: harness.includeOverheard,
             resolveTranscriptOrigin: async () => ({
@@ -648,7 +715,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
         })
         expect(harness.getExtractorCalls()).toBe(0)
 
-        harness.messageLog.appendReply(whitelistedScope.conversationId, [
+        harness.messageLog.append(whitelistedScope.conversationId, [
             entry('user', 'q3'),
             entry('assistant', 'a3')
         ])
@@ -675,7 +742,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
             extract: () => Promise.resolve(result)
         })
         await queueExtraction(harness)
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', 'q'),
             entry('assistant', 'a')
         ])
@@ -702,7 +769,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
                 )
         })
         await queueExtraction(harness)
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', 'q'),
             entry('assistant', 'a')
         ])
@@ -731,21 +798,24 @@ describe('LivingMemoryExtractionCoordinator', () => {
             }
         })
         await queueExtraction(harness)
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', 'q'),
             entry('assistant', 'a')
         ])
         await queueExtraction(harness)
         await new Promise((resolve) => setTimeout(resolve, 25))
 
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             {
+                messageId: 'q2',
+                platform: 'onebot',
+                presetId: scope.presetId,
                 userId: 'user-2',
                 name: '用户B',
                 content: 'q2',
                 timestamp: Date.now(),
                 role: 'user',
-                origin: 'live'
+                backfilled: false
             },
             entry('assistant', 'a2')
         ])
@@ -768,7 +838,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
                 )
         })
         await queueExtraction(harness)
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', 'q'),
             entry('assistant', 'a')
         ])
@@ -784,7 +854,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
 
     it('clears scope state by conversation', async () => {
         const harness = createHarness({ window: 2 })
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', 'q'),
             entry('assistant', 'a')
         ])
@@ -792,7 +862,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
         expect(harness.getExtractorCalls()).toBe(0)
 
         harness.coordinator.clearByConversation(scope.conversationId)
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', 'q2'),
             entry('assistant', 'a2')
         ])
@@ -802,54 +872,23 @@ describe('LivingMemoryExtractionCoordinator', () => {
         expect(harness.getExtractorCalls()).toBe(0)
     })
 
-    it('defers cursor initialization until backfill succeeds', async () => {
-        let failBackfill = true
-        const backfill: ConversationHistorySource['read'] = async () => {
-            if (failBackfill) {
-                throw new Error('platform down')
-            }
-            return [
-                {
-                    id: 'obs-old-1',
-                    conversationKey: scope.conversationId,
-                    sessionId: 'session-1',
-                    routeId: 'route-1',
-                    platform: 'onebot',
-                    platformMessageId: 'old-1',
-                    userId: 'user-1',
-                    name: '用户A',
-                    time: 1_000,
-                    self: false,
-                    backfilled: true,
-                    content: [{ type: 'text', text: '回填历史' }]
-                }
-            ]
-        }
-        const harness = createHarness({ window: 2, backfill })
-
-        // 回填失败期间不初始化游标：积压已达标也不提取
+    it('retries an unavailable history head without keeping a rejected initializer', async () => {
+        let fail = true
+        const harness = createHarness({ window: 2, head: async () => {
+            if (fail) throw new Error('history unavailable')
+            return harness.messageLog.captureCursor()
+        } })
+        await assert.rejects(queueExtraction(harness), /history unavailable/)
+        harness.messageLog.append(scope.conversationId, [entry('user', 'old-q'), entry('assistant', 'old-a')])
+        fail = false
         await queueExtraction(harness)
-        harness.messageLog.appendReply(scope.conversationId, [
-            entry('user', '旧问题'),
-            entry('assistant', '旧回答')
-        ])
-        await queueExtraction(harness)
+        await settleDrain()
         expect(harness.getExtractorCalls()).toBe(0)
-
-        // 重试成功：游标在回填落地后初始化，历史与新消息都不倾泻
-        failBackfill = false
+        harness.messageLog.append(scope.conversationId, [entry('user', 'new-q'), entry('assistant', 'new-a')])
         await queueExtraction(harness)
-        expect(harness.getExtractorCalls()).toBe(0)
-
-        harness.messageLog.appendReply(scope.conversationId, [
-            entry('user', 'q2'),
-            entry('assistant', 'a2')
-        ])
-        await queueExtraction(harness)
-        await waitFor(() => harness.getExtractorCalls() === 1, 'drain')
-        expect(harness.getExtractorInputs()[0]).toContain('q2')
-        expect(harness.getExtractorInputs()[0]).not.toContain('回填历史')
-        expect(harness.getExtractorInputs()[0]).not.toContain('旧问题')
+        await waitFor(() => harness.getExtractorCalls() === 1, 'history retry')
+        expect(harness.getExtractorInputs()[0]).toContain('new-q')
+        expect(harness.getExtractorInputs()[0]).not.toContain('old-q')
     })
 
     it('stops a running drain whose scope state was cleared mid-run', async () => {
@@ -865,7 +904,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
             }
         })
         await queueExtraction(harness)
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', 'q'),
             entry('assistant', 'a')
         ])
@@ -874,7 +913,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
 
         // 模型请求等待期间清空会话，随后新消息到达并由新状态接管
         harness.coordinator.clearByConversation(scope.conversationId)
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', 'new-q'),
             entry('assistant', 'new-a')
         ])
@@ -904,7 +943,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
         })
         // 首次入队建立游标，随后累积到窗口以上触发排干。
         await queueExtraction(harness)
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', 'q1'),
             entry('assistant', 'a1'),
             entry('user', 'q2'),
@@ -921,7 +960,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
         expect(harness.appended).toEqual([])
 
         // 停止后不再接收新触发
-        harness.messageLog.appendReply(scope.conversationId, [
+        harness.messageLog.append(scope.conversationId, [
             entry('user', 'q3'),
             entry('assistant', 'a3'),
             entry('user', 'q4'),

@@ -78,4 +78,15 @@ describe('blocksToLogText', () => {
             '[表情:得意][表情][聊天记录][卡片消息][非文本消息]'
         )
     })
+
+    it('excludes notices and recursively describes media inside message envelopes', () => {
+        assert.equal(blocksToLogText([
+            { type: 'envelope', kind: 'notice', id: 'notice', time: 1_000, content: [text('系统信息')] },
+            { type: 'envelope', kind: 'message', id: 'real', time: 2_000, content: [
+                text('图片'),
+                { type: 'file', mediaType: 'image/png', data: { type: 'url', url: 'a.png' } },
+                { type: 'reasoning', text: '隐藏推理' }
+            ] }
+        ]), '图片[图片]')
+    })
 })

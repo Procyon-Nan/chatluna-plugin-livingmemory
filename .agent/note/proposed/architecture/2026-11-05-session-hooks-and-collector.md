@@ -4,6 +4,8 @@ Status: proposed
 
 ## Problem
 
+2026-11-06 后续决定见 [使用框架聊天历史](../../implemented/architecture/2026-11-06-framework-chat-history.md)。本文保留 S6.5 的接入记录；复制 observer、补写末条 assistant 和拼接历史的实现将被框架统一读取替代。触发与注入仍需接入，本文旧测试结果只覆盖当时实现。
+
 插件在 S3 迁移了消息池与采集层，在 S5 迁移了召回、提取、Dream、画像与人设。这两部分各自完成了单元级验证，但拼不到一起：插件目前在任何宿主里都整体不加载。
 
 原因是一处声明错误。`src/index.ts` 的 `inject` 里有 `chatluna_collector`，`src/contracts/framework.ts` 用模块增强把它声明成 `Context.chatluna_collector`。这个名字在 ChatLuna v2 里不存在——模板项目的 `node_modules` 与 v2 源码里搜索 `chatluna_collector` 的匹配数都是 0。`cordis` 的 `inject` 在实现缺失时把 fiber 的 epoch 置为 `INACTIVE`，所以 `LivingmemoryService` 整个构造过程不会执行，`MessageCollector` 那一行从未运行过。

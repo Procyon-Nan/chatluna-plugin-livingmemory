@@ -1,65 +1,14 @@
 # ChatLuna v2 框架侧接口需求
 
-状态：草案。更新日期：2026-11-05。
+更新：2026-11-07。核对源码 `5e2fdce`。消息读取使用现有公开接口，插件不依赖框架补丁。
 
-本文把 [迁移方案](migration-plan.md) 中由 ChatLuna v2 承担的接口项单独列出，供框架侧实施。每项给出当前源码事实、需要补充的契约和验收条件。路径相对于 v2 源码 `packages/`。
+## 1—3. 消息历史、交付与会话边界（M05、M02、M06）
 
-## 1. 统一消息采集（M05-C1）
+消息正文来自 `ctx.chat_observer.recentOfConversation(conversationKey, limit)`，与原生 memory 共用入口。接口按频道返回当前缓冲，插件不设置 200 条上限。超出宿主容量的旧消息和只通过冷启动回填事件交给 Agent 的消息读不到；插件不从模型日志补写。
 
-**当前事实**
+`chatluna/observed` 通知旁听进度。`send` 中的 `chatSent.reply` 提供会话、预设、轮次和平台消息 ID，用于从缓冲中认出真正发出的回复。一次发送返回多个 ID 时只算一次；分段发送分别计数。普通提取等待本轮渲染和回复观察完成，命令通知、工具和思考不计入阈值。
 
-- `chat/observer/src/service.ts` 在 `message`、`middleware`、`chat/before-receive`、`chat/receive`、`send` 上被动观察，只对外暴露拉取式 `recentOfConversation(key, limit)`、`identityOfConversation(key)` 与 `channelOf`，没有“消息已入池”的公共事件。
-- `ObservedMessage` 含 `id`、`cid`、`routeId`、`platformMessageId`、`time`、`userId`、`name`、`self`、`backfilled`、`content`，不含会话键、历史 session 和实际预设。
-- 没有活跃 Agent 时消息仍会被 `_onMessage` 记入通道缓冲，但消费方无法得到通知。
-- 回填由观察层自己完成（`_backfill`），以 `when: 'quiet'` 送进 agent 会话，**不写入 `channel.observed`**；`recentOfConversation` 因此只能读到实时消息。
-
-**需要补充**
-
-1. 公共事件 `chatluna/observed`，参数为单条 `ObservedMessage`，在每次 `channels.observe` 后发出，包含旁听消息、自身回声与回填消息，并用 `backfilled` 区分。
-2. 事件载荷补充 `conversationKey`、`sessionId`（当前历史头）、`routeId`、`platform`，与 `recentOfConversation` 的键一致。
-3. 公共读取接口按 `conversationKey` 与 `sessionId` 返回可见历史（含平台历史回填能力声明），返回 `ObservedMessage`，附带分页。
-
-**验收**
-
-- 未触发引擎回复的群消息、无活跃 Agent 的消息都能通过事件到达订阅方。
-- 同一消息在事件与 `recentOfConversation` 中身份一致；回填消息带 `backfilled: true` 且不计入实时序。
-
-## 2. 交付归属（M05-C2）
-
-**当前事实**
-
-- `chat/core/src/session.ts` 的 `SentInfo` 为 `{ source, command?, own, messageIds, content }`，`emitSent()` 在 `chatSent` 上附加。
-- 来源分类为 `chat`、`command`、`plugin`、`schedule`；`own` 仅表示由对话回复发出。
-- 没有对“本次交付对应哪条入站请求或哪个轮次”的关联字段。
-
-**需要补充**
-
-1. `SentInfo` 增加 `conversationKey`、`sessionId`、`presetId`（本轮实际生效值）与 `replyTo`（被回复的入站消息 ID 或轮次号）。
-2. 分句、分段发送时，每一段都携带同一 `replyTo` 与同一 `presetId`。
-
-**验收**
-
-- 一次回复被切成多段时，订阅方可用 `replyTo` 归并到同一轮次。
-- 预设切换后仍在发送的回复，其 `presetId` 为原请求的预设，不取发送时的最新配置。
-
-## 3. 会话与预设变化通知（M02-C1、M06-C1）
-
-**当前事实**
-
-- `conversations/core/src/service.ts` 的 `reset()`、`switch()`、`fork()` 只改历史头，不发出任何事件；唯一事件是 `chatluna/sessions-indexed`。
-- `session/core/src/service.ts` 的 `branch()` 发出 `chatluna/session-branch`（`{ parent, session, at }`），但 `conversations.fork()` 不额外通知。
-- `engine/core/src/index.ts` 的 `switchPreset()` 只写 `slot.pending`，`switchAtTurnStart()` 在下一轮开始才应用，并写入 `preset/selected` 标记；没有对外事件。
-
-**需要补充**
-
-1. `conversations` 在 `reset`、`switch`、`fork` 完成后发出事件，载荷含 `conversationKey`、`previousSessionId`、`currentSessionId`、`reason`（`reset`/`switch`/`fork`），保证与入池顺序可核对。
-2. 预设实际生效时发出 `chatluna/preset-applied`，载荷含 `conversationKey`、`sessionId`、`presetId`、`turn`；与 `preset/selected` 标记同批写入。
-3. 提供只读查询：给定 `conversationKey` 返回当前历史头与当前生效预设，供无 Agent 场景使用。
-
-**验收**
-
-- `reset`/`switch`/`fork` 与 `preset-applied` 的先后顺序在订阅方可复现，且与消息入池顺序一致。
-- 同一会话连续 A → B → A 时，收到两次 `preset-applied`，消费方可据此各建新起点。
+预设生效与会话切换通知用于重设消费起点，边界取当时缓冲末尾。具体限制与验收见[消息来源与消费](message-pool.md)。
 
 ## 4. 后端调度归属（M01-C1）
 
@@ -177,14 +126,12 @@ readonly scheduling = { extract: true, dream: true, recall: true }
 
 | 项 | 插件侧 | 框架侧 |
 | --- | --- | --- |
-| 1 统一消息采集 | 已改用 `chat_observer` 拉取（S7），只剩入池事件待补 | 待补 |
-| 2 交付归属 | 回复改从 `agent.session` 末条 assistant 取（S7），不再依赖交付事件 | 待补 |
-| 3 会话与预设变化 | 按历史头变化丢弃整池（S7） | 待补 |
+| 1 聊天历史 | 已移除消息池，改为无缓存读取 | 官方 observer 频道缓冲与观察通知 |
+| 2 真实交付 | 已移除末条 assistant 补写 | 官方 send 提供实际回复归属 |
+| 3 生命周期 | 已接入消费边界 | 官方预设、会话变化事件 |
 | 4 调度归属 | 已声明 `scheduling`（S6） | 待补：原生读取该字段并让出调度 |
 | 5 任务受理、状态与取消 | 已实现 `cancelled`、`getJob`、`cancelJob`、`watchJobs`（S6） | 待补：`runJob` 接受预派 `jobId` 与信号、`extract` 接受信号、取消入口 |
 | 6 原生任务页读取后端任务 | 已实现投影与订阅面（S6） | 待补：`listJobs` 合并后端任务、`memory.jobs.run` 识别后端任务 |
 | 7 工具 schema 说明字段 | 已把说明并入工具描述规避（S4） | 待补 |
 
 插件侧实现在 `src/contracts/framework.ts` 声明形状，框架落地后改为从 `@chatluna/*` 导入；`src/service/app/job_view.ts`、`job_surface.ts` 与 `LivingMemoryBackend.scheduling` 是第 4—6 项对应的落点。
-
-第 1 项的实际影响已经缩小：采集改走 `chat_observer` 的拉取接口后，插件能在没有该事件的情况下维护消息池；缺口只剩“未触发回复且无后续轮次的旁听消息不会被感知”与“回填不进入观测缓冲，召回窗口需从 `agent.session` 补足”。第 2 项同理——回复正文改从 `agent.session.messages()` 的末条 assistant 取，交付事件只影响分句发送时的逐段消息号归并。

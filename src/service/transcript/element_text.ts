@@ -1,4 +1,3 @@
-import { contentText } from '@chatluna/message'
 import type { ChatBlock } from '@chatluna/message'
 
 /**
@@ -19,7 +18,7 @@ function describeBlock(block: ChatBlock): string {
     case 'file':
       return describeFile(block)
     case 'envelope':
-      return contentText(block.content)
+      return block.kind === 'message' ? blocksToLogText(block.content) : ''
     case 'native':
       return describeNative(block)
     case 'source':

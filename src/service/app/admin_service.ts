@@ -63,7 +63,7 @@ export interface LivingMemoryAdminDeps {
     logger: LivingMemoryLogger
     /** 预设目录：`ctx.presets` 中的预设 id。 */
     listPresetIds(): Promise<string[]>
-    /** 清理单个预设的会话状态（快照、召回与提取游标、消息池）。 */
+    /** 清理单个预设的会话状态（快照、召回与提取消费位置）。 */
     cleanupConversation(conversationId: string): Promise<void>
 }
 
@@ -311,7 +311,7 @@ export class LivingMemoryAdminService {
         )[0]?.id
     }
 
-    /** 会话级状态清理：快照、召回与提取游标、消息池。 */
+    /** 会话级状态清理：快照、召回与提取消费位置。 */
     cleanupConversation(conversationId: string) {
         return this.deps.cleanupConversation(conversationId)
     }

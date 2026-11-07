@@ -29,7 +29,8 @@ import type { LivingMemoryRepository } from './persistence/repository.ts'
 /**
  * LivingMemory 的 `ctx.memory` 后端。
  *
- * v1 的业务能力（消息池、提取、召回、Dream、画像、索引）仍由插件自身的工作流承担；
+ * v1 的业务能力（提取、召回、Dream、画像、索引）仍由插件自身的工作流承担，
+ * 聊天消息统一从框架历史读取；
  * 这里把 v2 定义的后端契约映射到插件的持久化仓储与变更服务，使原生工具、管理界面
  * 与路由能够把 LivingMemory 当作普通后端使用。
  *

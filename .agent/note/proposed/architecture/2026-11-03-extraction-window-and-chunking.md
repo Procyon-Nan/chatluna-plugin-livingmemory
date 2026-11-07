@@ -4,6 +4,8 @@ Status: proposed
 
 ## Problem
 
+2026-11-06 后续决定见 [使用框架聊天历史](../../implemented/architecture/2026-11-06-framework-chat-history.md)。本文的阈值、完整交流和分块规则继续适用；输入改为框架提供的逐条聊天消息，容量与保留范围由框架负责，插件不再自建消息池。
+
 LivingMemory v1 的自动提取把消息阈值、交流边界、旁听消息和模型输入分块连接在同一条消费链上。ChatLuna v2 原生流程目前按会话读取 observer 的最近窗口并直接调用后端；如果迁移时把最近窗口当成完整实现，会改变完整交流、旁听和消费游标的行为。
 
 ## Proposal

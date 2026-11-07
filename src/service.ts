@@ -10,7 +10,7 @@ import { LivingMemoryLogger } from './service/logging/logger.ts'
 import { registerLivingMemoryTools } from './service/memory/tools/index.ts'
 import { defineLivingMemoryTables } from './service/persistence/tables.ts'
 import { LivingMemoryRepository } from './service/persistence/repository.ts'
-import { MessageCollector } from './service/message_collector.ts'
+import { LivingMemoryChatHistory } from './service/chat_history.ts'
 import { LivingMemoryVectorIndexService } from './service/vector_index/service.ts'
 import { LivingMemorySearchEngine } from './service/workflows/recall/memory_search_engine.ts'
 import { LivingMemoryAgenticRecallExecutor } from './service/workflows/recall/agentic_recall.ts'
@@ -77,7 +77,7 @@ export const DEFAULT_CONFIG: LivingMemoryServiceConfig = {
 export default class LivingmemoryService extends Service {
     readonly repository: LivingMemoryRepository
     readonly backend: LivingMemoryBackend
-    readonly collector: MessageCollector
+    readonly history: LivingMemoryChatHistory
     readonly vectorIndex: LivingMemoryVectorIndexService
     readonly mutations: LivingMemoryMutationService
     readonly searchEngine: LivingMemorySearchEngine
@@ -102,7 +102,7 @@ export default class LivingmemoryService extends Service {
         defineLivingMemoryTables(ctx)
         this.logger = new LivingMemoryLogger(ctx.logger('livingmemory'), () => this.config.debug)
         this.repository = new LivingMemoryRepository(ctx)
-        this.collector = new MessageCollector(ctx.chat_observer)
+        this.history = new LivingMemoryChatHistory(ctx.chat_observer)
         this.vectorIndex = new LivingMemoryVectorIndexService(ctx, config, this.repository, this.logger)
         this.mutations = new LivingMemoryMutationService(
             this.repository,
@@ -171,7 +171,7 @@ export default class LivingmemoryService extends Service {
         )
         this.recallCoordinator = new LivingMemoryRecallCoordinator(
             config,
-            this.collector,
+            this.history,
             this.repository,
             new LivingMemoryAgenticRecallExecutor(
                 ctx,
@@ -183,7 +183,7 @@ export default class LivingmemoryService extends Service {
         )
         this.extractionCoordinator = new LivingMemoryExtractionCoordinator(
             config,
-            this.collector,
+            this.history,
             this.repository,
             this.mutations,
             new LivingMemoryMessageFormatter(),
@@ -204,7 +204,7 @@ export default class LivingmemoryService extends Service {
             logger: this.logger
         })
         this.sessionHooks = new LivingMemorySessionHooks(ctx, {
-            collector: this.collector,
+            history: this.history,
             recall: this.recallCoordinator,
             extraction: this.extractionCoordinator,
             userProfiles: this.userProfiles,
@@ -236,13 +236,11 @@ export default class LivingmemoryService extends Service {
 
     /**
      * 清理单个会话在本插件内的状态：快照按会话删除，召回与提取游标按会话
-     * 失效，消息池整池丢弃。记忆条目本身不删——它们属于预设，不随会话消失。
+     * 失效，消费边界重新建立。记忆条目本身不删——它们属于预设，不随会话消失。
      */
     private async cleanupConversation(conversationId: string) {
         await this.repository.deleteSnapshotsByConversation(conversationId)
-        this.recallCoordinator.clearByConversation(conversationId)
-        this.extractionCoordinator.clearByConversation(conversationId)
-        this.collector.reset(conversationId)
+        this.sessionHooks.reset(conversationId)
     }
 
     /**
@@ -269,10 +267,9 @@ export default class LivingmemoryService extends Service {
         return await this.repository.cancelJob(jobId, 'cancel requested')
     }
 
-    /** 注册后端、采集订阅、会话钩子与记忆工具；插件卸载时随 effect 一并注销。 */
+    /** 注册后端、会话钩子与记忆工具；插件卸载时随 effect 一并注销。 */
     private register(): Disposable {
         const unregister = this.ctx.memory.backend(this.backend.id, () => this.backend)
-        const stopCollecting = this.collector.start()
         const stopHooks = this.sessionHooks.register()
         this.registerCommands()
         this.registerWebUI()
@@ -284,7 +281,6 @@ export default class LivingmemoryService extends Service {
         return () => {
             for (const dispose of tools) dispose()
             stopHooks()
-            stopCollecting()
             unregister()
         }
     }
@@ -353,6 +349,7 @@ export default class LivingmemoryService extends Service {
         return async () => {
             // 先停止接收新任务并取消在途运行，再释放 Worker 与索引。
             stopMaintenance()
+            disposer()
             await Promise.all([
                 this.dreamCoordinator.stop(),
                 this.recallCoordinator.stop(),
@@ -365,7 +362,6 @@ export default class LivingmemoryService extends Service {
                 await this.dreamWorker.stop()
             } finally {
                 await this.vectorIndex.stop()
-                disposer()
             }
         }
     }

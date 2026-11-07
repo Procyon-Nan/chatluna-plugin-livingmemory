@@ -17,7 +17,7 @@ yarn build
 
 插件加载要求以下服务在场，任一缺失时插件不会加载：
 
-`chatluna`、`memory`、`database`、`chat_observer`、`agents`
+`chatluna`、`memory`、`database`、`chat_observer`、`agents`、`chat`、`conversations`
 
 命令与 WebUI 是可选能力，分别在有 `koishi` 与 `chatluna_webui` 时注册；每日维护
 在有 `timer` 时调度。

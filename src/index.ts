@@ -4,6 +4,8 @@ import { modelAddressSchema } from '@chatluna/schema'
 import type {} from '@chatluna/memory'
 import type {} from '@chatluna/chat-observer'
 import type {} from '@chatluna/agent'
+import type {} from '@chatluna/chat'
+import type {} from '@chatluna/conversations'
 import LivingmemoryService, { DEFAULT_CONFIG } from './service.ts'
 import type { LivingMemoryConfig } from './contracts/workflows.ts'
 
@@ -11,15 +13,17 @@ export const name = 'livingmemory'
 
 /**
  * `inject` 是加载前置条件：任一项缺失时 cordis 会把插件置为 INACTIVE、整段
- * `apply` 不执行。这里只列 v2 实际存在的服务。消息采集走 `chat_observer`
- * 的拉取接口，领域钩子走 `ctx.agents.prepareStep` 与 `chatluna/agent-turn`。
+ * `apply` 不执行。聊天历史由 `chat_observer` 提供，会话切换由
+ * `conversations` 通知，提取在 `chat` 完成实际回复发送后触发。
  */
 export const inject = [
     'chatluna',
     'memory',
     'database',
     'chat_observer',
-    'agents'
+    'agents',
+    'chat',
+    'conversations'
 ] as const
 
 export type Config = LivingMemoryConfig

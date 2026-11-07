@@ -1,316 +1,322 @@
 import assert from 'node:assert/strict'
 import type { Context } from 'cordis'
 import type { Agent } from '@chatluna/agent'
-import type { ChatObserverService } from '@chatluna/chat-observer'
 import { ChatMessage, contentText } from '@chatluna/message'
-import { MessageCollector } from '../src/service/message_collector.ts'
 import { LivingMemorySessionHooks } from '../src/service/session_hooks.ts'
-import { DEFAULT_CONFIG } from '../src/service.ts'
+import { LivingMemoryChatHistory } from '../src/service/chat_history.ts'
+import type { ChatHistoryScope } from '../src/service/chat_history.ts'
+import type { LivingMemoryTranscriptMessage } from '../src/contracts/memory.ts'
 import { createCapturedLogger } from './workflow-test-utils.ts'
-import type { ConversationLogEntryInput } from '../src/service/transcript/message_log/types.ts'
-import type { LivingMemoryTranscriptMessage, MemoryScope } from '../src/contracts/memory.ts'
-import type { MemorySnapshotRecord } from '../src/contracts/memory.ts'
+import { FrameworkHistoryFixture, historyMessage } from './chat-history-test-utils.ts'
 
-type PrepareStep = (input: {
-    agent: Agent
-    stepNumber: number
-    steps: readonly unknown[]
-}) => Promise<{ contribute?: readonly ChatMessage[] } | undefined>
-
-interface SessionHooksHarness {
-    hooks: LivingMemorySessionHooks
-    prepare: PrepareStep
-    turn: (agent: Agent) => void
-    setSnapshot: (text: string) => void
-    recallCalls: {
-        scope: MemoryScope
-        current: LivingMemoryTranscriptMessage
-        history: () => Promise<LivingMemoryTranscriptMessage[]>
-    }[]
-    extractionCalls: {
-        scope: MemoryScope
-        includeOverheard: boolean
-        origin: () => Promise<{ header: string; sourceLabel: string }>
-    }[]
-    observed: (input: { id: string; userId?: string; text: string }) => void
-    agentOf: (input?: { presetId?: string; sessionId?: string; reply?: string }) => Agent
-    guildName?: string
+const settle = async () => {
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    await new Promise<void>((resolve) => setImmediate(resolve))
 }
+type Prepare = (input: { agent: Agent; stepNumber: number; messages: readonly ChatMessage[] }) => Promise<{ contribute?: readonly ChatMessage[] } | undefined>
 
-const createHarness = (
-    config: Partial<{
-        enableSnapshotInjection: boolean
-        enableUserProfileInjection: boolean
-        recallIntervalMessages: number
-        recallHistoryMessages: number
-        extractionWindowMessages: number
-        extractionIncludeOverheard: boolean
-    }> = {}
-): SessionHooksHarness => {
-    const prepared: PrepareStep[] = []
-    const turnListeners: ((payload: { agent: Agent; reason: string }) => void)[] = []
-    const captured = createCapturedLogger(false)
-    const recallCalls: SessionHooksHarness['recallCalls'] = []
-    const extractionCalls: SessionHooksHarness['extractionCalls'] = []
-    const buffers = new Map<string, any[]>()
+function createHarness(config: { overheard?: boolean; extractionWindow?: number; recallInterval?: number } = {}) {
+    const framework = new FrameworkHistoryFixture()
+    const listeners = new Map<string, ((payload: any) => unknown)[]>()
+    const recalls: { scope: ChatHistoryScope; current: LivingMemoryTranscriptMessage; history: () => Promise<LivingMemoryTranscriptMessage[]>; position: number }[] = []
+    const extractions: { scope: ChatHistoryScope; boundary: number; eligible?: number; origin: () => Promise<{ header: string }> }[] = []
+    const cleared: string[] = []
+    const order: string[] = []
+    let prepare!: Prepare
     let snapshotText = ''
-
-    const harness: SessionHooksHarness = {
-        hooks: null as never,
-        prepare: async () => undefined,
-        turn: (agent) => {
-            for (const listener of turnListeners) listener({ agent, reason: 'completed' })
-        },
-        setSnapshot: (text) => {
-            snapshotText = text
-        },
-        recallCalls,
-        extractionCalls,
-        observed: ({ id, userId, text }) => {
-            const list = buffers.get('conv-1') ?? []
-            list.push({
-                id: `obs:${id}`,
-                cid: 'cid',
-                routeId: 'route-1',
-                platformMessageId: id,
-                time: Date.now(),
-                userId: userId ?? 'user-1',
-                name: '用户A',
-                self: false,
-                backfilled: false,
-                content: [{ type: 'text', text }]
-            })
-            buffers.set('conv-1', list)
-        },
-        agentOf: ({ presetId, sessionId, reply } = {}) => {
-            const messages =
-                reply === undefined
-                    ? []
-                    : [ChatMessage.assistant(reply, { provider: 'test', model: 'test' })]
-            return {
-                options: {
-                    config: { provider: 'test', model: 'test' },
-                    conversationKey: 'conv-1',
-                    presetId: presetId ?? 'preset-1',
-                    location: { platform: 'onebot', selfId: 'bot-1', isDirect: false, guild: 'guild-1' }
-                },
-                session: { id: sessionId ?? 'session-1', messages: () => messages }
-            } as unknown as Agent
-        }
+    let presetId: string | undefined = 'preset-1'
+    let sessionId = 'session-1'
+    let drainGate: Promise<unknown> = Promise.resolve()
+    let currentGate: Promise<unknown> = Promise.resolve()
+    const captured = createCapturedLogger(false)
+    const emit = (name: string, payload: unknown) => {
+        return Promise.all((listeners.get(name) ?? []).map(listener => listener(payload)))
     }
-
-    const observer = {
-        recentOfConversation: (key: string, limit: number) =>
-            (buffers.get(key) ?? []).slice(-limit),
-        identityOfConversation: () => ({
-            platform: 'onebot',
-            selfId: 'bot-1',
-            isDirect: false,
-            guildId: 'guild-1',
-            channelId: 'channel-1',
-            userId: 'user-1'
-        })
-    } as unknown as Pick<ChatObserverService, 'recentOfConversation' | 'identityOfConversation'>
-
     const ctx = {
-        agents: {
-            prepareStep: (fn: PrepareStep) => {
-                prepared.push(fn)
-                harness.prepare = fn
-                return () => {}
-            }
+        get: () => undefined,
+        agents: { prepareStep: (callback: Prepare) => { prepare = callback; return () => {} } },
+        on: (name: string, listener: (payload: unknown) => unknown) => {
+            const entries = listeners.get(name) ?? []
+            entries.push(listener)
+            listeners.set(name, entries)
+            return () => listeners.set(name, entries.filter((entry) => entry !== listener))
         },
-        on: (_name: string, listener: (payload: { agent: Agent; reason: string }) => void) => {
-            turnListeners.push(listener)
-            return () => {}
+        conversations: {
+            current: async () => { await currentGate; return { sessionId, presetId } }
         },
         chat: {
-            environmentOf: () =>
-                harness.guildName === undefined ? undefined : { guildName: harness.guildName }
+            drain: async () => { await drainGate; order.push('drain'); return 1 },
+            environmentOf: () => ({ guildName: '测试群' })
         }
     } as unknown as Context
-
-    const snapshot = (): MemorySnapshotRecord | undefined =>
-        snapshotText === ''
-            ? undefined
-            : {
-                  id: 'snapshot-1',
-                  presetId: 'preset-1',
-                  conversationId: 'conv-1',
-                  query: '',
-                  items: [
-                      {
-                          finalText: snapshotText,
-                          toolCallSummary: {
-                              searchTexts: [],
-                              searchKeywords: [],
-                              maxCandidates: 0
-                          },
-                          matchedMemories: []
-                      }
-                  ],
-                  createdAt: new Date()
-              }
-
-    harness.hooks = new LivingMemorySessionHooks(ctx, {
-        collector: new MessageCollector(observer),
+    const hooks = new LivingMemorySessionHooks(ctx, {
+        history: new LivingMemoryChatHistory(framework),
         recall: {
-            queue: async (
-                scope: MemoryScope,
-                current: LivingMemoryTranscriptMessage,
-                history: () => Promise<LivingMemoryTranscriptMessage[]>
-            ) => {
-                recallCalls.push({ scope, current, history })
-            }
+            queue: async (scope: ChatHistoryScope, current: LivingMemoryTranscriptMessage,
+                history: () => Promise<LivingMemoryTranscriptMessage[]>, position: number) => {
+                recalls.push({ scope, current, history, position })
+            },
+            clearByConversation: (key: string) => cleared.push(key)
         } as never,
         extraction: {
-            queue: async (
-                scope: MemoryScope,
-                options: {
-                    includeOverheard: boolean
-                    resolveTranscriptOrigin: () => Promise<{
-                        header: string
-                        sourceLabel: string
-                    }>
-                }
-            ) => {
-                extractionCalls.push({
-                    scope,
-                    includeOverheard: options.includeOverheard,
-                    origin: options.resolveTranscriptOrigin
-                })
-            }
+            queue: async (scope: ChatHistoryScope, options: { resolveTranscriptOrigin: () => Promise<{ header: string }> },
+                boundary: number, eligible?: number) => {
+                order.push('extract')
+                extractions.push({ scope, boundary, eligible, origin: options.resolveTranscriptOrigin })
+            },
+            clearByConversation: () => {}
         } as never,
-        userProfiles: {
-            renderForSpeakers: async () => ''
-        } as never,
-        repository: {
-            getLatestSnapshotByScope: async () => snapshot()
-        },
+        userProfiles: { renderForSpeakers: async () => '' } as never,
+        repository: { getLatestSnapshotByScope: async () => snapshotText === '' ? undefined : {
+            items: [{ finalText: snapshotText, matchedMemories: [], toolCallSummary: { searchTexts: [], searchKeywords: [], maxCandidates: 0 } }]
+        } as never },
         logger: captured.logger,
         config: {
-            enableSnapshotInjection: config.enableSnapshotInjection ?? true,
-            enableUserProfileInjection: config.enableUserProfileInjection ?? false,
-            // 未显式覆盖时取插件默认值，使默认值变更不会让这些用例失去意义。
-            recallIntervalMessages:
-                config.recallIntervalMessages ?? DEFAULT_CONFIG.recallIntervalMessages,
-            recallHistoryMessages:
-                config.recallHistoryMessages ?? DEFAULT_CONFIG.recallHistoryMessages,
-            extractionWindowMessages:
-                config.extractionWindowMessages ?? DEFAULT_CONFIG.extractionWindowMessages,
-            extractionIncludeOverheard: config.extractionIncludeOverheard ?? false
+            enableSnapshotInjection: true, enableUserProfileInjection: false,
+            recallIntervalMessages: config.recallInterval ?? 1, recallHistoryMessages: 20,
+            extractionWindowMessages: config.extractionWindow ?? 2,
+            extractionIncludeOverheard: config.overheard ?? false
         }
     })
-    harness.hooks.register()
-    return harness
+    const dispose = hooks.register()
+    const agent = (turn = 1) => ({
+        options: { conversationKey: 'conv-1', presetId },
+        session: { id: sessionId, lastTurn: turn }
+    }) as unknown as Agent
+    const user = (position: number) => ChatMessage.user('chat', { meta: { externalId: `m-${position}` } })
+    return {
+        framework, hooks, recalls, extractions, cleared, order, dispose, agent, user,
+        engineTurn: (agent: Agent, turn: number, id: number) => emit('chatluna/engine-turn', { agent, turn, input: [user(id)] }),
+        prepare: async (target: Agent, positions: number[] = [], stepNumber = 1, extra: ChatMessage[] = []) => {
+            const result = await prepare({ agent: target, stepNumber, messages: [...positions.map(user), ...extra] })
+            emit('chatluna/agent-output', { agent: target, turn: target.session.lastTurn })
+            return result
+        },
+        send: (ids: number[], turn = 1, originPreset = presetId) => emit('send', {
+            chatSent: { own: true, reply: { conversationKey: 'conv-1', sessionId, presetId: originPreset, turn },
+                messageIds: ids.map(id => 'm-' + id) }
+        }),
+        observed: async (id: number, text: string, overrides: Parameters<typeof historyMessage>[2] = {}) => {
+            const message = historyMessage(id, text, overrides)
+            framework.messages.push(message)
+            emit('chatluna/observed', { conversationKey: 'conv-1', sessionId, message })
+            await settle()
+        },
+        turn: async (target: Agent) => { emit('chatluna/agent-turn', { agent: target, reason: 'completed' }); await settle() },
+        switch: (nextPreset: string | undefined, nextSession = sessionId) => {
+            const previous = { sessionId, presetId }
+            presetId = nextPreset
+            sessionId = nextSession
+            emit('chatluna/conversation-change', {
+                conversationKey: 'conv-1', previous, current: { sessionId, presetId }, reason: 'preset'
+            })
+        },
+        setSnapshot: (text: string) => { snapshotText = text },
+        setDrain: (gate: Promise<unknown>) => { drainGate = gate },
+        setCurrent: (gate: Promise<unknown>) => { currentGate = gate }
+    }
 }
 
 describe('LivingMemorySessionHooks', () => {
-    it('injects nothing on the first step when no snapshot exists', async () => {
+    it('injects the current snapshot on step one only', async () => {
         const harness = createHarness()
-        harness.observed({ id: 'm-1', text: '问' })
-
-        const patch = await harness.prepare({
-            agent: harness.agentOf(),
-            stepNumber: 1,
-            steps: []
-        })
-
-        assert.equal(patch, undefined)
-    })
-
-    it('contributes the snapshot on the first step only', async () => {
-        const harness = createHarness()
-        harness.observed({ id: 'm-1', text: '问' })
+        await harness.observed(10, '问')
         harness.setSnapshot('用户喜欢红茶')
-
-        const agent = harness.agentOf()
-        const first = await harness.prepare({ agent, stepNumber: 1, steps: [] })
-        const second = await harness.prepare({ agent, stepNumber: 2, steps: [] })
-
-        assert.equal(first?.contribute?.length, 1)
+        const agent = harness.agent()
+        const first = await harness.prepare(agent, [10])
+        const second = await harness.prepare(agent, [10], 2)
         assert.match(contentText(first!.contribute![0].content), /用户喜欢红茶/)
         assert.equal(second, undefined)
     })
 
-    it('queues recall with the triggering message and a history loader', async () => {
-        const harness = createHarness({ recallIntervalMessages: 1 })
-        harness.observed({ id: 'm-1', text: '第一句' })
-        harness.observed({ id: 'm-2', text: '第二句' })
-
-        await harness.prepare({ agent: harness.agentOf(), stepNumber: 1, steps: [] })
-
-        assert.equal(harness.recallCalls.length, 1)
-        assert.equal(harness.recallCalls[0].current.contentLines.join(''), '第二句')
-        const history = await harness.recallCalls[0].history()
-        assert.deepEqual(
-            history.map((message) => message.contentLines.join('')),
-            ['第一句']
-        )
-    })
-
-    it('leaves recall alone when the interval is disabled', async () => {
-        const harness = createHarness({ recallIntervalMessages: 0 })
-        harness.observed({ id: 'm-1', text: '问' })
-
-        await harness.prepare({ agent: harness.agentOf(), stepNumber: 1, steps: [] })
-
-        assert.equal(harness.recallCalls.length, 0)
-    })
-
-    it('queues extraction after a completed turn', async () => {
+    it('uses the actual input batch while a later user message is already recorded', async () => {
         const harness = createHarness()
-        harness.observed({ id: 'm-1', text: '问' })
-
-        harness.turn(harness.agentOf({ reply: '答' }))
-
-        assert.equal(harness.extractionCalls.length, 1)
-        assert.equal(harness.extractionCalls[0].scope.presetId, 'preset-1')
+        await harness.observed(10, 'earlier')
+        await harness.observed(30, 'current')
+        await harness.observed(50, 'queued next')
+        await harness.prepare(harness.agent(), [30])
+        assert.equal(harness.recalls[0].current.contentLines.join(''), 'current')
+        assert.equal(harness.recalls[0].position, 1)
+        assert.deepEqual((await harness.recalls[0].history()).map((message) => message.contentLines.join('')), ['earlier'])
     })
 
-    it('skips extraction when the window is zero', async () => {
-        const harness = createHarness({ extractionWindowMessages: 0 })
-        harness.observed({ id: 'm-1', text: '问' })
-
-        harness.turn(harness.agentOf({ reply: '答' }))
-
-        assert.equal(harness.extractionCalls.length, 0)
-    })
-
-    it('ignores an agent without a preset', async () => {
+    it('finds original user ids inside folded message envelopes and excludes notices', async () => {
         const harness = createHarness()
-        harness.observed({ id: 'm-1', text: '问' })
-        const agent = {
-            options: { config: {}, conversationKey: 'conv-1' },
-            session: { id: 'session-1', messages: () => [] }
-        } as unknown as Agent
-
-        const patch = await harness.prepare({ agent, stepNumber: 1, steps: [] })
-        harness.turn(agent)
-
-        assert.equal(patch, undefined)
-        assert.equal(harness.extractionCalls.length, 0)
+        await harness.observed(10, '问')
+        const folded = ChatMessage.user([{
+            type: 'envelope', kind: 'message', id: 'route:m-10', externalId: 'm-10',
+            sender: { id: 'user-1' }, time: 1_010, content: [{ type: 'text', text: '问' }]
+        }])
+        await harness.prepare(harness.agent(), [], 1, [folded, ChatMessage.notice('internal', 'notice')])
+        assert.equal(harness.recalls[0].position, 0)
+        await harness.prepare(harness.agent(), [], 1, [ChatMessage.notice('wake', 'proactive wake'), ChatMessage.user('internal steer')])
+        assert.equal(harness.recalls.length, 1)
     })
 
-    it('uses the guild name from the chat environment for the transcript origin', async () => {
+    it('counts the first post-restart user message and preserves the baseline across agent recreation', async () => {
         const harness = createHarness()
-        harness.guildName = '测试群'
-        harness.observed({ id: 'm-1', text: '问' })
-
-        harness.turn(harness.agentOf({ reply: '答' }))
-        const origin = await harness.extractionCalls[0].origin()
-
-        assert.equal(origin.header, '以下是你在「测试群」（群聊 ID：guild-1）中的聊天记录：')
+        harness.framework.messages.push(historyMessage(10, 'old'))
+        await harness.observed(30, 'first new')
+        const firstAgent = harness.agent()
+        await harness.prepare(firstAgent, [30])
+        harness.send([40], 1)
+        await harness.observed(40, 'answer', { self: true })
+        await harness.turn(firstAgent)
+        assert.equal(harness.extractions[0].boundary, 0)
+        const replacement = harness.agent(2)
+        await harness.observed(50, 'second new')
+        await harness.prepare(replacement, [50])
+        harness.send([60], 2)
+        await harness.observed(60, 'second answer', { self: true })
+        await harness.turn(replacement)
+        assert.equal(harness.extractions[1].boundary, 0)
+        assert.equal(harness.cleared.length, 0)
     })
 
-    it('falls back to the guild id when the environment has no name', async () => {
+    it('resets every preset switch including A to B to A and ignores late old-preset replies', async () => {
         const harness = createHarness()
-        harness.observed({ id: 'm-1', text: '问' })
+        await harness.observed(10, 'A')
+        const oldAgent = harness.agent()
+        await harness.prepare(oldAgent, [10])
+        harness.switch('preset-2')
+        await harness.observed(30, 'B')
+        await harness.prepare(harness.agent(), [30])
+        harness.switch('preset-1')
+        await harness.observed(50, 'new A')
+        const currentAgent = harness.agent(3)
+        await harness.prepare(currentAgent, [50])
+        await harness.turn(oldAgent)
+        assert.equal(harness.extractions.length, 0)
+        harness.send([60], 1, 'preset-2')
+        await harness.observed(60, 'late B reply', { self: true })
+        harness.send([65], 1) // 切回 A 前的同名预设，仍属于旧轮。
+        await harness.observed(65, 'late old A reply', { self: true })
+        harness.send([70], 3)
+        await harness.observed(70, 'new A reply', { self: true })
+        await harness.turn(currentAgent)
+        assert.equal(harness.extractions[0].boundary, 1)
+        assert.equal(harness.extractions[0].scope.presetId, 'preset-1')
+        assert.equal(harness.cleared.length, 2)
+    })
 
-        harness.turn(harness.agentOf({ reply: '答' }))
-        const origin = await harness.extractionCalls[0].origin()
+    it('resets a history switch even when the preset stays the same', async () => {
+        const harness = createHarness()
+        await harness.observed(10, 'old history')
+        await harness.prepare(harness.agent(), [10])
+        harness.switch('preset-1', 'session-2')
+        await harness.observed(80, 'new history')
+        const agent = harness.agent()
+        await harness.prepare(agent, [80])
+        assert.deepEqual(await harness.recalls.at(-1)!.history(), [])
+        harness.send([90], 1)
+        await harness.observed(90, 'new reply', { self: true })
+        await harness.turn(agent)
+        assert.equal(harness.extractions[0].scope.sessionId, 'session-2')
+        assert.equal(harness.extractions[0].boundary, 0)
+    })
 
-        assert.match(origin.header, /群聊 ID：guild-1/)
-        assert.match(origin.header, /「guild-1」/)
+    it('triggers overheard extraction for user-only traffic and never counts backfill', async () => {
+        const harness = createHarness({ overheard: true })
+        await harness.observed(10, 'backfill', { backfilled: true })
+        assert.equal(harness.extractions.length, 0)
+        await harness.observed(30, 'first overheard')
+        await harness.observed(50, 'second overheard')
+        assert.deepEqual(harness.extractions.map((call) => call.boundary), [0, 0])
+        assert.equal(harness.recalls.length, 0)
+    })
+
+    it('waits for full rendering and history commit before normal extraction', async () => {
+        const harness = createHarness()
+        let release!: () => void
+        harness.setDrain(new Promise<void>((resolve) => { release = resolve }))
+        await harness.observed(10, 'question')
+        const agent = harness.agent()
+        await harness.prepare(agent, [10])
+        await harness.turn(agent)
+        harness.send([20], 1)
+        await harness.observed(20, 'first split reply', { self: true })
+        assert.equal(harness.extractions.length, 0)
+        harness.send([30], 1)
+        await harness.observed(30, 'second split reply', { self: true })
+        Object.assign(agent.session, { lastTurn: 2 })
+        await harness.observed(40, 'next question')
+        await harness.prepare(agent, [40])
+        harness.send([50], 2)
+        await harness.observed(50, 'next turn partial reply', { self: true })
+        release()
+        await settle()
+        assert.deepEqual(harness.order, ['drain', 'extract'])
+        assert.equal(harness.extractions[0].eligible, 2)
+        assert.match((await harness.extractions[0].origin()).header, /测试群/)
+    })
+
+    it('waits for observation after drain and counts a multi-ID send only once', async () => {
+        const harness = createHarness()
+        await harness.observed(10, 'question')
+        const agent = harness.agent()
+        await harness.prepare(agent, [10])
+        harness.send([20, 21])
+        await harness.turn(agent)
+        assert.equal(harness.extractions.length, 0)
+        await harness.observed(20, 'reply', { self: true })
+        await harness.observed(21, 'reply', { self: true })
+        assert.deepEqual(harness.extractions.map(x => x.eligible), [1])
+    })
+
+    it('attributes a direct engine reply even when the engine skips prepareStep', async () => {
+        const harness = createHarness()
+        await harness.observed(1, 'question')
+        const agent = harness.agent()
+        await harness.engineTurn(agent, 7, 1)
+        harness.send([2], 7)
+        await harness.observed(2, 'direct answer', { self: true })
+        await harness.turn(agent)
+        assert.deepEqual(harness.extractions.map(x => x.eligible), [1])
+    })
+
+    it('does not trigger normal extraction for a turn without an actually delivered reply', async () => {
+        const harness = createHarness()
+        await harness.observed(10, 'question')
+        const agent = harness.agent()
+        await harness.prepare(agent, [10])
+        await harness.turn(agent)
+        assert.equal(harness.extractions.length, 0)
+    })
+
+    it('discards a pending scope lookup if the preset changes', async () => {
+        const harness = createHarness()
+        await harness.observed(10, 'old')
+        let release!: () => void
+        harness.setCurrent(new Promise<void>((resolve) => { release = resolve }))
+        const preparing = harness.prepare(harness.agent(), [30])
+        await settle()
+        harness.switch('preset-2')
+        release()
+        await preparing
+        assert.equal(harness.recalls.length, 0)
+        await harness.observed(30, 'new')
+        await harness.prepare(harness.agent(), [30])
+        assert.equal(harness.recalls[0].scope.presetId, 'preset-2')
+    })
+
+    it('disables extraction at zero and drops pending delivery callbacks after disposal', async () => {
+        const disabled = createHarness({ extractionWindow: 0 })
+        await disabled.observed(10, 'question')
+        const disabledAgent = disabled.agent()
+        await disabled.prepare(disabledAgent, [10])
+        await disabled.turn(disabledAgent)
+        assert.equal(disabled.extractions.length, 0)
+
+        const harness = createHarness()
+        let release!: () => void
+        harness.setDrain(new Promise<void>((resolve) => { release = resolve }))
+        await harness.observed(10, 'question')
+        const agent = harness.agent()
+        await harness.prepare(agent, [10])
+        await harness.turn(agent)
+        harness.dispose()
+        release()
+        await settle()
+        assert.equal(harness.extractions.length, 0)
     })
 })

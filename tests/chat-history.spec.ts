@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict'
+import { LivingMemoryChatHistory, toHistoryTranscriptMessages } from '../src/service/chat_history.ts'
+import { createSpeakerKey } from '../src/service/memory/speaker_identity.ts'
+import { renderLivingMemoryTranscript } from '../src/service/transcript/transcript_renderer.ts'
+import { FrameworkHistoryFixture, historyMessage, historyScope } from './chat-history-test-utils.ts'
+
+describe('LivingMemoryChatHistory', () => {
+    it('reads beyond 200 and consumes only new rows after the buffer rolls over at equal timestamps', async () => {
+        const observer = new FrameworkHistoryFixture()
+        const history = new LivingMemoryChatHistory(observer)
+        for (let i = 0; i < 250; i++) observer.messages.push(historyMessage(i, String(i), { time: 123 }))
+        assert.equal((await history.after(historyScope, -1)).length, 250)
+        const cursor = await history.head(historyScope)
+        observer.messages.splice(0, 2)
+        observer.messages.push(historyMessage(250, 'new', { time: 123 }), historyMessage(251, 'newer', { time: 123 }))
+        assert.deepEqual((await history.after(historyScope, cursor)).map(x => x.content), ['new', 'newer'])
+        assert.equal(history.trigger(historyScope, ['m-0']), undefined)
+    })
+
+    it('matches the last available chat in the actual batch and excludes queued input from context', async () => {
+        const observer = new FrameworkHistoryFixture()
+        observer.messages.push(historyMessage(1, 'earlier'), historyMessage(2, 'trigger'), historyMessage(3, 'queued'))
+        const history = new LivingMemoryChatHistory(observer)
+        const trigger = history.trigger(historyScope, ['route:m-2', 'm-1', 'm-2', 'unmatched-backfill'])
+        assert.equal(trigger?.content, 'trigger')
+        assert.deepEqual((await history.recent(historyScope, 6, trigger!.position)).map(x => x.content), ['earlier'])
+    })
+
+    it('uses the observed time and nickname and counts only chat and attributed replies', async () => {
+        const observer = new FrameworkHistoryFixture()
+        const chat = historyMessage(1, '正文', { time: new Date(2026, 10, 6, 12, 34).getTime(), name: '昵称' })
+        const answer = historyMessage(5, '答复', { self: true, name: '助手' })
+        observer.messages.push(chat, historyMessage(2, '', { content: [{ type: 'reasoning', text: 'thinking' }] }),
+            historyMessage(3, '通知', { self: true }), historyMessage(4, '旧消息', { backfilled: true }), answer)
+        const history = new LivingMemoryChatHistory(observer)
+        history.locate(historyScope.conversationId, { ...answer }, historyScope)
+        const entries = await history.after(historyScope, -1)
+        assert.deepEqual(entries.map(x => x.content), ['正文', '答复'])
+        const transcript = toHistoryTranscriptMessages(historyScope, entries)
+        assert.equal(renderLivingMemoryTranscript(transcript.slice(0, 1)), '[2026-11-06 12:34] 昵称：正文')
+        assert.equal(transcript[0].speakerKey, createSpeakerKey('onebot', 'user-1'))
+        assert.equal(transcript[1].role, 'assistant')
+        assert.equal((await history.after({ ...historyScope }, -1)).some(x => x.role === 'assistant'), false)
+    })
+})

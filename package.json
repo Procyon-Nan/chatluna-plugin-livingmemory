@@ -51,6 +51,7 @@
         "@chatluna/ai-runtime": "*",
         "@chatluna/chat": "*",
         "@chatluna/chat-observer": "*",
+        "@chatluna/conversations": "*",
         "@chatluna/core": "*",
         "@chatluna/memory": "*",
         "@chatluna/message": "*",

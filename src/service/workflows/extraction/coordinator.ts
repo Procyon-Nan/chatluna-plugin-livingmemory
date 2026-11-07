@@ -9,13 +9,11 @@ import type {
 } from '../../../contracts/workflows.ts'
 import type {
     LivingMemoryTranscriptMessage,
-    MemoryScope,
     PresetPersonaResolver
 } from '../../../contracts/memory.ts'
 import { formatLogScope, type LivingMemoryLogger } from '../../logging/logger.ts'
-import type { MessageLogRegistry } from '../../transcript/message_log/message_log_registry.ts'
-import type { ConversationLogMessage } from '../../transcript/message_log/types.ts'
-import { toLogTranscriptMessages } from '../../transcript/message_log/converter.ts'
+import { toHistoryTranscriptMessages } from '../../chat_history.ts'
+import type { ChatHistoryEntry, ChatHistoryScope, LivingMemoryChatHistory } from '../../chat_history.ts'
 
 type LivingMemoryExtractionConfig = Pick<
     LivingMemoryConfig,
@@ -31,17 +29,23 @@ type ExtractionFormatter = Pick<
 type ExtractionModel = Pick<LivingMemoryExtractor, 'extract'>
 
 /** 提取排干所需的消息日志读取面。 */
-export type ExtractionMessageLog = Pick<
-    MessageLogRegistry,
-    'warmup' | 'isWarm' | 'afterSeq' | 'tailSeq'
->
+export type ExtractionMessageLog = Pick<LivingMemoryChatHistory, 'after' | 'head'>
 
 interface ExtractionScopeState {
-    scope: MemoryScope
+    scope: ChatHistoryScope
     options: QueueExtractionOptions
-    /** 上次处理块的末序号；旁听起点在回填完成后解析。 */
-    resolveInitialCursor?: () => number
-    cursorSeq: number
+    /** 上次处理块的位置；首次调用不传边界时从框架当前历史末尾开始。 */
+    initialPosition?: Promise<number>
+    cursorPosition: number
+    /** 本次已完成交付的历史上界，不能读取下一轮尚未发送完整的回复。 */
+    eligiblePosition: number
+    requested: boolean
+    /** 失败后保持同一批正文，后续新消息属于下一批。 */
+    chunk?: {
+        entries: ChatHistoryEntry[]
+        scope: ChatHistoryScope
+        options: QueueExtractionOptions
+    }
     /** 当前块连续失败次数；达到上限后放弃该块（记任务、推进游标、续排后续块）。 */
     failStreak: number
 }
@@ -59,7 +63,7 @@ const calculateChunkMessageBudget = (window: number): number =>
  * 消息的段（孤儿回复 run，触发消息未被记录）整段视为一个交流。
  */
 const countTrailingExchangeMessages = (
-    segment: readonly ConversationLogMessage[]
+    segment: readonly ChatHistoryEntry[]
 ): number => {
     let exchangeStart = segment.length - 1
     while (exchangeStart > 0 && segment[exchangeStart].role === 'assistant') {
@@ -75,14 +79,14 @@ const countTrailingExchangeMessages = (
  * 切进交流时整段交流保留。被丢弃的闲聊随游标推进，不再进入后续提取。
  */
 const selectAnchoredUnits = (
-    segments: readonly ConversationLogMessage[][],
+    segments: readonly ChatHistoryEntry[][],
     window: number
-): ConversationLogMessage[][] => {
+): ChatHistoryEntry[][] => {
     if (segments.length === 0) {
         return []
     }
 
-    const units: ConversationLogMessage[][] = []
+    const units: ChatHistoryEntry[][] = []
     let coreRemaining =
         countTrailingExchangeMessages(segments[segments.length - 1]) + window
 
@@ -107,11 +111,11 @@ const selectAnchoredUnits = (
  * （核心后缀＋核心外的交流），旁听模式传入切片后的子块。
  */
 const packChunksFromLatest = (
-    units: readonly ConversationLogMessage[][],
+    units: readonly ChatHistoryEntry[][],
     window: number
-): ConversationLogMessage[][] => {
+): ChatHistoryEntry[][] => {
     const absorbLimit = calculateChunkMessageBudget(window)
-    const chunks: ConversationLogMessage[][] = []
+    const chunks: ChatHistoryEntry[][] = []
     let consumed = units.length
 
     while (consumed > 0) {
@@ -133,11 +137,11 @@ const packChunksFromLatest = (
  * assistant 之后；预算内的段保持原子。
  */
 const splitOverheardUnits = (
-    segments: readonly ConversationLogMessage[][],
+    segments: readonly ChatHistoryEntry[][],
     window: number
-): ConversationLogMessage[][] => {
+): ChatHistoryEntry[][] => {
     const absorbLimit = calculateChunkMessageBudget(window)
-    const units: ConversationLogMessage[][] = []
+    const units: ChatHistoryEntry[][] = []
     for (const segment of segments) {
         if (segment.length <= absorbLimit) {
             units.push(segment)
@@ -168,16 +172,16 @@ const splitOverheardUnits = (
  * 的闲聊，旁听模式先经 splitOverheardUnits 把超预算段切成预算内子块。
  */
 export const planExtractionChunks = (
-    entries: readonly ConversationLogMessage[],
+    entries: readonly ChatHistoryEntry[],
     window: number,
     includeOverheard: boolean
-): ConversationLogMessage[][] => {
+): ChatHistoryEntry[][] => {
     if (window <= 0 || entries.length === 0) {
         return []
     }
 
-    const segments: ConversationLogMessage[][] = []
-    let current: ConversationLogMessage[] = []
+    const segments: ChatHistoryEntry[][] = []
+    let current: ChatHistoryEntry[] = []
     for (let index = 0; index < entries.length; index++) {
         const entry = entries[index]
         current.push(entry)
@@ -229,36 +233,41 @@ export class LivingMemoryExtractionCoordinator {
     ) {}
 
     async queue(
-        scope: MemoryScope,
+        scope: ChatHistoryScope,
         options: QueueExtractionOptions,
-        initialCursor?: () => number
+        initialPosition?: number,
+        eligiblePosition?: number
     ) {
         if (this.config.extractionWindowMessages === 0) return
         if (this.controller.signal.aborted) return
         if (!this.isExtractionWhitelisted(scope)) return
 
         const key = scopeKey(scope)
-        if (initialCursor && !this.stateByScope.has(key)) {
-            this.clearByConversation(scope.conversationId)
-        }
         const state: ExtractionScopeState = this.stateByScope.get(key) ?? {
             scope,
             options,
-            cursorSeq: 0,
-            resolveInitialCursor:
-                initialCursor ??
-                (() => this.messageLog.tailSeq(scope.conversationId) ?? 0),
+            cursorPosition: -1,
+            eligiblePosition: -1,
+            requested: false,
+            initialPosition: initialPosition === undefined
+                ? this.messageLog.head(scope)
+                : Promise.resolve(initialPosition),
             failStreak: 0
         }
         this.stateByScope.set(key, state)
-        await this.messageLog.warmup(scope.conversationId)
-        if (!this.messageLog.isWarm(scope.conversationId)) return
-        if (this.stateByScope.get(key) !== state) return
-
-        if (state.resolveInitialCursor) {
-            state.cursorSeq = state.resolveInitialCursor()
-            delete state.resolveInitialCursor
+        if (state.initialPosition !== undefined) {
+            try {
+                state.cursorPosition = await state.initialPosition
+                delete state.initialPosition
+            } catch (error) {
+                if (this.stateByScope.get(key) === state) this.stateByScope.delete(key)
+                throw error
+            }
         }
+        const head = eligiblePosition ?? await this.messageLog.head(scope)
+        if (this.controller.signal.aborted || this.stateByScope.get(key) !== state) return
+        state.eligiblePosition = Math.max(state.eligiblePosition, head)
+        state.requested = true
         state.scope = scope
         state.options = options
         this.schedule(key, state)
@@ -266,27 +275,14 @@ export class LivingMemoryExtractionCoordinator {
 
     private schedule(key: string, state: ExtractionScopeState) {
         const { scope, options } = state
-        const window = this.config.extractionWindowMessages
-
-        const backlog = this.messageLog.afterSeq(
-            scope.conversationId,
-            state.cursorSeq
-        ).length
-        if (backlog < window) {
-            this.logger.diagnosticSummary(() => ({
-                event: '等待记忆提取',
-                detail: `${formatLogScope(scope)}; 消息提取阈值：${backlog}/${window} 条`
-            }))
-            return
-        }
-
         if (this.runningScopeKeys.has(key)) {
             this.logger.diagnosticSummary(() => ({
                 event: '等待记忆提取',
-                detail: `${formatLogScope(scope)}; 当前任务运行中; 待处理消息：${backlog} 条`
+                detail: `${formatLogScope(scope)}; 当前任务运行中`
             }))
             return
         }
+        state.requested = false
 
         const runLogger = this.logger.with({
             ...scope,
@@ -323,6 +319,7 @@ export class LivingMemoryExtractionCoordinator {
     async stop() {
         this.controller.abort(new Error('记忆提取服务正在停止。'))
         await Promise.allSettled([...this.tasks])
+        this.stateByScope.clear()
     }
 
     clearAll() {
@@ -338,7 +335,7 @@ export class LivingMemoryExtractionCoordinator {
     }
 
     /** 白名单以用户可直接填写的平台 id 为准：群聊比对群号，私聊比对用户 id。 */
-    private resolveWhitelistId(scope: MemoryScope) {
+    private resolveWhitelistId(scope: ChatHistoryScope) {
         return scope.isDirect === true ? scope.userId : scope.guildId
     }
 
@@ -346,7 +343,7 @@ export class LivingMemoryExtractionCoordinator {
      * 白名单门禁：未开启时全部放行；开启时仅放行 id 命中白名单的会话，
      * 未命中记跳过诊断。白名单只约束自动提取，不影响日志采集与召回。
      */
-    private isExtractionWhitelisted(scope: MemoryScope): boolean {
+    private isExtractionWhitelisted(scope: ChatHistoryScope): boolean {
         if (!this.config.enableExtractionWhitelist) {
             return true
         }
@@ -367,13 +364,14 @@ export class LivingMemoryExtractionCoordinator {
     private async drain(
         key: string,
         state: ExtractionScopeState,
-        scope: MemoryScope,
+        scope: ChatHistoryScope,
         options: QueueExtractionOptions,
         runLogger: LivingMemoryLogger
     ) {
         this.runningScopeKeys.add(key)
 
         try {
+            let firstChunk = true
             while (true) {
                 // 卸载取消：立即结束排干，不再进入下一块。
                 this.controller.signal.throwIfAborted()
@@ -391,8 +389,10 @@ export class LivingMemoryExtractionCoordinator {
                     state,
                     scope,
                     options,
-                    runLogger
+                    runLogger,
+                    firstChunk
                 )
+                firstChunk = false
                 if (!drainedMore) {
                     return
                 }
@@ -402,8 +402,8 @@ export class LivingMemoryExtractionCoordinator {
             const pending = this.stateByScope.get(key)
             if (
                 pending &&
-                pending !== state &&
-                !pending.resolveInitialCursor &&
+                (pending !== state || (pending.requested && pending.failStreak === 0)) &&
+                pending.initialPosition === undefined &&
                 !this.controller.signal.aborted
             ) {
                 this.schedule(key, pending)
@@ -414,57 +414,53 @@ export class LivingMemoryExtractionCoordinator {
     /**
      * 排干下一块：无待处理块返回 false（本次排干结束）；成功提取、或连续
      * 失败达上限放弃并推进游标，返回 true（继续排后续块）；连续失败未达
-     * 上限返回 false（中断本次，连同新消息下次重试）。
+     * 上限返回 false（中断本次，等待下一触发重试固定批次）。
      */
     private async drainNextChunk(
         state: ExtractionScopeState,
-        scope: MemoryScope,
+        scope: ChatHistoryScope,
         options: QueueExtractionOptions,
-        runLogger: LivingMemoryLogger
+        runLogger: LivingMemoryLogger,
+        firstChunk: boolean
     ): Promise<boolean> {
-        const entries = this.messageLog.afterSeq(
-            scope.conversationId,
-            state.cursorSeq
-        )
-        if (
-            options.includeOverheard &&
-            entries.length < this.config.extractionWindowMessages
-        ) {
-            return false
+        if (state.chunk === undefined) {
+            const entries = await this.messageLog.after(scope, state.cursorPosition, state.eligiblePosition + 1)
+            this.controller.signal.throwIfAborted()
+            if (this.stateByScope.get(scopeKey(scope)) !== state) return false
+            if ((firstChunk || options.includeOverheard) && entries.length < this.config.extractionWindowMessages) {
+                runLogger.diagnosticSummary(() => ({
+                    event: '等待记忆提取',
+                    detail: `${formatLogScope(scope)}; 消息提取阈值：${entries.length}/${this.config.extractionWindowMessages} 条`
+                }))
+                return false
+            }
+            const [chunk] = planExtractionChunks(entries, this.config.extractionWindowMessages, options.includeOverheard)
+            if (chunk === undefined) return false
+            state.chunk = { entries: chunk, scope, options }
         }
-        const chunks = planExtractionChunks(
-            entries,
-            this.config.extractionWindowMessages,
-            options.includeOverheard
-        )
-        const chunk = chunks[0]
-        if (chunk == null) {
-            return false
-        }
-
-        const messages = await toLogTranscriptMessages(
-            scope,
-            scope.platform ?? 'unknown',
-            chunk
-        )
+        const batch = state.chunk
+        const chunk = batch.entries
+        const messages = toHistoryTranscriptMessages(batch.scope, chunk)
         try {
             if (messages.length > 0) {
-                await this.run(scope, messages, options, runLogger)
+                const consumed = await this.run(batch.scope, messages, batch.options, runLogger)
+                if (!consumed) return false
             } else {
                 runLogger.diagnosticSummary(() => ({
                     event: '跳过记忆提取',
                     detail: `${formatLogScope(scope)}; 原因：本批消息转写为空`
                 }))
             }
-            state.cursorSeq = chunk[chunk.length - 1].seq
+            state.cursorPosition = chunk[chunk.length - 1].position
             state.failStreak = 0
+            delete state.chunk
             return true
         } catch (error) {
             // 取消不是提取失败：不计失败次数、不写失败任务、不推进游标。
             this.controller.signal.throwIfAborted()
             return this.handleChunkFailure(
                 state,
-                scope,
+                batch.scope,
                 chunk,
                 messages,
                 error,
@@ -474,14 +470,14 @@ export class LivingMemoryExtractionCoordinator {
     }
 
     /**
-     * 单块失败处理：连续失败未达上限时中断本次排干（返回 false），连同新
-     * 消息下次重试；达到上限时记 failed job、推进游标放弃该块（返回 true）
+     * 单块失败处理：连续失败未达上限时中断本次排干（返回 false），下一次
+     * 触发重试同一批；达到上限时记 failed job、推进游标放弃该块（返回 true）
      * 以续排后续块，防止游标永久卡死。
      */
     private async handleChunkFailure(
         state: ExtractionScopeState,
-        scope: MemoryScope,
-        chunk: readonly ConversationLogMessage[],
+        scope: ChatHistoryScope,
+        chunk: readonly ChatHistoryEntry[],
         messages: LivingMemoryTranscriptMessage[],
         error: unknown,
         runLogger: LivingMemoryLogger
@@ -491,7 +487,7 @@ export class LivingMemoryExtractionCoordinator {
             runLogger.summary(
                 '记忆提取延期重试',
                 (fields) =>
-                    `${formatLogScope(fields)}; 连续失败：${state.failStreak} 次; 消息游标：${state.cursorSeq}`,
+                    `${formatLogScope(fields)}; 连续失败：${state.failStreak} 次; 消息游标：${state.cursorPosition}`,
                 'warn',
                 error
             )
@@ -501,7 +497,7 @@ export class LivingMemoryExtractionCoordinator {
         runLogger.summary(
             '记忆提取批次已跳过',
             (fields) =>
-                `${formatLogScope(fields)}; 连续失败：${state.failStreak} 次; 消息范围：${state.cursorSeq + 1}—${chunk[chunk.length - 1].seq}`,
+                `${formatLogScope(fields)}; 连续失败：${state.failStreak} 次; 消息范围：${state.cursorPosition + 1}—${chunk[chunk.length - 1].position}`,
             'warn',
             error
         )
@@ -511,13 +507,14 @@ export class LivingMemoryExtractionCoordinator {
             error,
             new Date()
         )
-        state.cursorSeq = chunk[chunk.length - 1].seq
+        state.cursorPosition = chunk[chunk.length - 1].position
         state.failStreak = 0
+        delete state.chunk
         return true
     }
 
     private async run(
-        scope: MemoryScope,
+        scope: ChatHistoryScope,
         messages: LivingMemoryTranscriptMessage[],
         options: QueueExtractionOptions,
         logger: LivingMemoryLogger
@@ -554,7 +551,7 @@ export class LivingMemoryExtractionCoordinator {
                 event: '跳过记忆提取',
                 detail: `${formatLogScope(scope)}; 原因：${result.skippedReason === 'model-not-configured' ? '提取模型未配置' : '提取模型暂不可用'}`
             }))
-            return
+            return false
         }
 
         // 结果工具在一次纠正重试后仍无法通过校验：持久化失败记录，
@@ -572,7 +569,7 @@ export class LivingMemoryExtractionCoordinator {
                 `extraction parse failed: ${parseError}`,
                 startedAt
             )
-            return
+            return true
         }
 
         const extracted = result.extracted
@@ -609,10 +606,11 @@ export class LivingMemoryExtractionCoordinator {
             event: '记忆提取完成',
             detail: `${formatLogScope(scope)}; 提取记忆：${extracted.length} 条`
         }))
+        return true
     }
 
     private async recordFailedExtraction(
-        scope: MemoryScope,
+        scope: ChatHistoryScope,
         input: string,
         error: unknown,
         startedAt: Date
