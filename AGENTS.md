@@ -46,7 +46,7 @@ livingmemory/
 │   ├── service.ts              # Cordis 服务：装配仓储、后端、历史读取、索引、工作流与工具
 │   ├── query.ts                # 记忆、快照、任务、画像的列表过滤、分面统计与分页
 │   ├── worker_artifacts.ts     # 解析 Worker 打包产物路径（源码与构建包共用）
-│   ├── contracts/              # 跨模块契约：记忆与任务、工作流、向量索引、管理接口、框架侧待补接口
+│   ├── contracts/              # 跨模块契约：记忆与任务、工作流、向量索引、管理接口；框架类型直接导入公共包
 │   ├── service/
 │   │   ├── backend.ts          # v2 MemoryBackend 实现，映射到 v1 仓储
 │   │   ├── user_profile.ts     # 人物画像生成、审阅与注入渲染

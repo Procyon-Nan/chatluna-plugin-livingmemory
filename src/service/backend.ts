@@ -1,6 +1,7 @@
 import type { Disposable } from 'cordis'
 import type {
   MemoryBackend,
+  MemoryBackendScheduling,
   MemoryChange,
   MemoryEntry,
   MemoryExport,
@@ -19,7 +20,6 @@ import type {
   MemoryUpdatePatch,
   MemoryScope as LivingMemoryScope
 } from '../contracts/memory.ts'
-import type { MemoryBackendScheduling } from '../contracts/framework.ts'
 import type { LivingMemoryMutationService } from './app/mutation_service.ts'
 import { formatLogScope, type LivingMemoryLogger } from './logging/logger.ts'
 import { titleOf } from './memory/entry_identity.ts'
