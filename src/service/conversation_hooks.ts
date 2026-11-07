@@ -28,7 +28,7 @@ interface LivingMemoryConversationHooksOptions {
     userProfiles: LivingMemoryUserProfileService
     repository: Pick<SnapshotRepository, 'getLatestSnapshotByScope'>
     logger: LivingMemoryLogger
-    settingsOf: (key: string, location?: Agent['options']['location'], routeId?: string) => RouteSettings
+    settingsOf: (key: string, location?: Agent['options']['location'], routeId?: string, noticeSessionId?: string) => RouteSettings
 }
 
 /** 只保存消费边界；聊天正文始终从框架读取。 */
@@ -161,7 +161,9 @@ export class LivingMemoryConversationHooks {
     private captureWindow(agent: Agent, key: string, trigger: TurnTrigger | undefined, noticePosition?: number): CapturedWindow {
         const contextStart = this.revisions.get(key)?.contextStart ?? -1
         const position = trigger?.kind === 'chat' ? this.options.history.locateUserPosition(key, trigger, contextStart) : noticePosition
-        const settings = this.options.settingsOf(key, agent.options.location, trigger?.kind === 'chat' ? trigger.routeId : undefined)
+        const routeId = trigger?.kind === 'chat' ? trigger.routeId : undefined
+        const noticeSessionId = trigger?.kind === 'notice' ? String(agent.session.id) : undefined
+        const settings = this.options.settingsOf(key, agent.options.location, routeId, noticeSessionId)
         const needsHistory = settings.recallIntervalMessages > 0 || settings.enableUserProfileInjection
         const rows = needsHistory && position !== undefined
             ? this.options.history.recent({ conversationId: key }, settings.recallHistoryMessages, position, contextStart)

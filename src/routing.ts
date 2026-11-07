@@ -3,6 +3,7 @@ import type { AgentOptions } from '@chatluna/agent'
 import { Schema, type InferOutput } from '@chatluna/schema'
 import { routeIdOf } from '@chatluna/satori'
 import type {} from '@chatluna/routing'
+import type {} from '@chatluna/chat'
 import type {} from '@chatluna/chat-observer'
 import type {} from '@chatluna/ui-schema-registry'
 
@@ -45,10 +46,21 @@ export function registerRouteSettings(ctx: Context) {
     })
 }
 
-export function routeSettings(ctx: Context, key?: string, location?: AgentOptions['location'], routeId?: string): RouteSettings {
+/** 首次通知可以先于任何私聊消息；chat.wake 已将目标地址写入会话环境。 */
+function privateWakeAddress(ctx: Context, sessionId?: string) {
+    if (sessionId === undefined) return
+    const target = ctx.chat.environmentOf(sessionId)
+    if (!target?.isDirect || !target.platform || !target.selfId || !target.userId) return
+    const { platform, selfId, guildId, channelId, userId } = target
+    return { platform, selfId, guildId, channelId, userId, isDirect: true }
+}
+
+export function routeSettings(
+    ctx: Context, key?: string, location?: AgentOptions['location'], routeId?: string, noticeSessionId?: string
+): RouteSettings {
     // 聊天 Agent 自带群和频道。旁听没有 Agent；私聊通知的地址还需要区分对端。
     if (key !== undefined && (!location || (location.isDirect && !routeId && !location.route))) {
-        const address = ctx.chat_observer.identityOfConversation(key)
+        const address = ctx.chat_observer.identityOfConversation(key) ?? privateWakeAddress(ctx, noticeSessionId)
         if (address && (!routeId || routeId === routeIdOf(address))) {
             const input = ctx.routing.matchInput({ ...address, userId: undefined }, routeId ?? routeIdOf(address))
             return ctx.routing.resolve(input).get('livingmemory')

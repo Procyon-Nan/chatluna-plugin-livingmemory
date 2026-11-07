@@ -189,7 +189,7 @@ export default class LivingmemoryService extends Service {
             userProfiles: this.userProfiles,
             repository: this.repository,
             logger: this.logger,
-            settingsOf: (key, location, routeId) => routeSettings(ctx, key, location, routeId)
+            settingsOf: (...args) => routeSettings(ctx, ...args)
         })
         this.admin = new LivingMemoryAdminService({
             config,

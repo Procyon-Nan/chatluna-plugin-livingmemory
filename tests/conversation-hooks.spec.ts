@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict'
-import type { Context } from 'cordis'
+import { Context } from 'cordis'
+import Routing from '@chatluna/routing'
+import SchemaRegistry from '@chatluna/ui-schema-registry'
+import { routeIdOf } from '@chatluna/satori'
+import { registerRouteSettings, routeSettings } from '../src/routing.ts'
 import type { RouteSettings } from '../src/routing.ts'
 import type { Agent, TurnMiddleware } from '@chatluna/agent'
 import { ChatMessage, contentText } from '@chatluna/message'
@@ -24,6 +28,7 @@ function createHarness(config: {
     extractionWindow?: number
     recallInterval?: number
     rules?: Partial<RouteSettings>
+    settingsOf?: ConstructorParameters<typeof LivingMemoryConversationHooks>[1]['settingsOf']
     onRecallModel?: (input: string) => void
 } = {}) {
     const framework = new FrameworkHistoryFixture()
@@ -93,14 +98,14 @@ function createHarness(config: {
             items: [{ finalText: snapshotText, matchedMemories: [], toolCallSummary: { searchTexts: [], searchKeywords: [], maxCandidates: 0 } }]
         } as never },
         logger: captured.logger,
-        settingsOf: () => ({
+        settingsOf: config.settingsOf ?? (() => ({
             enableAutoDream: true, enableConversationIsolation: false, snapshotMaxLines: 5,
             enableSnapshotInjection: true, enableUserProfileInjection: false,
             recallIntervalMessages: config.recallInterval ?? 1, recallHistoryMessages: 20,
             extractionWindowMessages: config.extractionWindow ?? 2,
             extractionIncludeOverheard: config.overheard ?? false,
             ...config.rules
-        })
+        }))
     })
     const dispose = hooks.register()
     const agent = (turn = 1, engine?: string) => ({
@@ -439,6 +444,33 @@ it('schedules a bare agent’s first wake on enqueue and reuses it at turn start
 
 const proactive = (reason: string) => ChatMessage.notice('timer', '[wake] ' + reason, {
     meta: { wake: { by: 'timer', reason } }
+})
+
+it('uses the target DM rule on the first scheduled wake before any chat is observed', async (t) => {
+    const ctx = new Context()
+    t.after(() => ctx.fiber.dispose())
+    await ctx.plugin(SchemaRegistry)
+    await ctx.plugin(Routing)
+    registerRouteSettings(ctx)
+    const dm = { platform: 'test', selfId: 'bot', guildId: 'g', channelId: 'private', isDirect: true, userId: 'bob' }
+    ctx.provide('chat')
+    ctx.set('chat', { environmentOf: (id: string) => id === 'session-1' ? dm : undefined } as never)
+    ctx.provide('chat_observer')
+    ctx.set('chat_observer', { identityOfConversation: () => undefined } as never)
+    await ctx.routing.save({ id: 'dm', filter: { kind: 'scope', field: 'route', values: [routeIdOf(dm)] },
+        values: { livingmemory: { enableConversationIsolation: true } } })
+    await ctx.routing.save({ id: 'bob', filter: { kind: 'scope', field: 'user', values: ['bob'] },
+        values: { livingmemory: { enableUserProfileInjection: true } } })
+
+    const h = createHarness({ settingsOf: (...args) => routeSettings(ctx, ...args) })
+    const agent = h.agent(1, 'test-engine')
+    agent.options.location = { platform: 'test', selfId: 'bot', channel: 'private', isDirect: true }
+    const timer = proactive('scheduled')
+    await h.input(agent, timer, 'queued')
+    await h.engineTurn(agent, 1, [timer])
+    const settings = h.hooks.settingsForTurn(agent)
+    assert.equal(settings?.enableConversationIsolation, true)
+    assert.equal(settings.enableUserProfileInjection, false)
 })
 
 it('captures each proactive wake at enqueue and shares the first window with profiles', async () => {
