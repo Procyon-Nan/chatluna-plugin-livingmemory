@@ -23,7 +23,7 @@ function createHarness(config: {
     overheard?: boolean
     extractionWindow?: number
     recallInterval?: number
-    rules?: (userId?: string | null) => Partial<RouteSettings>
+    rules?: Partial<RouteSettings>
     onRecallModel?: (input: string) => void
 } = {}) {
     const framework = new FrameworkHistoryFixture()
@@ -93,13 +93,13 @@ function createHarness(config: {
             items: [{ finalText: snapshotText, matchedMemories: [], toolCallSummary: { searchTexts: [], searchKeywords: [], maxCandidates: 0 } }]
         } as never },
         logger: captured.logger,
-        settingsOf: (_key, userId) => ({
+        settingsOf: () => ({
             enableAutoDream: true, enableConversationIsolation: false, snapshotMaxLines: 5,
             enableSnapshotInjection: true, enableUserProfileInjection: false,
             recallIntervalMessages: config.recallInterval ?? 1, recallHistoryMessages: 20,
             extractionWindowMessages: config.extractionWindow ?? 2,
             extractionIncludeOverheard: config.overheard ?? false,
-            ...config.rules?.(userId)
+            ...config.rules
         })
     })
     const dispose = hooks.register()
@@ -181,7 +181,7 @@ describe('LivingMemoryConversationHooks', () => {
     })
 
     it('uses the first wake after quiet chat even when a later input mentions the bot', async () => {
-        const h = createHarness({ rules: userId => ({ enableConversationIsolation: userId === 'u2' }) })
+        const h = createHarness({ rules: { enableConversationIsolation: true } })
         for (const id of [1, 2, 3]) await h.observed(id, 'chat', { userId: 'u' + id })
         const ordinary = ChatMessage.user('ordinary wake', { meta: { externalId: 'm-2', wake: { by: 'activity', reason: 'activity' } } })
         const mention = ChatMessage.user('later @', { meta: { externalId: 'm-3', wake: { by: 'chat', reason: 'at-me', direct: true } } })
@@ -191,7 +191,7 @@ describe('LivingMemoryConversationHooks', () => {
         assert.equal(h.hooks.settingsForTurn(agent)?.enableConversationIsolation, true)
     })
 
-    it('finds original user ids inside folded message envelopes and excludes notices', async () => {
+    it('locates the original chat in a folded envelope and excludes notices', async () => {
         const harness = createHarness()
         await harness.observed(10, '问')
         const folded = ChatMessage.user([{
@@ -379,10 +379,9 @@ const foldedChat = (id: number, sender: string, wake?: { by: string; reason: str
 const direct = { by: 'chat', reason: 'at-me', direct: true } as const
 
 it('freezes Alice’s triggering window on enqueue across folded inputs, buffer rollover and model steps', async () => {
-    const h = createHarness({ rules: id => ({
-        enableUserProfileInjection: id === 'alice', enableConversationIsolation: id === 'alice',
-        recallIntervalMessages: id === 'alice' ? 1 : 0, recallHistoryMessages: 2
-    }) })
+    const h = createHarness({ rules: {
+        enableUserProfileInjection: true, enableConversationIsolation: true, recallHistoryMessages: 2
+    } })
     await h.observed(0, 'earlier', { userId: 'dave' })
     await h.observed(1, 'question', { userId: 'alice' })
     const a = h.agent(1, 'test-engine')
@@ -443,10 +442,7 @@ const proactive = (reason: string) => ChatMessage.notice('timer', '[wake] ' + re
 })
 
 it('captures each proactive wake at enqueue and shares the first window with profiles', async () => {
-    const h = createHarness({ rules: id => ({
-        // 只有频道规则启用召回和画像，匹配任一用户都会关闭。
-        recallIntervalMessages: id === null ? 1 : 0, enableUserProfileInjection: id === null
-    }) })
+    const h = createHarness({ rules: { enableUserProfileInjection: true } })
     const agent = h.agent(1, 'test-engine')
     await h.observed(1, 'quiet chat', { userId: 'alice' })
     const quiet = foldedChat(1, 'alice')
@@ -560,7 +556,7 @@ it('defers a wake without a preset and uses its original chat when the preset is
 })
 
 it('keeps a queued recall in its original preset after a switch before engine-turn', async () => {
-    const h = createHarness({ rules: () => ({ enableUserProfileInjection: true }) })
+    const h = createHarness({ rules: { enableUserProfileInjection: true } })
     const agent = h.agent(1, 'test-engine')
     await h.observed(1, 'question in A', { userId: 'alice' })
     const input = foldedChat(1, 'alice', direct)
@@ -575,10 +571,8 @@ it('keeps a queued recall in its original preset after a switch before engine-tu
     assert.deepEqual(h.profiles.flat(), [])
 })
 
-it('retains an evicted trigger’s sender for routing without using a later sender’s chat', async () => {
-    const h = createHarness({ rules: id => ({
-        enableUserProfileInjection: id === 'alice', recallHistoryMessages: 1
-    }) })
+it('keeps the group settings and leaves the window empty when the trigger was evicted', async () => {
+    const h = createHarness({ rules: { enableUserProfileInjection: true, recallHistoryMessages: 1 } })
     await h.observed(1, 'alice', { userId: 'alice' })
     await h.observed(2, 'bob', { userId: 'bob' })
     h.framework.messages.shift()
@@ -592,9 +586,7 @@ it('retains an evicted trigger’s sender for routing without using a later send
 })
 
 it('still injects profiles from the triggering window when recall is disabled', async () => {
-    const h = createHarness({ rules: () => ({
-        enableUserProfileInjection: true, recallIntervalMessages: 0, recallHistoryMessages: 1
-    }) })
+    const h = createHarness({ rules: { enableUserProfileInjection: true, recallIntervalMessages: 0, recallHistoryMessages: 1 } })
     await h.observed(1, 'question', { userId: 'alice' })
     await h.observed(2, 'later', { userId: 'bob' })
     const a = h.agent(1, 'test-engine')

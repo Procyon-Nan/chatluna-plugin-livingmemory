@@ -153,7 +153,6 @@ export default class LivingmemoryService extends Service {
             this.repository,
             this.logger
         )
-        const settingsOf = (conversationId: string, userId?: string | null) => routeSettings(ctx, conversationId, userId)
         this.recallCoordinator = new LivingMemoryRecallCoordinator(
             config.subModel,
             this.history,
@@ -190,7 +189,7 @@ export default class LivingmemoryService extends Service {
             userProfiles: this.userProfiles,
             repository: this.repository,
             logger: this.logger,
-            settingsOf
+            settingsOf: (key, location, routeId) => routeSettings(ctx, key, location, routeId)
         })
         this.admin = new LivingMemoryAdminService({
             config,
@@ -257,7 +256,7 @@ export default class LivingmemoryService extends Service {
             isConversationIsolated: (agent) => {
                 const current = agent && this.conversationHooks.settingsForTurn(agent)
                 if (current) return current.enableConversationIsolation
-                return routeSettings(this.ctx, agent?.options.conversationKey, agent?.options.location?.user).enableConversationIsolation
+                return routeSettings(this.ctx, agent?.options.conversationKey, agent?.options.location).enableConversationIsolation
             }
         })
         return () => {

@@ -12,7 +12,7 @@ v1 的自动提取、Dream、画像和导入在 LivingMemory 内已有完整所�
 
 LivingMemory 独立启动、停止、存储和调度。任务页订阅自己的仓储，直接展示 Dream 的部分完成状态。原生插件可以同时启用；两个插件分别处理各自的记忆。此决定取代[迁移方案](../../../../doc/migration-plan.md)的 D01，调整[v1 业务保留提案](../../proposed/architecture/2026-11-04-v1-behavior-preservation.md)和[提取窗口提案](../../proposed/architecture/2026-11-03-extraction-window-and-chunking.md)中的后端入口，保留其业务规则。
 
-对话行为注册在框架的 `livingmemory` 规则区块。触发人、平台、群和频道决定当轮召回、隔离、注入以及提取的窗口、旁听和后续 Dream。模型、工具注册、画像生成和提取白名单属于实例。规则决定触发和处理方式；群聊正文仍由[官方 observer](2026-11-07-official-observer-window.md)按频道提供。框架规则中的“消息包含文本”等瞬时条件不参与这条基于身份的匹配。
+对话行为注册在框架的 `livingmemory` 规则区块。群聊按平台、机器人及群或频道匹配规则，私聊按对话地址匹配。同一地址共用召回、隔离、注入、提取窗口、旁听和后续 Dream 的设置。模型、工具注册、画像生成和提取白名单属于实例。规则决定触发和处理方式；群聊正文仍由[官方 observer](2026-11-07-official-observer-window.md)按频道提供。发言人、@ 和消息文本不参与对话地址匹配。
 
 ## 考虑过的方案
 

@@ -121,15 +121,14 @@ export class LivingMemoryChatHistory {
         return entries.reverse()
     }
 
-    locateUserMessage(key: string, message: { id: string; externalId?: string; userId?: string }, after = -1) {
+    locateUserPosition(key: string, message: { id: string; externalId?: string }, after = -1): number | undefined {
         this.lastPosition(key)
         for (const row of this.newest(key)) {
             if (row.id !== message.id && (message.externalId === undefined || row.platformMessageId !== message.externalId)) continue
             const position = this.positions.get(row)!
-            if (position <= after || row.self || row.backfilled) return {}
-            return { position, userId: message.userId ?? row.userId }
+            if (position > after && !row.self && !row.backfilled) return position
+            return
         }
-        return { userId: message.userId }
     }
 
     private entry(scope: Pick<ChatHistoryScope, 'platform'>, row: ObservedMessage): ChatHistoryEntry | undefined {

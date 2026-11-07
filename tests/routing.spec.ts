@@ -14,9 +14,9 @@ test('LivingMemory rules load independently, inherit global settings and apply e
     await ctx.plugin(SchemaRegistry)
     await ctx.plugin(Routing)
     ctx.provide('chat_observer')
-    ctx.set('chat_observer', {
-        identityOfConversation: () => ({ platform: 'test', selfId: 'bot', guildId: 'g', channelId: 'c', userId: 'bob', isDirect: false })
-    } as never)
+    // 群地址已由 Agent 提供；即使 observer 没有任何消息也应匹配群规则。
+    ctx.set('chat_observer', { identityOfConversation: () => undefined } as never)
+    const room = { platform: 'test', selfId: 'bot', guild: 'g', channel: 'c', isDirect: false }
     registerRouteSettings(ctx)
     assert.ok(!inject.some(key => String(key) === 'memory'))
     const section = (await ctx.schemas.sections('routing')).find(section => section.id === 'livingmemory')
@@ -26,20 +26,33 @@ test('LivingMemory rules load independently, inherit global settings and apply e
     assert.equal(routeSettings(ctx).extractionWindowMessages, 15)
     await ctx.routing.save({
         id: 'alice', filter: { kind: 'scope', field: 'user', values: ['alice'] },
+        values: { livingmemory: { extractionWindowMessages: 99 } }
+    })
+    await ctx.routing.save({
+        id: 'group', filter: { kind: 'scope', field: 'guild', values: ['g'] },
         values: { livingmemory: { enableUserProfileInjection: true } }
     })
-    assert.equal(routeSettings(ctx, 'c', 'alice').enableUserProfileInjection, true)
-    assert.equal(routeSettings(ctx, 'c', 'alice').extractionWindowMessages, 15)
-    assert.equal(routeSettings(ctx, 'c').enableUserProfileInjection, false)
+    for (const user of ['alice', 'bob']) {
+        const settings = routeSettings(ctx, 'c', { ...room, user })
+        assert.equal(settings.enableUserProfileInjection, true)
+        assert.equal(settings.extractionWindowMessages, 15)
+    }
+    assert.equal(routeSettings(ctx, 'another', { ...room, guild: 'g2' }).enableUserProfileInjection, false)
+    const route = routeIdOf({ platform: room.platform, selfId: room.selfId, guildId: room.guild,
+        channelId: room.channel, isDirect: false, userId: 'bob' })
+    await ctx.routing.save({ id: 'channel-route', filter: { kind: 'scope', field: 'route', values: [route] },
+        values: { livingmemory: { enableConversationIsolation: true } } })
+    assert.equal(routeSettings(ctx, 'c', room, route).enableConversationIsolation, true)
+    assert.equal(routeSettings(ctx, 'c', room).enableConversationIsolation, true)
     // A second capability owns its own namespace, even with both enabled on the same rule.
     const unregister = ctx.schemas.section({
         surface: 'routing', id: 'memory', key: 'memory', title: 'Memory', order: 30,
         tab: 'rules.capabilities', schema: Schema.object({ enabled: Schema.boolean().default(false) })
     })
     await ctx.routing.save({ id: 'global', values: { memory: { enabled: true }, livingmemory: { extractionWindowMessages: 0 } } })
-    assert.equal(routeSettings(ctx, 'c', 'alice').extractionWindowMessages, 0)
+    assert.equal(routeSettings(ctx, 'c', room).extractionWindowMessages, 0)
     unregister()
-    assert.equal(routeSettings(ctx, 'c', 'alice').enableUserProfileInjection, true)
+    assert.equal(routeSettings(ctx, 'c', room).enableUserProfileInjection, true)
 })
 
 test('a scheduled wake in a DM keeps its route rule without matching the last speaker’s user rule', async (t) => {
@@ -55,8 +68,9 @@ test('a scheduled wake in a DM keeps its route rule without matching the last sp
         values: { livingmemory: { enableConversationIsolation: true } } })
     await ctx.routing.save({ id: 'bob', filter: { kind: 'scope', field: 'user', values: ['bob'] },
         values: { livingmemory: { enableUserProfileInjection: true } } })
-    const settings = routeSettings(ctx, 'conversation', null)
+    const settings = routeSettings(ctx, 'conversation', { platform: 'test', selfId: 'bot', isDirect: true })
     assert.equal(settings.enableConversationIsolation, true)
     assert.equal(settings.enableUserProfileInjection, false)
-    assert.equal(routeSettings(ctx, 'conversation', 'bob').enableUserProfileInjection, true)
+    const other = routeIdOf({ ...dm, userId: 'alice' })
+    assert.equal(routeSettings(ctx, 'other', { platform: 'test', selfId: 'bot', isDirect: true }, other).enableConversationIsolation, false)
 })

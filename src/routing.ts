@@ -1,4 +1,5 @@
 import type { Context } from 'cordis'
+import type { AgentOptions } from '@chatluna/agent'
 import { Schema, type InferOutput } from '@chatluna/schema'
 import { routeIdOf } from '@chatluna/satori'
 import type {} from '@chatluna/routing'
@@ -44,14 +45,26 @@ export function registerRouteSettings(ctx: Context) {
     })
 }
 
-export function routeSettings(ctx: Context, conversationId?: string, userId?: string | null): RouteSettings {
-    const identity = conversationId === undefined ? undefined : ctx.chat_observer.identityOfConversation(conversationId)
-    if (identity !== undefined) {
-        const speaker = typeof userId === 'string' ? { ...identity, userId } : identity
-        // 无发言人的唤醒仍属于当前路由（私聊路由 ID 含对端用户），只去掉用户规则的匹配条件。
-        const subject = userId === null ? { ...identity, userId: undefined } : speaker
-        const input = ctx.routing.matchInput(subject, routeIdOf(speaker))
-        return ctx.routing.resolve(input).get('livingmemory')
+export function routeSettings(ctx: Context, key?: string, location?: AgentOptions['location'], routeId?: string): RouteSettings {
+    // 聊天 Agent 自带群和频道。旁听没有 Agent；私聊通知的地址还需要区分对端。
+    if (key !== undefined && (!location || (location.isDirect && !routeId && !location.route))) {
+        const address = ctx.chat_observer.identityOfConversation(key)
+        if (address && (!routeId || routeId === routeIdOf(address))) {
+            const input = ctx.routing.matchInput({ ...address, userId: undefined }, routeId ?? routeIdOf(address))
+            return ctx.routing.resolve(input).get('livingmemory')
+        }
     }
-    return ROUTE_SCHEMA.parse(ctx.routing.valuesAt(undefined, 'livingmemory') ?? {})
+    let route = routeId ?? location?.route
+    if (!route && location?.isDirect === false && location.platform && location.selfId) {
+        // 群路由由平台、机器人和群/频道生成，与发言人无关。
+        route = routeIdOf({
+            platform: location.platform, selfId: location.selfId, guildId: location.guild,
+            channelId: location.channel, isDirect: false, userId: ''
+        })
+    }
+    const values = ctx.routing.valuesAt({
+        platform: location?.platform, selfId: location?.selfId, isDirect: location?.isDirect,
+        guild: location?.guild, channel: location?.channel, route
+    }, 'livingmemory')
+    return ROUTE_SCHEMA.parse(values ?? {})
 }

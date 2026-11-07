@@ -28,7 +28,7 @@ interface LivingMemoryConversationHooksOptions {
     userProfiles: LivingMemoryUserProfileService
     repository: Pick<SnapshotRepository, 'getLatestSnapshotByScope'>
     logger: LivingMemoryLogger
-    settingsOf: (key: string, userId?: string | null) => RouteSettings
+    settingsOf: (key: string, location?: Agent['options']['location'], routeId?: string) => RouteSettings
 }
 
 /** 只保存消费边界；聊天正文始终从框架读取。 */
@@ -160,9 +160,8 @@ export class LivingMemoryConversationHooks {
 
     private captureWindow(agent: Agent, key: string, trigger: TurnTrigger | undefined, noticePosition?: number): CapturedWindow {
         const contextStart = this.revisions.get(key)?.contextStart ?? -1
-        const chat = trigger?.kind === 'chat' ? this.options.history.locateUserMessage(key, trigger, contextStart) : undefined
-        const position = chat?.position ?? noticePosition
-        const settings = this.options.settingsOf(key, trigger?.kind === 'notice' ? null : chat?.userId)
+        const position = trigger?.kind === 'chat' ? this.options.history.locateUserPosition(key, trigger, contextStart) : noticePosition
+        const settings = this.options.settingsOf(key, agent.options.location, trigger?.kind === 'chat' ? trigger.routeId : undefined)
         const needsHistory = settings.recallIntervalMessages > 0 || settings.enableUserProfileInjection
         const rows = needsHistory && position !== undefined
             ? this.options.history.recent({ conversationId: key }, settings.recallHistoryMessages, position, contextStart)
@@ -287,7 +286,7 @@ export class LivingMemoryConversationHooks {
 
     private async onObservedChat(event: ObservedEvent) {
         const key = event.conversationKey
-        const settings = this.options.settingsOf(key, event.message.userId)
+        const settings = this.options.settingsOf(key, undefined, event.message.routeId)
         const position = this.options.history.locate(key, event.message)
         if (position === undefined) return
         const revision = this.revisions.get(key)
@@ -373,7 +372,7 @@ export class LivingMemoryConversationHooks {
 type Wake = NonNullable<ChatMessageMeta['wake']>
 type TurnTrigger =
     | { kind: 'notice'; wake: Wake }
-    | { kind: 'chat'; id: string; externalId?: string; userId?: string; wake?: Wake }
+    | { kind: 'chat'; id: string; externalId?: string; routeId?: string; wake?: Wake }
 
 function findTurnTrigger(messages: readonly ChatMessage[]): TurnTrigger | undefined {
     let firstChat: TurnTrigger | undefined
@@ -386,7 +385,7 @@ function findTurnTrigger(messages: readonly ChatMessage[]): TurnTrigger | undefi
     return firstChat
 }
 
-/** 合批时，发送者和唤醒标记取自每条原始消息。 */
+/** 合批后仍按原消息的 ID 和唤醒标记确定历史截止位置。 */
 function* turnInputs(message: ChatMessage): Iterable<TurnTrigger> {
     const { form, meta, source } = message
     if (form === 'notice') {
@@ -398,7 +397,7 @@ function* turnInputs(message: ChatMessage): Iterable<TurnTrigger> {
     const envelopes = message.content.filter(block => block.type === 'envelope')
     if (!envelopes.length) {
         if (source.routeId !== undefined || meta?.externalId !== undefined) {
-            yield { kind: 'chat', id: String(message.id), externalId: meta?.externalId, userId: meta?.sender?.id, wake: meta?.wake }
+            yield { kind: 'chat', id: String(message.id), externalId: meta?.externalId, routeId: source.routeId, wake: meta?.wake }
         }
         return
     }
@@ -407,7 +406,7 @@ function* turnInputs(message: ChatMessage): Iterable<TurnTrigger> {
         if (kind === 'notice') {
             if (wake) yield { kind, wake }
         } else if (!sender?.self) {
-            yield { kind: 'chat', id, externalId, userId: sender?.id, wake }
+            yield { kind: 'chat', id, externalId, routeId: source.routeId, wake }
         }
     }
 }
