@@ -116,14 +116,6 @@ livingmemory/
 | [doc/framework-requirements.md](doc/framework-requirements.md) | 由 ChatLuna v2 承担的接口项：统一采集、交付归属、会话与预设通知、调度归属、任务受理与取消、原生任务页面接入，含当前源码事实与验收条件 |
 | [doc/v1-behavior-inventory.md](doc/v1-behavior-inventory.md) | D11 的 v1 全量业务行为清单、源码/测试核对入口、v2 适配归属和执行标记 |
 | [.agent/note/README.zh.md](.agent/note/README.zh.md) | Agent Note 工作流、目录约定、状态转换和归档规则 |
-| [.agent/note/proposed/architecture/2026-11-03-extraction-window-and-chunking.md](.agent/note/proposed/architecture/2026-11-03-extraction-window-and-chunking.md) | 沿用 v1 自动提取窗口、完整交流、旁听分块和批次进度语义的提案 |
-| [.agent/note/proposed/architecture/2026-11-04-v1-behavior-preservation.md](.agent/note/proposed/architecture/2026-11-04-v1-behavior-preservation.md) | v1 全部业务行为作为迁移基线，以及 v2 适配层的职责边界 |
-| [.agent/note/proposed/architecture/2026-11-04-extraction-inflight-lifecycle.md](.agent/note/proposed/architecture/2026-11-04-extraction-inflight-lifecycle.md) | v1 在途自动提取的状态失效、原作用域提交和 v2 卸载生命周期契约提案 |
-| [.agent/note/proposed/architecture/2026-11-04-vector-index-retention.md](.agent/note/proposed/architecture/2026-11-04-vector-index-retention.md) | 保留 v1 向量索引能力，只把 embedding 调用层替换为 v2 `ctx.ai.embed` 的提案 |
-| [.agent/note/implemented/architecture/2026-11-04-test-migration-strategy.md](.agent/note/implemented/architecture/2026-11-04-test-migration-strategy.md) | v1 测试按模块随源码迁移的三档处置、48 个文件的最终落点与并入关系 |
-| [.agent/note/proposed/architecture/2026-11-05-session-hooks-and-collector.md](.agent/note/proposed/architecture/2026-11-05-session-hooks-and-collector.md) | v1 两个中间件在 v2 的等价钩子、采集层改用 `chat_observer` 拉取、召回窗口与会话历史的补足规则 |
-| [.agent/note/implemented/architecture/2026-11-05-internal-tool-loop.md](.agent/note/implemented/architecture/2026-11-05-internal-tool-loop.md) | 召回与 Dream 自行驱动模型调用的工具循环，以及不接入 v2 Agent 层的依据 |
-| [.agent/note/implemented/architecture/2026-11-05-reject-stringified-structured-output.md](.agent/note/implemented/architecture/2026-11-05-reject-stringified-structured-output.md) | 拒绝字符串化的结构化输出、改为回给模型重写，以及该处与 v1 的有意差异 |
 
-迁移讨论持续更新方案文档，分别标记已确认事项、设计草案与待讨论问题。后续按实际讨论内容拆分专题文档，并同步本索引。
+迁移讨论持续更新方案文档，分别标记已确认事项、设计草案与待讨论问题。新增 `doc/` 专题文档时同步本索引。Agent Note 只保留工作流入口，具体记录通过生命周期、类别目录及文内交叉链接查找，不逐篇追加到本索引。
 

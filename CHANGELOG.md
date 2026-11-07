@@ -3,7 +3,7 @@
 ## 2026-11-06 version:0.0.0
 
 - pending: 插件自行提供 TypeScript 配置、构建和清理脚本，移除对上层目录及 Yakumo 配置的依赖；补齐直接使用的构建与类型依赖，通过一条 yarn build 生成类型声明、服务端、WebUI 和 Worker。
-- pending: README 仅列出插件自身的构建入口，移除迁移过程说明。
+- pending: README 仅列出插件自身的构建入口，移除迁移过程说明；AGENTS 文档索引仅保留 Agent Note 工作流入口。
 - pending: 修正旧 SQLite 数据迁移测试的文件路径传参，使用 `pathToFileURL` 将绝对路径转为文件 URL，避免 Windows 盘符被驱动解析为 URL 协议而导致启动失败；验证待执行。
 
 ## 2026-11-04 version:0.0.0
