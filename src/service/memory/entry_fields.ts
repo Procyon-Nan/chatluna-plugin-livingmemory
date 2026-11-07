@@ -1,3 +1,5 @@
+import type { AttributedMemoryItem, ExtractedMemoryItem } from '../../contracts/workflows.ts'
+
 export const MAX_MEMORY_KEYWORDS = 12
 export const DEFAULT_MEMORY_IMPORTANCE = 0.5
 
@@ -30,3 +32,16 @@ export const normalizeMemoryKeywords = (
 export const normalizeMemoryImportance = (
     value: number | null | undefined
 ): number | null => (value == null ? null : Math.min(1, Math.max(0, value)))
+
+/** 只将工具可编辑的六个字段传给仓储。说话人昵称由调用方按预设解析。 */
+export const toMemoryFields = (memory: ExtractedMemoryItem) => ({
+    type: memory.type,
+    content: memory.content,
+    summary: memory.summary,
+    keywords: memory.keywords,
+    sentiment: memory.sentiment,
+    importance: memory.importance
+})
+
+export const toAttributedMemory = (memory: ExtractedMemoryItem, speakerKeys: string[]): AttributedMemoryItem =>
+    ({ ...toMemoryFields(memory), speakerKeys })

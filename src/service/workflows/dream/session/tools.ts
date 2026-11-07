@@ -1,5 +1,5 @@
-import type { MemoryMutationInput } from '../../../../contracts/memory.ts'
-import type { AttributedMemoryItem } from '../../../../contracts/workflows.ts'
+import { toAttributedMemory } from '../../../memory/entry_fields.ts'
+import type { ExtractedMemoryItem } from '../../../../contracts/workflows.ts'
 import type { PresetSpeakerRecord } from '../../../../contracts/memory.ts'
 import type { LivingMemoryMutationService } from '../../../app/mutation_service.ts'
 import { LivingMemoryFactsCommittedError } from '../../../vector_index/errors.ts'
@@ -19,38 +19,6 @@ import {
     recordDreamSpeakers,
     type DreamSessionState
 } from './state.ts'
-
-interface GeneratedMemory {
-    type: MemoryMutationInput['type']
-    content: string
-    summary: string
-    keywords: string[]
-    speakerLabels: string[]
-    sentiment: string
-    importance: number
-}
-
-const toMemoryFields = (memory: GeneratedMemory): MemoryMutationInput => ({
-    type: memory.type,
-    content: memory.content,
-    summary: memory.summary,
-    keywords: memory.keywords,
-    sentiment: memory.sentiment,
-    importance: memory.importance
-})
-
-const toAttributedMemory = (
-    memory: GeneratedMemory,
-    speakerKeys: string[]
-): AttributedMemoryItem => ({
-    type: memory.type,
-    content: memory.content,
-    summary: memory.summary,
-    keywords: memory.keywords,
-    sentiment: memory.sentiment,
-    importance: memory.importance,
-    speakerKeys
-})
 
 interface DreamSessionToolDependencies {
     presetId: string
@@ -80,7 +48,7 @@ export const createDreamSessionTools = ({
     getEntriesByPresetAndIds,
     mutations
 }: DreamSessionToolDependencies): LivingMemoryLoopTool[] => {
-    const speakerKeysOf = (memory: GeneratedMemory) =>
+    const speakerKeysOf = (memory: ExtractedMemoryItem) =>
         resolveSpeakerKeysByLabels(memory.speakerLabels, speakers)
 
     return [
@@ -90,7 +58,7 @@ export const createDreamSessionTools = ({
             args: memorySplitTool.schema,
             async run(input: {
                 sourceMemoryId: string
-                memories: GeneratedMemory[]
+                memories: ExtractedMemoryItem[]
             }) {
                 assertDreamMemoriesAvailable(state, [input.sourceMemoryId])
                 const result = await mutations.splitActiveMemory(
@@ -119,7 +87,7 @@ export const createDreamSessionTools = ({
             args: memoryUpdateTool.schema,
             async run(input: {
                 memoryId: string
-                memory: GeneratedMemory
+                memory: ExtractedMemoryItem
             }) {
                 assertDreamMemoriesAvailable(state, [input.memoryId])
                 const speakerKeys = speakerKeysOf(input.memory)
@@ -128,7 +96,7 @@ export const createDreamSessionTools = ({
                     const record = await mutations.updateActiveMemory(
                         presetId,
                         input.memoryId,
-                        { ...toMemoryFields(input.memory), speakerKeys }
+                        toAttributedMemory(input.memory, speakerKeys)
                     )
                     if (record === null) {
                         throw new MemoryInputError(
@@ -159,7 +127,7 @@ export const createDreamSessionTools = ({
             args: memoryMergeTool.schema,
             async run(input: {
                 sourceMemoryIds: string[]
-                memory: GeneratedMemory
+                memory: ExtractedMemoryItem
             }) {
                 assertDreamMemoriesAvailable(state, input.sourceMemoryIds)
                 const result = await mutations.mergeActiveMemories(

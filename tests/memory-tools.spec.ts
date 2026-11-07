@@ -268,6 +268,10 @@ it('resolves speaker labels through the preset speakers', async () => {
     const creation: LivingMemoryCreationProvider = {
         listPresetSpeakers: async () => speakers,
         createMemory: async (scope, input, speakerKeys) => {
+            assert.deepEqual(input, {
+                type: 'fact', content: '一起看了展览', summary: '看展览',
+                keywords: ['展览'], sentiment: '愉快', importance: 0.6
+            })
             created.push({ presetId: scope.presetId, speakerKeys, scope: scope.conversationId })
             return record('memory-1', input.type)
         }
@@ -284,6 +288,7 @@ it('resolves speaker labels through the preset speakers', async () => {
                     summary: '看展览',
                     keywords: ['展览'],
                     speakerLabels: ['小A'],
+                    status: 'archived',
                     sentiment: '愉快',
                     importance: 0.6
                 }

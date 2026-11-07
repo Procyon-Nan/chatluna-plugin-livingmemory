@@ -40,7 +40,6 @@ export class LivingMemoryDreamJobRunner {
             )
             const result = await this.dream.run(
                 scope.presetId,
-                jobId,
                 logger,
                 signal,
                 input

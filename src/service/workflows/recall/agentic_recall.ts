@@ -140,8 +140,8 @@ const applySnapshotOperations = (
  * 召回用的三个工具：检索、提交快照、跳过。作用域与旧快照由闭包带入，
  * 与 v1 按实例构造工具的结构一致。
  */
-const createRecallTools = (options: {
-    searchEngine: LivingMemorySearchEngine
+export const createRecallTools = (options: {
+    searchEngine: Pick<LivingMemorySearchEngine, 'searchMemories'>
     config: LivingMemoryAgenticRecallConfig
     scope: MemoryScope
     snapshotLines: readonly string[]

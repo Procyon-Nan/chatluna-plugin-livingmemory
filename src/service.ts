@@ -192,7 +192,7 @@ export default class LivingmemoryService extends Service {
             logger: this.logger,
             settingsOf
         })
-        this.admin = new LivingMemoryAdminService(ctx, {
+        this.admin = new LivingMemoryAdminService({
             config,
             repository: this.repository,
             mutations: this.mutations,
@@ -201,7 +201,6 @@ export default class LivingmemoryService extends Service {
             userProfiles: this.userProfiles,
             dreamCoordinator: this.dreamCoordinator,
             vectorIndex: this.vectorIndex,
-            logger: this.logger,
             listPresetIds: async () =>
                 ctx.presets.list().map((preset) => preset.id),
             cleanupConversation: (conversationId) =>

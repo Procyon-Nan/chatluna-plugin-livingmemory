@@ -149,7 +149,6 @@ const runService = async (
         )
         const result = await service.run(
             scope.presetId,
-            'job-test',
             logger,
             options.signal,
             options.postExtraction
@@ -270,7 +269,7 @@ it('serializes starts, recovers stale jobs and aborts and drains running jobs on
     let recoveries = 0
     const runner = new LivingMemoryDreamJobRunner(
         {
-            run: async (_preset, _id, _logger, signal) => {
+            run: async (_preset, _logger, signal) => {
                 calls++
                 await new Promise<void>((resolve) =>
                     signal!.addEventListener('abort', () => resolve(), {
@@ -313,7 +312,7 @@ it('cancels one running dream job without stopping the coordinator', async () =>
     const store = createJobStore()
     const runner = new LivingMemoryDreamJobRunner(
         {
-            run: async (_preset, _id, _logger, signal) => {
+            run: async (_preset, _logger, signal) => {
                 await new Promise<void>((resolve) =>
                     signal!.addEventListener('abort', () => resolve(), {
                         once: true
@@ -348,7 +347,7 @@ it('records a dream interrupted by coordinator stop as failed, not cancelled', a
     const store = createJobStore()
     const runner = new LivingMemoryDreamJobRunner(
         {
-            run: async (_preset, _id, _logger, signal) => {
+            run: async (_preset, _logger, signal) => {
                 await new Promise<void>((resolve) =>
                     signal!.addEventListener('abort', () => resolve(), {
                         once: true

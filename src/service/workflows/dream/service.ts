@@ -85,7 +85,6 @@ export class LivingMemoryDreamService {
 
     async run(
         presetId: string,
-        sessionId: string,
         logger: LivingMemoryLogger,
         signal?: AbortSignal,
         input: DreamRunInput = { mode: 'full' }

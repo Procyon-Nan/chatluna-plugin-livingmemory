@@ -1,7 +1,7 @@
 import { defineTool, type ToolCallContext, type ToolDefinition } from '@chatluna/tool'
-import type { MemoryMutationInput } from '../../../contracts/memory.ts'
+import { toAttributedMemory, toMemoryFields } from '../entry_fields.ts'
 import type {
-    AttributedMemoryItem,
+    ExtractedMemoryItem,
     LivingMemoryArchiveProvider,
     LivingMemoryCreationProvider,
     LivingMemoryMergeProvider,
@@ -28,48 +28,17 @@ import {
     resolveToolMemoryScope
 } from './tool_runtime.ts'
 
-interface GeneratedMemory {
-    type: MemoryMutationInput['type']
-    content: string
-    summary: string
-    keywords: string[]
-    speakerLabels: string[]
-    sentiment: string
-    importance: number
-}
-
-/** 模型侧记忆字段 → 落库字段。说话人昵称在预设范围内解析为稳定 speakerKey。 */
-const toMemoryFields = (memory: GeneratedMemory): MemoryMutationInput => ({
-    type: memory.type,
-    content: memory.content,
-    summary: memory.summary,
-    keywords: memory.keywords,
-    sentiment: memory.sentiment,
-    importance: memory.importance
-})
-
-/** 合并与拆分写入新记忆，需要把说话人键一并带上。 */
-const toAttributedMemory = (memory: GeneratedMemory, speakerKeys: string[]): AttributedMemoryItem => ({
-    type: memory.type,
-    content: memory.content,
-    summary: memory.summary,
-    keywords: memory.keywords,
-    sentiment: memory.sentiment,
-    importance: memory.importance,
-    speakerKeys
-})
-
 export const createCreateMemoryTool = (
     creation: LivingMemoryCreationProvider,
     maxMemories: number
-): ToolDefinition<{ memories: GeneratedMemory[] }> => {
+): ToolDefinition<{ memories: ExtractedMemoryItem[] }> => {
     const doc = memoryCreateTool(maxMemories)
     return defineTool({
         name: doc.name,
         description: doc.description,
         args: doc.schema,
         traits: { effect: 'write' },
-        async run(input: { memories: GeneratedMemory[] }, call: ToolCallContext) {
+        async run(input: { memories: ExtractedMemoryItem[] }, call: ToolCallContext) {
             const resolution = resolveToolMemoryScope(agentOfTool(call.agent))
             if (resolution.ok === false) {
                 throw new Error(describeLivingMemoryToolScopeFailure(resolution.reason))
@@ -107,13 +76,13 @@ export const createCreateMemoryTool = (
 
 export const createUpdateMemoryTool = (
     updates: LivingMemoryUpdateProvider
-): ToolDefinition<{ memoryId: string; memory: GeneratedMemory }> =>
+): ToolDefinition<{ memoryId: string; memory: ExtractedMemoryItem }> =>
     defineTool({
         name: memoryUpdateTool.name,
         description: memoryUpdateTool.description,
         args: memoryUpdateTool.schema,
         traits: { effect: 'write' },
-        async run(input: { memoryId: string; memory: GeneratedMemory }, call: ToolCallContext) {
+        async run(input: { memoryId: string; memory: ExtractedMemoryItem }, call: ToolCallContext) {
             const resolution = resolveToolMemoryPresetId(agentOfTool(call.agent))
             if (resolution.ok === false) {
                 throw new Error(describeLivingMemoryToolScopeFailure(resolution.reason))
@@ -124,10 +93,9 @@ export const createUpdateMemoryTool = (
             const speakerKeys = resolveSpeakerKeysByLabels(memory.speakerLabels, speakers)
             const warnings: string[] = []
             try {
-                const record = await updates.updateActiveMemory(resolution.presetId, memoryId, {
-                    ...toMemoryFields(memory),
-                    speakerKeys
-                })
+                const record = await updates.updateActiveMemory(
+                    resolution.presetId, memoryId, toAttributedMemory(memory, speakerKeys)
+                )
                 if (record === null) {
                     throw new MemoryInputError(
                         `不存在 ID 为 ${memoryId} 的记忆，请重新查明记忆 ID 后再调用。`
@@ -147,13 +115,13 @@ export const createUpdateMemoryTool = (
 
 export const createMergeMemoriesTool = (
     merges: LivingMemoryMergeProvider
-): ToolDefinition<{ sourceMemoryIds: string[]; memory: GeneratedMemory }> =>
+): ToolDefinition<{ sourceMemoryIds: string[]; memory: ExtractedMemoryItem }> =>
     defineTool({
         name: memoryMergeTool.name,
         description: memoryMergeTool.description,
         args: memoryMergeTool.schema,
         traits: { effect: 'write' },
-        async run(input: { sourceMemoryIds: string[]; memory: GeneratedMemory }, call: ToolCallContext) {
+        async run(input: { sourceMemoryIds: string[]; memory: ExtractedMemoryItem }, call: ToolCallContext) {
             const resolution = resolveToolMemoryPresetId(agentOfTool(call.agent))
             if (resolution.ok === false) {
                 throw new Error(describeLivingMemoryToolScopeFailure(resolution.reason))
@@ -178,13 +146,13 @@ export const createMergeMemoriesTool = (
 
 export const createSplitMemoryTool = (
     splits: LivingMemorySplitProvider
-): ToolDefinition<{ sourceMemoryId: string; memories: GeneratedMemory[] }> =>
+): ToolDefinition<{ sourceMemoryId: string; memories: ExtractedMemoryItem[] }> =>
     defineTool({
         name: memorySplitTool.name,
         description: memorySplitTool.description,
         args: memorySplitTool.schema,
         traits: { effect: 'write' },
-        async run(input: { sourceMemoryId: string; memories: GeneratedMemory[] }, call: ToolCallContext) {
+        async run(input: { sourceMemoryId: string; memories: ExtractedMemoryItem[] }, call: ToolCallContext) {
             const resolution = resolveToolMemoryPresetId(agentOfTool(call.agent))
             if (resolution.ok === false) {
                 throw new Error(describeLivingMemoryToolScopeFailure(resolution.reason))

@@ -1,4 +1,3 @@
-import type { Context } from 'cordis'
 import type {
     LivingMemoryPresetExport,
     LivingMemoryPresetImportResult,
@@ -32,7 +31,6 @@ import type { LivingMemoryPresetPersonaService } from '../memory/preset_persona.
 import type { LivingMemoryUserProfileService } from '../user_profile.ts'
 import type { LivingMemoryDreamCoordinator } from '../workflows/dream/coordinator.ts'
 import type { LivingMemoryVectorIndexService } from '../vector_index/service.ts'
-import type { LivingMemoryLogger } from '../logging/logger.ts'
 import type { LivingMemoryConfig } from '../../contracts/workflows.ts'
 import { createMemoryServiceStatus } from './config_status.ts'
 import { loadMemorySourceMessages } from './query_projections.ts'
@@ -46,11 +44,6 @@ import {
 import { createSpeakerKey } from '../memory/speaker_identity.ts'
 import { normalizeManualUserProfileContent } from '../user_profile.ts'
 
-/** 管理面的预设数据导出，与仓储的导出格式同源。 */
-export type LivingMemoryPresetExportData = Awaited<
-    ReturnType<LivingMemoryRepository['exportPresetData']>
->
-
 export interface LivingMemoryAdminDeps {
     config: LivingMemoryConfig
     repository: LivingMemoryRepository
@@ -60,7 +53,6 @@ export interface LivingMemoryAdminDeps {
     userProfiles: LivingMemoryUserProfileService
     dreamCoordinator: LivingMemoryDreamCoordinator
     vectorIndex: LivingMemoryVectorIndexService
-    logger: LivingMemoryLogger
     /** 预设目录：`ctx.presets` 中的预设 id。 */
     listPresetIds(): Promise<string[]>
     /** 清理单个预设的会话状态（快照、召回与提取消费位置）。 */
@@ -75,10 +67,7 @@ export interface LivingMemoryAdminDeps {
  * 展示用的读模型混进执行路径。
  */
 export class LivingMemoryAdminService {
-    constructor(
-        private readonly ctx: Context,
-        private readonly deps: LivingMemoryAdminDeps
-    ) {}
+    constructor(private readonly deps: LivingMemoryAdminDeps) {}
 
     get status(): MemoryServiceStatus {
         return createMemoryServiceStatus(

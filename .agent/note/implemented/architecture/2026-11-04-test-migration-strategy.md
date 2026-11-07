@@ -76,6 +76,6 @@ D11 已确认 v1 全部业务行为作为迁移基线。测试是该基线唯一
 
 删除文件覆盖的行为由这些能力承接：`client-dashboard` 的界面行为由 `webui.spec.ts` 的数据面断言与 S8 的界面验收承接；`living-memory-service-lifecycle` 的启动顺序由 `maintenance.spec.ts` 的启动维护用例与 `src/service.ts` 的显式顺序承接。v2 的 `ctx.effect` 与 dispose 语义与 v1 不同，装配顺序测试不再逐事件断言。
 
-v2 新增、v1 无对应的文件：`backend`、`job-surface`、`session-history`、`session-hooks`、`update-snapshot-tool`、`admin-service`、`webui`、`legacy-import`、`maintenance`。
+迁移阶段曾新增九个 v2 专用测试。独立运行后删除了只验证原生后端的 `backend` 与 `job-surface`；聊天历史改由 `chat-history` 与 `session-hooks` 验证。管理、旧数据导入与维护仍由 `admin-service`、`webui`、`legacy-import`、`maintenance` 覆盖。`tests/update-snapshot-tool.spec.ts` 保留 8 个用例，直接调用 `createRecallTools` 返回的工具，覆盖快照编辑、校验失败与跳过更新。
 
 `extraction-prompt` 按 D14 调整处置：v1 的「接受字符串化数组」用例改为断言拒绝并产生纠正提示，其余断言保持。

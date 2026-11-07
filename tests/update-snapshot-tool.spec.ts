@@ -1,19 +1,33 @@
 import assert from 'node:assert/strict'
 import { MemoryInputError } from '../src/service/memory/errors.ts'
-import {
-    createUpdateSnapshotTool,
-    updateSnapshotPassTool
-} from '../src/service/memory/tools/update_snapshot_tool.ts'
-import { snapshotMaxLineLength } from '../src/service/prompts/memory_tools.ts'
-import { runTool } from './tool-test-utils.ts'
+import { memoryPassTool, memoryUpdateSnapshotTool, snapshotMaxLineLength } from '../src/service/prompts/memory_tools.ts'
+import { createRecallTools } from '../src/service/workflows/recall/agentic_recall.ts'
+
+const snapshotTools = (lines: string[], maxLines = 5) => {
+    const saved: string[] = []
+    const tools = createRecallTools({
+        scope: { presetId: 'p', conversationId: 'c' },
+        config: { subModel: 'test', memorySearchToolMaxResults: 15, enableConversationIsolation: false, snapshotMaxLines: maxLines },
+        searchEngine: { searchMemories: async () => [] },
+        snapshotLines: lines,
+        recordedSearchCalls: [],
+        saveSnapshot: async item => { saved.push(item.finalText) }
+    })
+    const execute = (name: string, input: unknown) => {
+        const tool = tools.find(tool => tool.name === name)
+        assert.ok(tool)
+        return tool.run(tool.args(input))
+    }
+    return {
+        saved,
+        update: (input: unknown) => execute(memoryUpdateSnapshotTool.name, input),
+        pass: () => execute(memoryPassTool.name, {})
+    }
+}
 
 const run = async (lines: string[], input: unknown, maxLines = 5) => {
-    const saved: string[] = []
-    const tool = createUpdateSnapshotTool(lines, maxLines, async (text) => {
-        saved.push(text)
-    })
-    const result = await runTool(tool, input, {})
-    return { result, saved }
+    const { saved, update } = snapshotTools(lines, maxLines)
+    return { result: await update(input), saved }
 }
 
 it('appends new lines after the existing snapshot', async () => {
@@ -71,16 +85,13 @@ it('rejects untouched old lines above the character limit', async () => {
 })
 
 it('does not write the snapshot when validation fails', async () => {
-    const saved: string[] = []
-    const tool = createUpdateSnapshotTool(['a'], 5, async (text) => {
-        saved.push(text)
-    })
-
-    await assert.rejects(runTool(tool, { operations: [{ type: 'delete', line: 9 }] }, {}))
+    const { saved, update } = snapshotTools(['a'])
+    await assert.rejects(update({ operations: [{ type: 'delete', line: 9 }] }))
     assert.deepEqual(saved, [])
 })
 
 it('exposes a pass tool that reports no update', async () => {
-    const result = await runTool(updateSnapshotPassTool(), {}, {})
-    assert.deepEqual(result, { updated: false })
+    const { saved, pass } = snapshotTools(['a'])
+    assert.deepEqual(await pass(), { updated: false })
+    assert.deepEqual(saved, [])
 })

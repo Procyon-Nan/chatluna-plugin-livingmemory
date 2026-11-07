@@ -53,8 +53,8 @@ const createWebUI = () => {
     }
 }
 
-const adminOf = (ctx: Context, repository: LivingMemoryRepository) =>
-    new LivingMemoryAdminService(ctx, {
+const adminOf = (repository: LivingMemoryRepository) =>
+    new LivingMemoryAdminService({
         config: DEFAULT_CONFIG,
         repository,
         mutations: new LivingMemoryMutationService(
@@ -99,7 +99,7 @@ const withWebUI = async (
                 emit: ui.emit
             } as never,
             {
-                admin: adminOf(ctx, repository),
+                admin: adminOf(repository),
                 repository,
                 logger: { summary: () => {} } as never
             }

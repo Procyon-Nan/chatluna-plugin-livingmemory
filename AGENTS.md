@@ -47,7 +47,7 @@ livingmemory/
 │   ├── routing.ts              # 对话规则注册与本轮有效配置读取
 │   ├── query.ts                # 记忆、快照、任务、画像的列表过滤、分面统计与分页
 │   ├── worker_artifacts.ts     # 解析 Worker 打包产物路径（源码与构建包共用）
-│   ├── contracts/              # 跨模块契约：记忆与任务、工作流、向量索引、管理接口；框架类型直接导入公共包
+│   ├── contracts/              # 跨模块契约：记忆与任务、工作流、向量索引、管理接口与前后端共享的 WebUI 状态和动作；随客户端源码发布
 │   ├── service/
 │   │   ├── user_profile.ts     # 人物画像生成、审阅与注入渲染
 │   │   ├── chat_history.ts     # 无缓存读取框架聊天历史，转换真实时间、昵称与正文，筛选消费范围
@@ -57,7 +57,7 @@ livingmemory/
 │   │   ├── memory/             # 字段规范化、说话人身份、主题标题推导、来源消息、人设卡片
 │   │   │   ├── origins/        # 来源消息的规范化与迁移
 │   │   │   ├── snapshot/       # 召回快照的文本渲染
-│   │   │   └── tools/          # 记忆工具：检索、增删改合并拆分、快照编辑与注册入口
+│   │   │   └── tools/          # 记忆工具：检索、增删改合并拆分与注册入口
 │   │   ├── persistence/        # 表定义、条目/快照/任务/画像/人设仓储与事务
 │   │   ├── prompts/            # 提示词骨架：结构化 schema、工具参数说明、记忆渲染
 │   │   ├── shared/             # 串行任务队列与通用工具
@@ -86,7 +86,6 @@ livingmemory/
 ├── client/
 │   ├── index.ts                # WebUI 客户端入口：注册 `/livingmemory` 路由与语言资源
 │   ├── page.tsx                # 管理页：记忆、画像、人设、快照、任务、召回测试六个面板
-│   ├── contracts.ts            # 客户端侧的 States / Actions 类型增强
 │   └── locales/
 │       ├── zh.yml              # 中文界面文案
 │       └── en.yml              # 英文界面文案
