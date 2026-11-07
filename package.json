@@ -3,6 +3,9 @@
     "version": "0.0.0",
     "description": "ChatLuna plugin livingmemory",
     "type": "module",
+    "engines": {
+        "node": ">=24.0.0"
+    },
     "license": "AGPL-3.0-only",
     "repository": {
         "type": "git",
@@ -31,8 +34,8 @@
         "dist"
     ],
     "scripts": {
-        "build": "yakumo build && node scripts/build-workers.mjs",
-        "clean": "yakumo clean",
+        "build": "tsc -p tsconfig.json && node scripts/build.mjs",
+        "clean": "node scripts/clean.mjs",
         "test": "node --test --experimental-transform-types --import ./tests/setup.ts \"tests/**/*.spec.ts\""
     },
     "dependencies": {
@@ -43,8 +46,11 @@
         "schemastery": "^3.18.0"
     },
     "peerDependencies": {
+        "@chatluna/agent": "*",
         "@chatluna/ai": "*",
         "@chatluna/ai-runtime": "*",
+        "@chatluna/chat": "*",
+        "@chatluna/chat-observer": "*",
         "@chatluna/core": "*",
         "@chatluna/memory": "*",
         "@chatluna/message": "*",
@@ -56,14 +62,23 @@
         "cordis": "^4.0.0-rc.12"
     },
     "devDependencies": {
+        "@chatluna/permission": "*",
         "@chatluna/ui-client": "*",
+        "@chatluna/ui-kit": "*",
         "@cordisjs/plugin-database": "^4.1.1",
         "@cordisjs/plugin-database-sqlite": "^5.1.1",
+        "@cordisjs/plugin-timer": "^1.1.4",
+        "@cordisjs/unyaml": "2.0.3",
+        "@types/node": "24.13.3",
+        "@types/react": "^19.2.0",
+        "@types/react-dom": "^19.2.0",
         "cordis": "^4.0.0-rc.12",
+        "koishi": "npm:@koishijs/core@4.18.11",
         "react": "*",
         "react-dom": "*",
         "rolldown": "1.2.16",
-        "typescript": "*"
+        "typescript": "7.0.2",
+        "vite": "^8.2.1"
     },
     "cordis": {
         "description": {

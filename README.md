@@ -3,10 +3,15 @@
 ChatLuna v2 的长期记忆插件。从对话中提取记忆、按需召回并注入提示词，支持 Dream
 整理、用户画像与预设人设卡片，并提供独立的 WebUI 管理页。
 
-迁移来源为 v1 的 `chatluna-livingmemory`，业务语义按 D11 原样保留，只替换承载
-方式（Cordis 服务、`ctx.ai` 模型调用、`chat_observer` 消息采集、`@chatluna/ui-client`
-管理界面）。迁移进度见 [doc/migration-plan.md](doc/migration-plan.md) 与
-[doc/migration-stages.md](doc/migration-stages.md)。
+## 构建
+
+需要 Node.js 24+ 和 Yarn 4。
+
+在插件目录执行：
+
+```powershell
+yarn build
+```
 
 ## 配套服务
 

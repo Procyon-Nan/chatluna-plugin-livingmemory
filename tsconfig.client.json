@@ -1,8 +1,11 @@
 {
-    "extends": "../../tsconfig.client.json",
+    "extends": "./tsconfig.json",
     "compilerOptions": {
-        "rootDir": "..",
-        "allowImportingTsExtensions": true,
+        "rootDir": ".",
+        "noEmit": true,
+        "emitDeclarationOnly": false,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true,
         "types": ["vite/client", "@cordisjs/unyaml/types"]
     },
     "include": ["client", "src/contracts"]

@@ -37,10 +37,10 @@
 livingmemory/
 ├── AGENTS.md                   # 本项目协作规范、代码结构与文档索引
 ├── CHANGELOG.md                # 变更记录
-├── README.md                   # 插件说明，当前为脚手架内容
+├── README.md                   # 插件说明、构建方法、配套服务和配置
 ├── package.json                # 插件包信息、导出入口、依赖与测试脚本
-├── tsconfig.json               # 服务端 TypeScript 配置，继承模板项目配置
-├── tsconfig.client.json        # 客户端 TypeScript 配置，继承模板项目配置
+├── tsconfig.json               # 插件自身的服务端 TypeScript 配置
+├── tsconfig.client.json        # 客户端 TypeScript 配置，继承本插件配置
 ├── src/
 │   ├── index.ts                # 插件入口、配置 schema、依赖声明与服务启动
 │   ├── service.ts              # Cordis 服务：装配仓储、后端、采集、索引、工作流与工具
@@ -79,6 +79,8 @@ livingmemory/
 │   ├── workflow-test-utils.ts  # 工作流测试的日志捕获、作用域与等待辅助
 │   └── *.spec.ts               # 与源码同期迁移的测试
 ├── scripts/
+│   ├── build.mjs               # 打包服务端与 WebUI，串行执行 Worker 构建
+│   ├── clean.mjs               # 清理插件构建产物与增量编译记录
 │   └── build-workers.mjs       # 用 rolldown 打包 Vector 与语义分组 Worker 产物
 ├── client/
 │   ├── index.ts                # WebUI 客户端入口：注册 `/livingmemory` 路由与语言资源
@@ -107,7 +109,7 @@ livingmemory/
 
 | 文档 | 内容 |
 | --- | --- |
-| [README.md](README.md) | 插件简介、配套服务、配置项表、命令与管理页入口 |
+| [README.md](README.md) | 插件简介、构建方法、配套服务、配置项表、命令与管理页入口 |
 | [doc/migration-plan.md](doc/migration-plan.md) | 迁移目标、确认事项、任务编号与依赖、设计/实施/验收进度、双方接口及职责草案、旧数据迁移范围 |
 | [doc/migration-stages.md](doc/migration-stages.md) | S1—S8 实施阶段划分、各阶段交付物、模块归属、向量索引与测试处置、提交粒度与阻塞项 |
 | [doc/message-pool.md](doc/message-pool.md) | M05 跨引擎统一采集、分池、回填、去重、内存游标、会话生命周期、冷启动与实施验收 |
