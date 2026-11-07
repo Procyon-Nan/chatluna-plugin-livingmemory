@@ -1,7 +1,6 @@
 # chatluna-plugin-livingmemory
 
-ChatLuna v2 的长期记忆插件。从对话中提取记忆、按需召回并注入提示词，支持 Dream
-整理、用户画像与预设人设卡片，并提供独立的 WebUI 管理页。可以单独使用，也可以和原生 memory 同时启用；两者各自提取、保存和注入记忆。
+ChatLuna v2 的长期记忆插件，支持记忆提取与召回、Dream 整理、用户画像和预设人设卡片。可单独使用；与原生 memory 同时启用时，两者各自提取、保存和注入记忆。
 
 ## 构建
 
@@ -15,28 +14,25 @@ yarn build
 
 ## 配套服务
 
-插件加载要求以下服务在场，任一缺失时插件不会加载：
+必需服务：
 
 `chatluna`、`schemas`、`routing`、`model`、`database`、`ai`、`tools`、`presets`、`chat_observer`、`agents`、`chat`、`conversations`
 
-命令与 WebUI 是可选能力，分别在有 `koishi` 与 `chatluna_webui`（含 `permissions`）时注册；每日维护
-在有 `timer` 时调度。
+命令需要 `koishi`，管理页需要 `chatluna_webui` 和 `permissions`，每日维护需要 `timer`。
 
 ## 对话规则
 
-在 **对话规则 → 能力 → LivingMemory** 设置全局默认值，也可以为指定群或频道单独配置。同一群里，不管谁发言、是否 @ 机器人，还是由定时任务唤醒，都用同一套设置。开启画像后，注入本轮聊天窗口中各位发言人的已有画像。
-
-私聊也可以按私聊频道配置。刚重启、尚未收到私聊消息时，如果定时通知没有提供私聊路由 ID，就不能匹配专门针对该 ID 的规则。
+在 **对话规则 → 能力 → LivingMemory** 设置全局默认值，或为指定群、频道单独配置。私聊可按频道或路由 ID 配置。
 
 旧版本在插件配置里设置过以下选项的，请把需要保留的值填入全局对话规则。
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `enableSnapshotInjection` | boolean | `true` | 开启记忆快照注入 |
-| `enableUserProfileInjection` | boolean | `false` | 开启画像注入 |
+| `enableUserProfileInjection` | boolean | `false` | 注入最近聊天中发言人的已有画像 |
 | `enableConversationIsolation` | boolean | `false` | 只检索当前会话与全局记忆 |
-| `recallIntervalMessages` | number | `20` | 首次唤醒时有聊天就召回；之后在唤醒时检查新增聊天条数，达到间隔才召回。`0` 关闭自动召回 |
-| `recallHistoryMessages` | number | `20` | 召回和画像使用的最近聊天条数。用户发言触发时包含该条；定时或冷场唤醒时，截止到通知入队的那一刻 |
+| `recallIntervalMessages` | number | `20` | 有聊天记录时，首次唤醒即召回；之后在唤醒时按新增聊天条数触发。`0` 关闭自动召回 |
+| `recallHistoryMessages` | number | `20` | 每次唤醒时，用于召回和画像注入的最近聊天条数 |
 | `snapshotMaxLines` | number | `5` | 记忆快照的最大行数 |
 | `extractionWindowMessages` | number | `60` | 未提取消息达到该条数时提取（0—360）；`0` 关闭 |
 | `enableAutoDream` | boolean | `true` | 提取保存新记忆后自动整理 |
@@ -95,5 +91,4 @@ yarn build
 
 ## 管理页
 
-宿主装有 WebUI 时在「能力」分组下注册 `/livingmemory`，按预设切换，覆盖记忆、
-用户画像、人设卡片、快照、任务与召回测试六个面板。写操作要求权限等级 4。
+在 WebUI 的「能力」中打开 `/livingmemory`，可按预设查看记忆、用户画像、人设卡片、快照和任务，也可以测试召回效果。写操作需要权限等级 4。
