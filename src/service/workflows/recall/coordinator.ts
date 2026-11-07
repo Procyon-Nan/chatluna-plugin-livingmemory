@@ -1,9 +1,10 @@
 import type { RouteSettings } from '../../../routing.ts'
 import { randomUUID } from 'node:crypto'
 import { isModelConfigured } from '../../shared/utils.ts'
-import { normalizeText, scopeKey } from '../../memory/helpers.ts'
+import { scopeKey } from '../../memory/helpers.ts'
 import { formatLogScope, type LivingMemoryLogger } from '../../logging/logger.ts'
 import { renderSnapshotText } from '../../memory/snapshot/snapshot_text.ts'
+import { renderLivingMemoryTranscript } from '../../transcript/transcript_renderer.ts'
 import type { LivingMemoryAgenticRecallExecutor } from './agentic_recall.ts'
 import type {
     JobRepository,
@@ -18,7 +19,7 @@ import type {
 type RecallSettings = Pick<RouteSettings, 'recallIntervalMessages' | 'snapshotMaxLines' | 'enableConversationIsolation'>
 
 /** 召回间隔锚点所需的消息日志读取面。 */
-type RecallMessageLog = Pick<LivingMemoryChatHistory, 'head' | 'after'>
+type RecallMessageLog = Pick<LivingMemoryChatHistory, 'after'>
 
 type RecallAgenticExecutor = Pick<LivingMemoryAgenticRecallExecutor, 'run'>
 export type RecallWorkflowRepository = Pick<JobRepository, 'createFailedJob'> &
@@ -51,11 +52,10 @@ export class LivingMemoryRecallCoordinator {
     async queue(
         settings: RecallSettings,
         scope: ChatHistoryScope,
-        currentMessage: LivingMemoryTranscriptMessage,
-        loadHistoryMessages: () => Promise<LivingMemoryTranscriptMessage[]>,
-        currentPosition?: number
+        chatHistory: LivingMemoryTranscriptMessage[],
+        currentPosition: number
     ) {
-        if (settings.recallIntervalMessages === 0) return
+        if (settings.recallIntervalMessages === 0 || !chatHistory.length) return
         if (this.controller.signal.aborted) return
         if (!isModelConfigured(this.subModel)) {
             this.logger.diagnosticSummary(() => ({
@@ -68,10 +68,9 @@ export class LivingMemoryRecallCoordinator {
         const lockKey = scopeKey(scope)
         const generation = this.generations.get(scope.conversationId) ?? {}
         this.generations.set(scope.conversationId, generation)
-        const position = currentPosition ?? await this.messageLog.head(scope)
         const anchorPosition = this.anchorPositionByScope.get(lockKey)
         if (anchorPosition !== undefined) {
-            const messagesSinceRecall = (await this.messageLog.after(scope, anchorPosition, position + 1)).length
+            const messagesSinceRecall = (await this.messageLog.after(scope, anchorPosition, currentPosition + 1)).length
             if (messagesSinceRecall < settings.recallIntervalMessages) {
                 this.logger.diagnosticSummary(() => ({
                     event: '跳过记忆召回',
@@ -93,24 +92,15 @@ export class LivingMemoryRecallCoordinator {
             return
         }
 
-        this.anchorPositionByScope.set(
-            lockKey,
-            position
-        )
-        this.recallLockByConversation.add(lockKey)
-
+        const input = renderLivingMemoryTranscript(chatHistory)
         const runLogger = this.logger.with({
             ...scope,
             workflow: 'recall',
             runId: randomUUID()
         })
-        const task = this.run(
-            settings,
-            scope,
-            currentMessage,
-            loadHistoryMessages,
-            runLogger
-        )
+        this.recallLockByConversation.add(lockKey)
+        this.anchorPositionByScope.set(lockKey, currentPosition)
+        const task = this.run(settings, scope, input, runLogger)
             .catch((error) => {
                 if (this.generations.get(scope.conversationId) === generation) {
                     this.anchorPositionByScope.delete(lockKey)
@@ -160,18 +150,11 @@ export class LivingMemoryRecallCoordinator {
     private async run(
         settings: RecallSettings,
         scope: MemoryScope,
-        currentMessage: LivingMemoryTranscriptMessage,
-        loadHistoryMessages: () => Promise<LivingMemoryTranscriptMessage[]>,
+        input: string,
         logger: LivingMemoryLogger
     ) {
         const startedAt = new Date()
-        const input = normalizeText(currentMessage.contentLines.join('\n'))
-        if (input.length === 0) {
-            return
-        }
-
         try {
-            const historyMessages = await loadHistoryMessages()
             const snapshot =
                 await this.repository.getLatestSnapshotByScope(scope)
             const snapshotText = renderSnapshotText(snapshot?.items ?? [])
@@ -180,8 +163,7 @@ export class LivingMemoryRecallCoordinator {
             const updatedSnapshot = await this.agenticRecall.run(
                 settings,
                 scope,
-                currentMessage,
-                historyMessages,
+                input,
                 snapshotLines,
                 async (item) => {
                     this.controller.signal.throwIfAborted()

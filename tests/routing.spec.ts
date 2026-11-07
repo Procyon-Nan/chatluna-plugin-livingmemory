@@ -4,6 +4,7 @@ import { Context } from 'cordis'
 import Routing from '@chatluna/routing'
 import SchemaRegistry from '@chatluna/ui-schema-registry'
 import { Schema } from '@chatluna/schema'
+import { routeIdOf } from '@chatluna/satori'
 import { inject } from '../src/index.ts'
 import { registerRouteSettings, routeSettings } from '../src/routing.ts'
 
@@ -39,4 +40,23 @@ test('LivingMemory rules load independently, inherit global settings and apply e
     assert.equal(routeSettings(ctx, 'c', 'alice').extractionWindowMessages, 0)
     unregister()
     assert.equal(routeSettings(ctx, 'c', 'alice').enableUserProfileInjection, true)
+})
+
+test('a scheduled wake in a DM keeps its route rule without matching the last speaker’s user rule', async (t) => {
+    const ctx = new Context()
+    t.after(() => ctx.fiber.dispose())
+    await ctx.plugin(SchemaRegistry)
+    await ctx.plugin(Routing)
+    const dm = { platform: 'test', selfId: 'bot', userId: 'bob', isDirect: true }
+    ctx.provide('chat_observer')
+    ctx.set('chat_observer', { identityOfConversation: () => dm } as never)
+    registerRouteSettings(ctx)
+    await ctx.routing.save({ id: 'dm', filter: { kind: 'scope', field: 'route', values: [routeIdOf(dm)] },
+        values: { livingmemory: { enableConversationIsolation: true } } })
+    await ctx.routing.save({ id: 'bob', filter: { kind: 'scope', field: 'user', values: ['bob'] },
+        values: { livingmemory: { enableUserProfileInjection: true } } })
+    const settings = routeSettings(ctx, 'conversation', null)
+    assert.equal(settings.enableConversationIsolation, true)
+    assert.equal(settings.enableUserProfileInjection, false)
+    assert.equal(routeSettings(ctx, 'conversation', 'bob').enableUserProfileInjection, true)
 })

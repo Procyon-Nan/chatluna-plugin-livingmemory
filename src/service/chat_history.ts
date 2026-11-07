@@ -105,41 +105,34 @@ export class LivingMemoryChatHistory {
         return entries.reverse()
     }
 
-    async recent(scope: ChatHistoryScope, count: number, before = Infinity, after = -1): Promise<ChatHistoryEntry[]> {
+    recent(scope: Pick<ChatHistoryScope, 'conversationId' | 'platform'>, count: number, through: number, after = -1): ChatHistoryEntry[] {
         if (count <= 0) return []
+        const platform = scope.platform ?? this.observer.identityOfConversation(scope.conversationId)?.platform
         this.lastPosition(scope.conversationId)
         const entries: ChatHistoryEntry[] = []
         for (const row of this.newest(scope.conversationId)) {
             const position = this.positions.get(row)!
             if (position <= after) break
-            if (position >= before) continue
-            const entry = this.entry(scope, row)
+            if (position > through) continue
+            const entry = this.entry({ platform }, row)
             if (entry !== undefined) entries.push(entry)
             if (entries.length === count) break
         }
         return entries.reverse()
     }
 
-    trigger(scope: ChatHistoryScope, ids: readonly string[]): ChatHistoryEntry | undefined {
-        if (!ids.length) return
-        this.lastPosition(scope.conversationId)
-        const ranks = new Map(ids.map((id, index) => [id, index]))
-        let best = -1
-        let current: ChatHistoryEntry | undefined
-        for (const row of this.newest(scope.conversationId)) {
-            if (row.self || row.backfilled) continue
-            const rank = Math.max(ranks.get(row.id) ?? -1, ranks.get(row.platformMessageId ?? '') ?? -1)
-            if (rank <= best) continue
-            const entry = this.entry(scope, row)
-            if (entry === undefined) continue
-            current = entry
-            best = rank
-            if (rank === ids.length - 1) break
+    locateUserMessage(key: string, message: { id: string; externalId?: string; userId?: string }, after = -1) {
+        this.lastPosition(key)
+        for (const row of this.newest(key)) {
+            if (row.id !== message.id && (message.externalId === undefined || row.platformMessageId !== message.externalId)) continue
+            const position = this.positions.get(row)!
+            if (position <= after || row.self || row.backfilled) return {}
+            return { position, userId: message.userId ?? row.userId }
         }
-        return current
+        return { userId: message.userId }
     }
 
-    private entry(scope: ChatHistoryScope, row: ObservedMessage): ChatHistoryEntry | undefined {
+    private entry(scope: Pick<ChatHistoryScope, 'platform'>, row: ObservedMessage): ChatHistoryEntry | undefined {
         if (row.self && !this.replies.has(row)) return
         const content = blocksToLogText(row.content)
         if (!content) return

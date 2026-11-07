@@ -14,16 +14,26 @@ describe('LivingMemoryChatHistory', () => {
         observer.messages.splice(0, 2)
         observer.messages.push(historyMessage(250, 'new', { time: 123 }), historyMessage(251, 'newer', { time: 123 }))
         assert.deepEqual((await history.after(historyScope, cursor)).map(x => x.content), ['new', 'newer'])
-        assert.equal(history.trigger(historyScope, ['m-0']), undefined)
+        assert.equal(history.locateUserMessage(historyScope.conversationId, { id: 'route:m-0' }).position, undefined)
     })
 
-    it('matches the last available chat in the actual batch and excludes queued input from context', async () => {
+    it('reads through the supplied chat and excludes later arrivals', async () => {
         const observer = new FrameworkHistoryFixture()
         observer.messages.push(historyMessage(1, 'earlier'), historyMessage(2, 'trigger'), historyMessage(3, 'queued'))
         const history = new LivingMemoryChatHistory(observer)
-        const trigger = history.trigger(historyScope, ['route:m-2', 'm-1', 'm-2', 'unmatched-backfill'])
-        assert.equal(trigger?.content, 'trigger')
-        assert.deepEqual((await history.recent(historyScope, 6, trigger!.position)).map(x => x.content), ['earlier'])
+        const { position } = history.locateUserMessage(historyScope.conversationId, { id: 'input', externalId: 'm-2' })
+        assert.equal(position, 1)
+        assert.deepEqual((await history.recent(historyScope, 2, position!)).map(x => x.content), ['earlier', 'trigger'])
+        assert.deepEqual((await history.recent(historyScope, 1, position!)).map(x => x.content), ['trigger'])
+    })
+
+    it('bounds the window at a real input even when that row has no transcript text', async () => {
+        const observer = new FrameworkHistoryFixture()
+        observer.messages.push(historyMessage(1, 'earlier'), historyMessage(2, '', { content: [] }), historyMessage(3, 'next'))
+        const history = new LivingMemoryChatHistory(observer)
+        const { position } = history.locateUserMessage(historyScope.conversationId, { id: 'route:m-2' })
+        assert.equal(position, 1)
+        assert.deepEqual((await history.recent(historyScope, 2, position!)).map(row => row.content), ['earlier'])
     })
 
     it('uses the observed time and nickname and counts only chat and attributed replies', async () => {

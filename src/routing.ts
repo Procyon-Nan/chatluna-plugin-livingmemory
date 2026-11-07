@@ -12,8 +12,9 @@ export const ROUTE_SCHEMA = Schema.object({
         .description('允许单独提取机器人未参与的闲聊。'),
     enableAutoDream: Schema.boolean().default(true).label('提取后整理新记忆'),
     recallIntervalMessages: Schema.natural().max(200).default(20).label('自动召回间隔')
-        .description('首次对话立即召回，之后按新聊天条数触发；0 表示关闭。'),
-    recallHistoryMessages: Schema.natural().min(1).max(200).default(20).label('召回上下文条数'),
+        .description('首次唤醒时有聊天就召回，之后按新增聊天条数判断；0 表示关闭。'),
+    recallHistoryMessages: Schema.natural().min(1).max(200).default(20).label('召回上下文条数')
+        .description('唤醒时读取的最近聊天条数。用户发言触发时包含该条；定时或冷场唤醒时只读已有聊天。'),
     snapshotMaxLines: Schema.natural().min(5).max(50).default(5).label('快照最大行数'),
     enableConversationIsolation: Schema.boolean().default(false).label('隔离会话检索')
         .description('自动召回与记忆检索工具只检索当前会话和全局记忆。'),
@@ -43,11 +44,13 @@ export function registerRouteSettings(ctx: Context) {
     })
 }
 
-export function routeSettings(ctx: Context, conversationId?: string, userId?: string): RouteSettings {
+export function routeSettings(ctx: Context, conversationId?: string, userId?: string | null): RouteSettings {
     const identity = conversationId === undefined ? undefined : ctx.chat_observer.identityOfConversation(conversationId)
     if (identity !== undefined) {
-        const speaker = userId === undefined ? identity : { ...identity, userId }
-        const input = ctx.routing.matchInput(speaker, routeIdOf(speaker))
+        const speaker = typeof userId === 'string' ? { ...identity, userId } : identity
+        // 无发言人的唤醒仍属于当前路由（私聊路由 ID 含对端用户），只去掉用户规则的匹配条件。
+        const subject = userId === null ? { ...identity, userId: undefined } : speaker
+        const input = ctx.routing.matchInput(subject, routeIdOf(speaker))
         return ctx.routing.resolve(input).get('livingmemory')
     }
     return ROUTE_SCHEMA.parse(ctx.routing.valuesAt(undefined, 'livingmemory') ?? {})

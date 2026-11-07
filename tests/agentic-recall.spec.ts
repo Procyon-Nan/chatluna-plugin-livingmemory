@@ -5,7 +5,6 @@ import { LivingMemoryLogger } from '../src/service/logging/logger.ts'
 import type {
     LivingMemorySearchInput,
     LivingMemorySearchResult,
-    LivingMemoryTranscriptMessage,
     MemoryScope
 } from '../src/contracts/memory.ts'
 import {
@@ -49,12 +48,7 @@ const scope: MemoryScope = {
     presetLabel: '助手<&'
 }
 
-const currentMessage: LivingMemoryTranscriptMessage = {
-    role: 'user',
-    speakerLabel: '用户',
-    contentLines: ['记忆查询'],
-    createdAt: new Date('2026-07-01T00:00:00.000Z')
-}
+const chatHistory = '[2026-07-01 08:00] 助手：之前的答复\n[2026-07-01 08:01] 用户：记忆查询'
 
 const call = (
     id: string,
@@ -163,10 +157,9 @@ const createHarness = (options: HarnessOptions) => {
         saved,
         run: () =>
             executor.run(
-                  config,
+                config,
                 scope,
-                currentMessage,
-                [],
+                chatHistory,
                 [],
                 async (item) => {
                     saved.push(item.finalText)
@@ -202,6 +195,10 @@ it('runs one search then commits the snapshot', async () => {
     assert.deepEqual(snapshot.toolCallSummary.searchTexts, ['记忆'])
     assert.equal(harness.searchInvocations[0]?.presetId, scope.presetId)
     assert.deepEqual(harness.searchInvocations[0]?.input.memoryTypes, ['all'])
+    const input = harness.invocations[0]?.messages[0]?.content.find((block) => block.type === 'text')?.text
+    assert.ok(input)
+    assert.ok(input.includes('<chat_history>\n' + chatHistory + '\n</chat_history>'))
+    assert.equal(input.split('记忆查询').length - 1, 1)
     assert.equal(harness.invocations.length, 2)
     assert.equal(harness.invocations[0]?.model, config.subModel)
     assert.match(String(harness.invocations[0]?.system), /你是助手&lt;&amp;/u)

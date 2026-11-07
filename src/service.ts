@@ -28,7 +28,7 @@ import { LivingMemoryMaintenance } from './service/app/maintenance.ts'
 import { LivingMemoryAdminService } from './service/app/admin_service.ts'
 import { livingMemoryCommands } from './service/app/commands.ts'
 import { livingMemoryWebUI } from './service/app/webui.ts'
-import { LivingMemorySessionHooks } from './service/session_hooks.ts'
+import { LivingMemoryConversationHooks } from './service/conversation_hooks.ts'
 import type { LivingMemoryConfig } from './contracts/workflows.ts'
 
 declare module 'cordis' {
@@ -78,7 +78,7 @@ export default class LivingmemoryService extends Service {
     readonly maintenance: LivingMemoryMaintenance
     readonly providers: LivingMemoryMemoryProviders
     readonly logger: LivingMemoryLogger
-    private readonly sessionHooks: LivingMemorySessionHooks
+    private readonly conversationHooks: LivingMemoryConversationHooks
     private readonly dreamWorker: LivingMemoryDreamWorkerClient
     private readonly dream: LivingMemoryDreamService
     private config: LivingMemoryServiceConfig
@@ -153,7 +153,7 @@ export default class LivingmemoryService extends Service {
             this.repository,
             this.logger
         )
-        const settingsOf = (conversationId: string, userId?: string) => routeSettings(ctx, conversationId, userId)
+        const settingsOf = (conversationId: string, userId?: string | null) => routeSettings(ctx, conversationId, userId)
         this.recallCoordinator = new LivingMemoryRecallCoordinator(
             config.subModel,
             this.history,
@@ -183,7 +183,7 @@ export default class LivingmemoryService extends Service {
                 }
             }
         )
-        this.sessionHooks = new LivingMemorySessionHooks(ctx, {
+        this.conversationHooks = new LivingMemoryConversationHooks(ctx, {
             history: this.history,
             recall: this.recallCoordinator,
             extraction: this.extractionCoordinator,
@@ -219,7 +219,7 @@ export default class LivingmemoryService extends Service {
      */
     private async cleanupConversation(conversationId: string) {
         await this.repository.deleteSnapshotsByConversation(conversationId)
-        this.sessionHooks.reset(conversationId)
+        this.conversationHooks.reset(conversationId)
     }
 
     /**
@@ -248,14 +248,14 @@ export default class LivingmemoryService extends Service {
 
     /** 注册会话钩子与记忆工具；插件卸载时随 effect 一并注销。 */
     private register(): Disposable {
-        const stopHooks = this.sessionHooks.register()
+        const stopHooks = this.conversationHooks.register()
         this.registerCommands()
         this.registerWebUI()
         const tools = registerLivingMemoryTools(this.ctx, this.providers, {
             enabled: this.config.enabledMemoryTools,
             createToolMaxMemories: this.config.memoryCreateToolMaxMemories,
             isConversationIsolated: (agent) => {
-                const current = agent && this.sessionHooks.settingsForTurn(agent)
+                const current = agent && this.conversationHooks.settingsForTurn(agent)
                 if (current) return current.enableConversationIsolation
                 return routeSettings(this.ctx, agent?.options.conversationKey, agent?.options.location?.user).enableConversationIsolation
             }

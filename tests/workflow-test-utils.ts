@@ -1,7 +1,6 @@
 import type { JobRepository } from '../src/contracts/workflows.ts'
 import type {
     AgenticMemorySnapshotItem,
-    LivingMemoryTranscriptMessage,
     MemoryEntryRecord,
     MemoryJobRecord,
     MemoryScope
@@ -38,13 +37,6 @@ export const createCapturedLogger = (debugEnabled = true) => {
 export const scope: MemoryScope = {
     conversationId: 'conversation-1',
     presetId: 'preset-1'
-}
-
-export const currentMessage: LivingMemoryTranscriptMessage = {
-    role: 'user',
-    speakerLabel: '用户',
-    contentLines: ['记忆查询'],
-    createdAt: new Date('2026-07-01T00:00:00.000Z')
 }
 
 export const createJobStore = () => {

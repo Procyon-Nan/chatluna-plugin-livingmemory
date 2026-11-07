@@ -31,8 +31,8 @@ yarn build
 | `enableSnapshotInjection` | boolean | `true` | 开启记忆快照注入 |
 | `enableUserProfileInjection` | boolean | `false` | 开启画像注入 |
 | `enableConversationIsolation` | boolean | `false` | 只检索当前会话与全局记忆 |
-| `recallIntervalMessages` | number | `20` | 每累计多少条新消息召回一次，会话首次对话时立即召回；`0` 关闭 |
-| `recallHistoryMessages` | number | `20` | 召回取用的上下文消息条数 |
+| `recallIntervalMessages` | number | `20` | 首次唤醒时有聊天就召回；之后在唤醒时检查新增聊天条数，达到间隔才召回。`0` 关闭自动召回 |
+| `recallHistoryMessages` | number | `20` | 召回和画像使用的最近聊天条数。用户发言触发时包含该条；定时或冷场唤醒时，截止到通知入队的那一刻 |
 | `snapshotMaxLines` | number | `5` | 记忆快照的最大行数 |
 | `extractionWindowMessages` | number | `60` | 未提取消息达到该条数时提取（0—360）；`0` 关闭 |
 | `enableAutoDream` | boolean | `true` | 提取保存新记忆后自动整理 |

@@ -71,11 +71,11 @@ D11 已确认 v1 全部业务行为作为迁移基线。测试是该基线唯一
 
 - `memory-create-tool`：工具 schema、批量上限、字段校验、提交后索引失败与作用域拒绝，断言全部在 `memory-tools.spec.ts` 内。
 - `chat-middleware`：平台消息号去重、空正文丢弃、昵称取值。v2 由 `chat_observer` 提供观察结果，入池规则不再依赖中间件，断言落在 `message-collector.spec.ts`。
-- `character-middleware`：卸载清理由两个协调器的 `clearByConversation` 与 `stop` 承接；召回历史排除当前消息由 `message-log-registry` 的 `loadRecallHistory` 承接；回复段的实际发出判定由 `message-collector` 的 `recordReplies` 承接。
+- `character-middleware`：卸载清理由两个协调器的 `clearByConversation` 与 `stop` 承接；`conversation-hooks.spec.ts` 验证实际回复的归属，以及召回和画像共用的[本轮聊天窗口](2026-11-07-official-observer-window.md)。
 - `chatluna-transcript-adapter`：会话历史转换、注入消息跳过、身份回退与去重键，落在 `session-history.spec.ts`。
 
 删除文件覆盖的行为由这些能力承接：`client-dashboard` 的界面行为由 `webui.spec.ts` 的数据面断言与 S8 的界面验收承接；`living-memory-service-lifecycle` 的启动顺序由 `maintenance.spec.ts` 的启动维护用例与 `src/service.ts` 的显式顺序承接。v2 的 `ctx.effect` 与 dispose 语义与 v1 不同，装配顺序测试不再逐事件断言。
 
-迁移阶段曾新增九个 v2 专用测试。独立运行后删除了只验证原生后端的 `backend` 与 `job-surface`；聊天历史改由 `chat-history` 与 `session-hooks` 验证。管理、旧数据导入与维护仍由 `admin-service`、`webui`、`legacy-import`、`maintenance` 覆盖。`tests/update-snapshot-tool.spec.ts` 保留 8 个用例，直接调用 `createRecallTools` 返回的工具，覆盖快照编辑、校验失败与跳过更新。
+迁移阶段曾新增九个 v2 专用测试。独立运行后删除了只验证原生后端的 `backend` 与 `job-surface`；聊天历史改由 `chat-history` 与 `conversation-hooks` 验证。管理、旧数据导入与维护仍由 `admin-service`、`webui`、`legacy-import`、`maintenance` 覆盖。`tests/update-snapshot-tool.spec.ts` 保留 8 个用例，直接调用 `createRecallTools` 返回的工具，覆盖快照编辑、校验失败与跳过更新。
 
 `extraction-prompt` 按 D14 调整处置：v1 的「接受字符串化数组」用例改为断言拒绝并产生纠正提示，其余断言保持。

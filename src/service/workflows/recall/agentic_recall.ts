@@ -5,7 +5,6 @@ import type {
     AgenticMemorySnapshotItem,
     AgenticMemorySnapshotMemoryItem,
     LivingMemorySearchResult,
-    LivingMemoryTranscriptMessage,
     MemoryScope
 } from '../../../contracts/memory.ts'
 import type { LivingMemoryConfig } from '../../../contracts/workflows.ts'
@@ -20,7 +19,6 @@ import {
     snapshotMaxLineLength
 } from '../../prompts/memory_tools.ts'
 import { buildSnapshotRecallPrompts } from '../../prompts/agentic_recall.ts'
-import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter.ts'
 import type { LivingMemoryLoopTool } from '../tool_call.ts'
 import { LivingMemoryToolLoop } from '../tool_loop.ts'
 import type { LivingMemorySearchEngine } from './memory_search_engine.ts'
@@ -211,8 +209,6 @@ export const createRecallTools = (options: {
 }
 
 export class LivingMemoryAgenticRecallExecutor {
-    private readonly formatter = new LivingMemoryMessageFormatter()
-
     constructor(
         private readonly ctx: Context,
         private readonly config: RecallModels,
@@ -223,21 +219,19 @@ export class LivingMemoryAgenticRecallExecutor {
     async run(
         rules: RecallRule,
         scope: MemoryScope,
-        currentMessage: LivingMemoryTranscriptMessage,
-        historyMessages: LivingMemoryTranscriptMessage[],
+        chatHistory: string,
         snapshotLines: readonly string[],
         saveSnapshot: (item: AgenticMemorySnapshotItem) => Promise<void>,
         runLogger: LivingMemoryLogger = this.logger,
         signal?: AbortSignal
     ): Promise<AgenticMemorySnapshotItem | null> {
         signal?.throwIfAborted()
-        const prompt = this.buildRecallPrompt(
-            scope,
-            currentMessage,
-            historyMessages,
+        const prompt = buildSnapshotRecallPrompts({
+            assistantLabel: resolveScopeAssistantLabel(scope),
+            chatHistory,
             snapshotLines,
-            rules.snapshotMaxLines
-        )
+            snapshotMaxLines: rules.snapshotMaxLines
+        })
         const recordedSearchCalls: RecordedAgenticSearchCall[] = []
         let savedSnapshot: AgenticMemorySnapshotItem | null = null
 
@@ -276,27 +270,5 @@ export class LivingMemoryAgenticRecallExecutor {
             detail: `${formatLogScope(fields)}; 模型调用：${result.modelCalls} 次; 检索调用：${recordedSearchCalls.length} 次`
         }))
         return savedSnapshot
-    }
-
-    private buildRecallPrompt(
-        scope: MemoryScope,
-        currentMessage: LivingMemoryTranscriptMessage,
-        historyMessages: LivingMemoryTranscriptMessage[],
-        snapshotLines: readonly string[],
-        snapshotMaxLines: number
-    ) {
-        const assistantLabel = resolveScopeAssistantLabel(scope)
-        const lastMessage = this.formatter.toExtractionPayload([
-            currentMessage
-        ]).input
-        const chatHistory =
-            this.formatter.toExtractionPayload(historyMessages).input
-        return buildSnapshotRecallPrompts({
-            assistantLabel,
-            lastMessage,
-            chatHistory,
-            snapshotLines,
-            snapshotMaxLines
-        })
     }
 }
