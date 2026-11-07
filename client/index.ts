@@ -1,11 +1,11 @@
 import type { Context } from 'cordis'
 import zh from './locales/zh.yml'
 import en from './locales/en.yml'
-import './contracts.ts'
+import type {} from '../src/contracts/webui_live.ts'
 
 /**
  * 管理页的客户端入口。页面本身按需加载，路由注册与语言资源随客户端启动
- * 载入；`./contracts.ts` 只带来 `States` / `Actions` 的类型增强。
+ * 载入。
  */
 export default function apply(ctx: Context) {
     ctx.locale.register('livingmemory', { zh, en })
