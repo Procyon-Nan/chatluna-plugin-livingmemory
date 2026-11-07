@@ -8,7 +8,6 @@ import { ApiError } from '@chatluna/server'
 import type {} from '@chatluna/server'
 import type { LivingMemoryAdminService } from './admin_service.ts'
 import type { LivingMemoryRepository } from '../persistence/repository.ts'
-import type { LivingMemoryJobSurface } from './job_surface.ts'
 import type { LivingMemoryLogger } from '../logging/logger.ts'
 import type {
     LivingMemoryEntriesSnapshot,
@@ -34,24 +33,21 @@ import type {
 import type { MemoryListQuery } from '../../contracts/rpc.ts'
 import { memoryEntryTypes } from '../../contracts/memory.ts'
 
-/** 写操作的权限等级，与原生记忆页一致。 */
+/** 管理页写操作要求的权限等级。 */
 const WRITE_LEVEL = 4
 
 interface LivingMemoryWebUI {
     admin: LivingMemoryAdminService
     repository: LivingMemoryRepository
-    jobs: LivingMemoryJobSurface
     logger: LivingMemoryLogger
 }
 
 /**
  * 管理页的数据面。只做两件事：把管理服务的返回值投影成界面视图，把写操作
- * 转给管理服务。业务规则不在这里出现。
- *
- * 记忆页沿用 v2 的原生记忆页做日常编辑；这一页承担原生页不覆盖的部分：
- * 任务列表、人设卡片、预设级导出导入与向量索引维护。
+ * 转给管理服务。
  */
 export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
+    ctx.effect(() => ui.repository.watchJobs(() => ctx.emit('livingmemory/job-change')))
     const refreshOn = ['livingmemory/change'] as const
 
     ctx.chatluna_webui.state('livingmemory.scopes', {
@@ -113,7 +109,7 @@ export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
             })
             return page.items.map(toJobView)
         },
-        refreshOn: ['chatluna/memory-job', ...refreshOn]
+        refreshOn: ['livingmemory/job-change', ...refreshOn]
     })
 
     ctx.chatluna_webui.state('livingmemory.personas', {
@@ -455,7 +451,7 @@ export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
         }
     )
 
-    /** 管理页自己的刷新信号；原生 `chatluna/memory-change` 的载荷与页面的读取范围不一致。 */
+    /** 通知管理页重新读取数据。 */
     function notifyChanged(context: Context) {
         context.emit('livingmemory/change')
     }

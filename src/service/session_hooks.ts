@@ -1,3 +1,4 @@
+import type { RouteSettings } from '../routing.ts'
 import type { Context, Disposable } from 'cordis'
 import type { Agent } from '@chatluna/agent'
 import type { ObservedEvent } from '@chatluna/chat-observer'
@@ -15,19 +16,10 @@ import { renderSnapshotText } from './memory/snapshot/snapshot_text.ts'
 import type { LivingMemoryRecallCoordinator } from './workflows/recall/coordinator.ts'
 import type { LivingMemoryExtractionCoordinator } from './workflows/extraction/coordinator.ts'
 import type { LivingMemoryUserProfileService } from './user_profile.ts'
-import type { LivingMemoryConfig, SnapshotRepository } from '../contracts/workflows.ts'
+import type { SnapshotRepository } from '../contracts/workflows.ts'
 
 const SNAPSHOT_PLUGIN = 'chatluna:livingmemory'
 const RECALL_STEP_ORDER = 870
-
-type SessionHooksConfig = Pick<LivingMemoryConfig,
-    | 'enableSnapshotInjection'
-    | 'enableUserProfileInjection'
-    | 'recallIntervalMessages'
-    | 'recallHistoryMessages'
-    | 'extractionWindowMessages'
-    | 'extractionIncludeOverheard'
->
 
 interface LivingMemorySessionHooksOptions {
     history: LivingMemoryChatHistory
@@ -36,7 +28,7 @@ interface LivingMemorySessionHooksOptions {
     userProfiles: LivingMemoryUserProfileService
     repository: Pick<SnapshotRepository, 'getLatestSnapshotByScope'>
     logger: LivingMemoryLogger
-    config: SessionHooksConfig
+    settingsOf: (key: string, userId?: string) => RouteSettings
 }
 
 /** 只保存消费边界；聊天正文始终从框架读取。 */
@@ -47,6 +39,7 @@ interface ConversationState {
 }
 
 interface Delivery {
+    settings: RouteSettings
     pending: Set<string>
     last: number
     drained: boolean
@@ -56,7 +49,7 @@ export class LivingMemorySessionHooks {
     private readonly disposables: (() => void)[] = []
     private readonly conversations = new Map<string, ConversationState>()
     private readonly revisions = new Map<string, { contextStart: number }>()
-    private readonly turns = new WeakMap<Agent, { state: ConversationState; turn?: number }>()
+    private readonly turns = new WeakMap<object, { state: ConversationState; settings: RouteSettings; turn?: number }>()
     private active = false
 
     constructor(
@@ -91,18 +84,12 @@ export class LivingMemorySessionHooks {
             this.turns.delete(agent)
             const key = agent.options.conversationKey
             if (key === undefined) return
-            const existing = this.conversations.get(key)
-            const preset = this.ctx.get('engines')?.presetOf(agent) ?? agent.options.presetId
-            if (existing?.scope.sessionId === String(agent.session.id) && existing.scope.presetId === preset) {
-                this.bindTurn(agent, existing, turn)
-                return
-            }
             const resolved = await this.resolveInput(agent, input)
-            if (resolved && this.conversations.get(key) === resolved.state) this.bindTurn(agent, resolved.state, turn)
+            if (resolved && this.conversations.get(key) === resolved.state) this.bindTurn(agent, resolved.state, turn, resolved.settings)
         }))
         this.disposables.push(this.ctx.on('chatluna/agent-output', ({ agent, turn }) => {
             const running = this.turns.get(agent)
-            if (running && running.turn === undefined) this.bindTurn(agent, running.state, turn)
+            if (running && running.turn === undefined) this.bindTurn(agent, running.state, turn, running.settings)
         }))
         this.disposables.push(this.ctx.on('send', (session) => {
             const sent = session.chatSent
@@ -155,14 +142,15 @@ export class LivingMemorySessionHooks {
                 if (!delivery.pending.delete(id)) continue
                 const position = this.options.history.locate(key, event.message, state.scope)
                 if (position !== undefined) delivery.last = Math.max(delivery.last, position)
-                if (this.options.config.extractionIncludeOverheard && position !== undefined) {
-                    await this.queueExtraction(state, position)
+                if (delivery.settings.extractionIncludeOverheard && position !== undefined) {
+                    await this.queueExtraction(state, delivery.settings, position)
                 }
                 if (delivery.drained) await this.flushDelivery(state, turn, delivery)
                 return
             }
             return
         }
+        const settings = this.options.settingsOf(key, event.message.userId)
         const position = this.options.history.locate(key, event.message)
         if (position === undefined) return
         const revision = this.revisions.get(key)
@@ -172,12 +160,16 @@ export class LivingMemorySessionHooks {
         const existing = this.conversations.get(key)
         const state = existing?.scope.sessionId === String(current.sessionId) ? existing
             : this.stateOf(this.options.history.scopeOf(key, String(current.sessionId), current.presetId), position - 1)
-        if (position > state.boundary && this.options.config.extractionIncludeOverheard) await this.queueExtraction(state, position)
+        if (position > state.boundary && settings.extractionIncludeOverheard) await this.queueExtraction(state, settings, position)
     }
 
-    private bindTurn(agent: Agent, state: ConversationState, turn: number) {
-        this.turns.set(agent, { state, turn })
-        state.deliveries.set(turn, { pending: new Set(), last: -1, drained: false })
+    settingsForTurn(agent: object) {
+        return this.turns.get(agent)?.settings
+    }
+
+    private bindTurn(agent: Agent, state: ConversationState, turn: number, settings: RouteSettings) {
+        this.turns.set(agent, { state, turn, settings })
+        state.deliveries.set(turn, { settings, pending: new Set(), last: -1, drained: false })
     }
 
     private async resolveInput(agent: Agent, messages: readonly ChatMessage[]) {
@@ -196,23 +188,24 @@ export class LivingMemorySessionHooks {
         const state = this.stateOf(candidateScope, trigger === undefined
             ? this.options.history.lastPosition(conversationId) : trigger.position - 1)
         const current = trigger !== undefined && trigger.position > (revision?.contextStart ?? -1) ? trigger : undefined
-        return { state, current }
+        return { state, current, settings: this.options.settingsOf(conversationId, current?.userId) }
     }
 
     private async beforeStep(agent: Agent, messages: readonly ChatMessage[]): Promise<ChatMessage | undefined> {
         const resolved = await this.resolveInput(agent, messages)
         if (!resolved || this.conversations.get(resolved.state.scope.conversationId) !== resolved.state) return
         const { state, current } = resolved
+        const settings = this.settingsForTurn(agent) ?? resolved.settings
         const scope = state.scope
         const conversationId = scope.conversationId
-        if (!this.turns.has(agent)) this.turns.set(agent, { state })
-        if (this.options.config.recallIntervalMessages > 0 && current !== undefined) {
+        if (!this.turns.has(agent)) this.turns.set(agent, { state, settings })
+        if (settings.recallIntervalMessages > 0 && current !== undefined) {
             const [message] = toHistoryTranscriptMessages(scope, [current])
             if (message === undefined) throw new Error(`触发消息无法转写：${current.messageId}`)
-            await this.options.recall.queue(scope, message, () => this.windowMessages(scope, current), current.position)
+            await this.options.recall.queue(settings, scope, message, () => this.windowMessages(scope, current, settings), current.position)
         }
         if (this.conversations.get(conversationId) !== state || !this.active) return undefined
-        const injection = await this.renderInjection(scope, current)
+        const injection = await this.renderInjection(scope, current, settings)
         if (this.conversations.get(conversationId) !== state || !this.active) return undefined
         return injection
     }
@@ -249,34 +242,36 @@ export class LivingMemorySessionHooks {
     private async flushDelivery(state: ConversationState, turn: number, delivery: Delivery) {
         if (delivery.pending.size) return
         state.deliveries.delete(turn)
-        if (!this.options.config.extractionIncludeOverheard && delivery.last > state.boundary) {
-            await this.queueExtraction(state, delivery.last)
+        if (!delivery.settings.extractionIncludeOverheard && delivery.last > state.boundary) {
+            await this.queueExtraction(state, delivery.settings, delivery.last)
         }
     }
 
-    private async queueExtraction(state: ConversationState, eligiblePosition?: number) {
-        if (this.options.config.extractionWindowMessages === 0) return
+    private async queueExtraction(state: ConversationState, settings: RouteSettings, eligiblePosition: number) {
+        if (settings.extractionWindowMessages === 0) return
         await this.options.extraction.queue(state.scope, {
-            includeOverheard: this.options.config.extractionIncludeOverheard,
+            includeOverheard: settings.extractionIncludeOverheard,
+            windowMessages: settings.extractionWindowMessages,
+            enableAutoDream: settings.enableAutoDream,
             resolveTranscriptOrigin: async () => this.transcriptOrigin(state.scope)
         }, state.boundary, eligiblePosition)
     }
 
-    private async windowMessages(scope: ChatHistoryScope, current: ChatHistoryEntry | undefined) {
+    private async windowMessages(scope: ChatHistoryScope, current: ChatHistoryEntry | undefined, settings: RouteSettings) {
         const entries = await this.options.history.recent(scope,
-            this.options.config.recallHistoryMessages, current?.position, this.revisions.get(scope.conversationId)?.contextStart)
+            settings.recallHistoryMessages, current?.position, this.revisions.get(scope.conversationId)?.contextStart)
         return toHistoryTranscriptMessages(scope, entries)
     }
 
-    private async renderInjection(scope: ChatHistoryScope, current: ChatHistoryEntry | undefined): Promise<ChatMessage | undefined> {
+    private async renderInjection(scope: ChatHistoryScope, current: ChatHistoryEntry | undefined, settings: RouteSettings): Promise<ChatMessage | undefined> {
         const sections: string[] = []
-        if (this.options.config.enableSnapshotInjection) {
+        if (settings.enableSnapshotInjection) {
             const snapshot = await this.options.repository.getLatestSnapshotByScope(scope)
             const text = renderSnapshotText(snapshot?.items ?? [])
             if (text.length > 0) sections.push(`## 短期记忆\n${text}`)
         }
-        if (this.options.config.enableUserProfileInjection) {
-            const speakerKeys = collectUserProfileSpeakerKeys(await this.windowMessages(scope, current))
+        if (settings.enableUserProfileInjection) {
+            const speakerKeys = collectUserProfileSpeakerKeys(await this.windowMessages(scope, current, settings))
             const profiles = await this.options.userProfiles.renderForSpeakers(scope.presetId, speakerKeys)
             if (profiles.trim().length > 0) sections.push(`## 用户画像\n${profiles.trim()}`)
         }

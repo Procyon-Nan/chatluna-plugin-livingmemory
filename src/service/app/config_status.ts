@@ -2,19 +2,13 @@ import type { LivingMemoryConfig, MemoryConfigWarning, MemoryServiceStatus } fro
 import type { MemoryVectorIndexStatus } from '../../contracts/vector_index.ts'
 import { isModelConfigured } from '../shared/utils.ts'
 
-/**
- * 配置自检。照搬 v1 的三条规则：缺模型不阻止加载，但工作流会跳过对应步骤，
- * 因此把「已开启但缺模型」的组合作废条件显式列出，供管理界面提示。
- */
+/** 实例状态只检查模型；自动工作流的开关按每次对话匹配。 */
 export const validateLivingMemoryConfig = (
     config: LivingMemoryConfig
 ): MemoryConfigWarning[] => {
     const warnings: MemoryConfigWarning[] = []
 
-    if (
-        config.recallIntervalMessages > 0 &&
-        !isModelConfigured(config.subModel)
-    ) {
+    if (!isModelConfigured(config.subModel)) {
         warnings.push({
             code: 'recall-model-missing',
             field: 'subModel',
@@ -28,15 +22,12 @@ export const validateLivingMemoryConfig = (
             message: '未配置 embeddingModel；记忆召回将失败。'
         })
     }
-    if (
-        config.extractionWindowMessages > 0 &&
-        !isModelConfigured(config.mainModel)
-    ) {
+    if (!isModelConfigured(config.mainModel)) {
         warnings.push({
             code: 'extract-model-missing',
             field: 'mainModel',
             message:
-                '自动记忆提取已启用（extractionWindowMessages > 0），但未配置 mainModel；提取流程将被跳过。'
+                '未配置 mainModel；启用自动提取的对话将跳过提取。'
         })
     }
 

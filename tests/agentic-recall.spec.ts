@@ -163,6 +163,7 @@ const createHarness = (options: HarnessOptions) => {
         saved,
         run: () =>
             executor.run(
+                  config,
                 scope,
                 currentMessage,
                 [],

@@ -1,7 +1,7 @@
 import type { Context } from 'cordis'
 import Schema from 'schemastery'
 import { modelAddressSchema } from '@chatluna/schema'
-import type {} from '@chatluna/memory'
+import { registerRouteSettings } from './routing.ts'
 import type {} from '@chatluna/chat-observer'
 import type {} from '@chatluna/agent'
 import type {} from '@chatluna/chat'
@@ -18,8 +18,13 @@ export const name = 'livingmemory'
  */
 export const inject = [
     'chatluna',
-    'memory',
+    'schemas',
+    'routing',
     'database',
+    'model',
+    'ai',
+    'tools',
+    'presets',
     'chat_observer',
     'agents',
     'chat',
@@ -33,14 +38,11 @@ const modelField = (description: string, modality: string) =>
     modelAddressSchema({ description, default: '无', modality, roles: true })
 
 /**
- * 配置分五组，与 v1 一致。默认值全部来自 `DEFAULT_CONFIG`，schema 只负责
+ * 插件实例配置。默认值来自 `DEFAULT_CONFIG`，schema 只负责
  * 界面语义与取值范围，避免两处默认值漂移。
  */
 export const Config: Schema<Config> = Schema.intersect([
     Schema.object({
-        enableSnapshotInjection: Schema.boolean()
-            .description('开启记忆快照注入。')
-            .default(DEFAULT_CONFIG.enableSnapshotInjection),
         debug: Schema.boolean()
             .description(
                 '记录召回、提取、Dream 每次模型调用的完整提示词、原始响应与诊断事件。'
@@ -114,9 +116,6 @@ export const Config: Schema<Config> = Schema.intersect([
             .default(DEFAULT_CONFIG.memoryCreateToolMaxMemories)
     }).description('工具配置'),
     Schema.object({
-        enableUserProfileInjection: Schema.boolean()
-            .description('开启用户画像注入。')
-            .default(DEFAULT_CONFIG.enableUserProfileInjection),
         enableUserProfileGeneration: Schema.boolean()
             .description('进行记忆提取后，生成、更新相关用户画像。')
             .default(DEFAULT_CONFIG.enableUserProfileGeneration),
@@ -137,49 +136,6 @@ export const Config: Schema<Config> = Schema.intersect([
             .default(DEFAULT_CONFIG.userProfileMemoryLimit)
     }).description('用户画像配置'),
     Schema.object({
-        enableConversationIsolation: Schema.boolean()
-            .description(
-                '自动召回与 living_memory_search 只检索当前会话产生的记忆与全局记忆。'
-            )
-            .default(DEFAULT_CONFIG.enableConversationIsolation),
-        recallIntervalMessages: Schema.number()
-            .min(0)
-            .max(200)
-            .step(1)
-            .description(
-                '每累计该条数的新消息（含 bot 未回复的闲聊）自动召回一次记忆，会话首次对话时立即召回。设为 0 时关闭自动召回。'
-            )
-            .default(DEFAULT_CONFIG.recallIntervalMessages),
-        recallHistoryMessages: Schema.number()
-            .min(1)
-            .max(200)
-            .step(1)
-            .description('每次召回取最近该条数的消息作为上下文。')
-            .default(DEFAULT_CONFIG.recallHistoryMessages),
-        snapshotMaxLines: Schema.number()
-            .min(5)
-            .max(50)
-            .step(1)
-            .description('记忆快照的最大行数。')
-            .default(DEFAULT_CONFIG.snapshotMaxLines)
-    }).description('记忆召回配置'),
-    Schema.object({
-        extractionWindowMessages: Schema.number()
-            .min(0)
-            .max(360)
-            .step(1)
-            .description(
-                '未提取的消息累计达到该条数时自动提取一次记忆。设为 0 时关闭自动提取。'
-            )
-            .default(DEFAULT_CONFIG.extractionWindowMessages),
-        enableAutoDream: Schema.boolean()
-            .description('自动提取保存新记忆后，检索近邻并通过 Dream 整理。')
-            .default(DEFAULT_CONFIG.enableAutoDream),
-        extractionIncludeOverheard: Schema.boolean()
-            .description(
-                '旁听提取：控制 bot 未参与的闲聊是否计入记忆提取。每次对话及其前方一个提取窗口内的消息总是提取；开启后窗口之外的闲聊也一并提取，关闭时丢弃。'
-            )
-            .default(DEFAULT_CONFIG.extractionIncludeOverheard),
         enableExtractionWhitelist: Schema.boolean()
             .description('只对白名单内的会话自动提取记忆。')
             .default(DEFAULT_CONFIG.enableExtractionWhitelist),
@@ -191,7 +147,8 @@ export const Config: Schema<Config> = Schema.intersect([
 ])
 
 export async function apply(ctx: Context, config: Config = DEFAULT_CONFIG) {
+    registerRouteSettings(ctx)
     const service = new LivingmemoryService(ctx, config)
-    ctx.effect(() => service.start())
+    await ctx.effect(() => service.start())
     ctx.logger.info('livingmemory loaded')
 }

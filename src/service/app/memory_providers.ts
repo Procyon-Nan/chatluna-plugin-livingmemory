@@ -1,4 +1,3 @@
-import type { MemoryBackend } from '@chatluna/memory'
 import type { LivingMemoryRepository } from '../persistence/repository.ts'
 import type { LivingMemoryMutationService } from './mutation_service.ts'
 import { loadMemorySourceMessages } from '../app/query_projections.ts'
@@ -23,11 +22,9 @@ import type {
 
 export interface LivingMemoryProviderOptions {
     repository: LivingMemoryRepository
-    backend: Pick<MemoryBackend, 'search'>
     /** 写路径统一经预设级串行队列与索引同步，见 `LivingMemoryMutationService`。 */
     mutations: LivingMemoryMutationService
-    /** 混合检索引擎；缺失时检索退回后端关键词打分。 */
-    searchEngine?: Pick<LivingMemorySearchProvider, 'searchMemories'>
+    searchEngine: Pick<LivingMemorySearchProvider, 'searchMemories'>
 }
 
 /**
@@ -49,43 +46,12 @@ export class LivingMemoryMemoryProviders
 {
     constructor(private readonly options: LivingMemoryProviderOptions) {}
 
-    /**
-     * 工具检索走混合检索引擎（向量 + 关键词 + 可选重排）；引擎未注入时
-     * 退回后端的关键词检索，保证工具在索引尚未就绪时仍可调用。
-     */
-    async searchMemories(
+    searchMemories(
         presetId: string,
         input: LivingMemorySearchInput,
         conversationId?: string
     ): Promise<LivingMemorySearchResult[]> {
-        if (this.options.searchEngine !== undefined) {
-            return await this.options.searchEngine.searchMemories(
-                presetId,
-                input,
-                conversationId
-            )
-        }
-        const hits = await this.options.backend.search(
-            { presetId, ...(conversationId === undefined ? {} : { conversationId }) },
-            {
-                texts: input.searchTexts,
-                ...(input.searchKeywords === undefined ? {} : { keywords: input.searchKeywords }),
-                types: input.memoryTypes,
-                ...(input.memoryStatus === undefined ? {} : { status: input.memoryStatus })
-            }
-        )
-        return hits.map((hit) => ({
-            id: hit.entry.id,
-            type: hit.entry.type,
-            content: hit.entry.content,
-            keywords: [...hit.entry.keywords],
-            summary: hit.entry.summary ?? null,
-            sentiment: hit.entry.sentiment ?? null,
-            importance: hit.entry.importance ?? null,
-            sourceLabel: null,
-            createdAt: hit.entry.createdAt,
-            updatedAt: hit.entry.updatedAt
-        }))
+        return this.options.searchEngine.searchMemories(presetId, input, conversationId)
     }
 
     getMemorySourceMessages(presetId: string, memoryId: string) {

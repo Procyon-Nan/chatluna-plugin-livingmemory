@@ -55,6 +55,7 @@ interface CoordinatorHarnessOptions {
 }
 
 interface CoordinatorHarness {
+    windowMessages: number
     includeOverheard: boolean
     coordinator: LivingMemoryExtractionCoordinator
     messageLog: TestHistory
@@ -71,6 +72,7 @@ interface CoordinatorHarness {
     /** 协调器传给提取器的取消信号；最后一次调用为准。 */
     getExtractorSignal: () => AbortSignal | undefined
     queued: string[][]
+    dreamFlags: boolean[]
     warnings: unknown[][]
 }
 
@@ -81,6 +83,7 @@ const createHarness = (
     const jobStore = createJobStore()
     const appended: CoordinatorHarness['appended'] = []
     const queued: string[][] = []
+    const dreamFlags: boolean[] = []
     const captured = createCapturedLogger(false)
     let extractorCalls = 0
     const extractorInputs: string[] = []
@@ -171,7 +174,6 @@ const createHarness = (
 
     const coordinator = new LivingMemoryExtractionCoordinator(
         {
-            extractionWindowMessages: options.window ?? 4,
             enableExtractionWhitelist:
                 options.enableExtractionWhitelist ?? false,
             extractionWhitelist: options.extractionWhitelist ?? []
@@ -183,17 +185,20 @@ const createHarness = (
         extractor,
         { resolveOrGenerateCardText: async () => '你是测试助手。' },
         captured.logger,
-        (_preset, ids) => {
+        (_preset, ids, _speakers, dream) => {
+            dreamFlags.push(dream)
             queued.push(ids)
         }
     )
     return {
+        windowMessages: options.window ?? 4,
         includeOverheard: options.includeOverheard ?? false,
         coordinator,
         messageLog,
         jobStore,
         appended,
         queued,
+        dreamFlags,
         getExtractorCalls: () => extractorCalls,
         getExtractorInputs: () => extractorInputs,
         getExtractorSignal: () => extractorSignal,
@@ -231,12 +236,15 @@ const entry = (role: 'user' | 'assistant', content: string): Omit<ChatHistoryEnt
 const queueExtraction = async (
     harness: CoordinatorHarness,
     initialCursor?: number,
-    eligiblePosition?: number
+    eligiblePosition?: number,
+    enableAutoDream = true
 ) => {
     await harness.coordinator.queue(
         scope,
         {
             includeOverheard: harness.includeOverheard,
+            windowMessages: harness.windowMessages,
+            enableAutoDream,
             resolveTranscriptOrigin: async () => ({
                 header: '以下是聊天记录：',
                 sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
@@ -708,6 +716,8 @@ describe('LivingMemoryExtractionCoordinator', () => {
         ])
         await harness.coordinator.queue(whitelistedScope, {
             includeOverheard: harness.includeOverheard,
+            windowMessages: harness.windowMessages,
+            enableAutoDream: true,
             resolveTranscriptOrigin: async () => ({
                 header: 'h',
                 sourceLabel: 's'
@@ -721,6 +731,8 @@ describe('LivingMemoryExtractionCoordinator', () => {
         ])
         await harness.coordinator.queue(whitelistedScope, {
             includeOverheard: harness.includeOverheard,
+            windowMessages: harness.windowMessages,
+            enableAutoDream: true,
             resolveTranscriptOrigin: async () => ({
                 header: 'h',
                 sourceLabel: 's'
@@ -970,4 +982,22 @@ describe('LivingMemoryExtractionCoordinator', () => {
         await new Promise((resolve) => setTimeout(resolve, 20))
         expect(harness.getExtractorCalls()).toBe(1)
     })
+})
+
+it('keeps in-flight Dream settings and applies a new rule to the next extraction', async () => {
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const h = createHarness({ window: 2, extract: async () => {
+        await gate
+        return createExtractionResult({ extracted: [createExtractedMemory()] })
+    } })
+    await queueExtraction(h)
+    h.messageLog.append(scope.conversationId, [entry('user', 'q1'), entry('assistant', 'a1')])
+    await queueExtraction(h)
+    await waitFor(() => h.getExtractorCalls() === 1, 'first extraction started')
+    h.messageLog.append(scope.conversationId, [entry('user', 'q2'), entry('assistant', 'a2')])
+    await queueExtraction(h, undefined, undefined, false)
+    release()
+    await waitFor(() => h.dreamFlags.length === 2, 'both extractions saved')
+    assert.deepEqual(h.dreamFlags, [true, false])
 })

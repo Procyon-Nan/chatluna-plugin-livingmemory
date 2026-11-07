@@ -16,12 +16,14 @@ import type { MemoryVectorIndexStatus } from '../src/contracts/vector_index.ts'
  */
 const createWebUI = () => {
     const states = new Map<string, (params: any) => unknown>()
+    const refresh = new Map<string, readonly string[]>()
     const actions = new Map<string, (...args: any[]) => unknown>()
     const events: string[] = []
 
     const chatluna_webui = {
-        state: (key: string, options: { get: (params: any) => unknown }) => {
+        state: (key: string, options: { get: (params: any) => unknown; refreshOn: readonly string[] }) => {
             states.set(key, options.get)
+            refresh.set(key, options.refreshOn)
             return () => {}
         },
         action: (name: string, _options: unknown, handler: (...args: any[]) => unknown) => {
@@ -35,6 +37,7 @@ const createWebUI = () => {
         permissions: { levelOf: async () => Number.POSITIVE_INFINITY },
         emit: (event: string) => events.push(event),
         states,
+        refresh,
         actions,
         events,
         read: async (key: string, params?: unknown) => {
@@ -90,7 +93,7 @@ const withWebUI = async (
         const ui = createWebUI()
         livingMemoryWebUI(
             {
-                ...ctx,
+                effect: ctx.effect.bind(ctx),
                 chatluna_webui: ui.chatluna_webui,
                 permissions: ui.permissions,
                 emit: ui.emit
@@ -98,7 +101,6 @@ const withWebUI = async (
             {
                 admin: adminOf(ctx, repository),
                 repository,
-                jobs: {} as never,
                 logger: { summary: () => {} } as never
             }
         )
@@ -253,5 +255,15 @@ it('overwrites a profile with the edited text', async () => {
 
         const [updated] = await repository.listUserProfilesByPreset('preset-1')
         assert.equal(updated?.content, '新内容')
+    })
+})
+it('refreshes the task list from its own repository and preserves partial Dream results', async () => {
+    await withWebUI(async (_ctx, repository, ui) => {
+        const job = await repository.createJob({ presetId: 'preset-1', conversationId: 'c' }, 'dream', 'manual')
+        await repository.updateJob(job.id, { status: 'partial' })
+        assert.deepEqual(ui.events, ['livingmemory/job-change', 'livingmemory/job-change'])
+        assert.ok(ui.refresh.get('livingmemory.jobs')?.includes(ui.events[1]!))
+        const rows = await ui.read('livingmemory.jobs', { presetId: 'preset-1' }) as { id: string; status: string }[]
+        assert.deepEqual(rows.map(({ id, status }) => [id, status]), [[job.id, 'partial']])
     })
 })

@@ -2,7 +2,7 @@ import type { MemoryEntryRecord, MemoryJobRecord } from './memory.ts'
 import type { MemoryListQuery } from './rpc.ts'
 import type { DreamTriggerResult, MemoryServiceStatus } from './workflows.ts'
 
-/** 记忆页的作用域视图：与 v2 原生记忆页的 `MemoryScopeView` 同形。 */
+/** 记忆页的作用域视图：供管理页选择预设及会话。 */
 export interface LivingMemoryScopeView {
     kind: 'global' | 'preset' | 'guild' | 'user' | 'conversation'
     presetId?: string | undefined

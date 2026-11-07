@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import type { Context } from 'cordis'
+import type { RouteSettings } from '../src/routing.ts'
 import type { Agent } from '@chatluna/agent'
 import { ChatMessage, contentText } from '@chatluna/message'
 import { LivingMemorySessionHooks } from '../src/service/session_hooks.ts'
@@ -15,7 +16,7 @@ const settle = async () => {
 }
 type Prepare = (input: { agent: Agent; stepNumber: number; messages: readonly ChatMessage[] }) => Promise<{ contribute?: readonly ChatMessage[] } | undefined>
 
-function createHarness(config: { overheard?: boolean; extractionWindow?: number; recallInterval?: number } = {}) {
+function createHarness(config: { overheard?: boolean; extractionWindow?: number; recallInterval?: number; rules?: (userId?: string) => Partial<RouteSettings> } = {}) {
     const framework = new FrameworkHistoryFixture()
     const listeners = new Map<string, ((payload: any) => unknown)[]>()
     const recalls: { scope: ChatHistoryScope; current: LivingMemoryTranscriptMessage; history: () => Promise<LivingMemoryTranscriptMessage[]>; position: number }[] = []
@@ -52,7 +53,7 @@ function createHarness(config: { overheard?: boolean; extractionWindow?: number;
     const hooks = new LivingMemorySessionHooks(ctx, {
         history: new LivingMemoryChatHistory(framework),
         recall: {
-            queue: async (scope: ChatHistoryScope, current: LivingMemoryTranscriptMessage,
+            queue: async (_settings: unknown, scope: ChatHistoryScope, current: LivingMemoryTranscriptMessage,
                 history: () => Promise<LivingMemoryTranscriptMessage[]>, position: number) => {
                 recalls.push({ scope, current, history, position })
             },
@@ -66,17 +67,19 @@ function createHarness(config: { overheard?: boolean; extractionWindow?: number;
             },
             clearByConversation: () => {}
         } as never,
-        userProfiles: { renderForSpeakers: async () => '' } as never,
+        userProfiles: { renderForSpeakers: async () => '测试画像' } as never,
         repository: { getLatestSnapshotByScope: async () => snapshotText === '' ? undefined : {
             items: [{ finalText: snapshotText, matchedMemories: [], toolCallSummary: { searchTexts: [], searchKeywords: [], maxCandidates: 0 } }]
         } as never },
         logger: captured.logger,
-        config: {
+        settingsOf: (_key, userId) => ({
+            enableAutoDream: true, enableConversationIsolation: false, snapshotMaxLines: 5,
             enableSnapshotInjection: true, enableUserProfileInjection: false,
             recallIntervalMessages: config.recallInterval ?? 1, recallHistoryMessages: 20,
             extractionWindowMessages: config.extractionWindow ?? 2,
-            extractionIncludeOverheard: config.overheard ?? false
-        }
+            extractionIncludeOverheard: config.overheard ?? false,
+            ...config.rules?.(userId)
+        })
     })
     const dispose = hooks.register()
     const agent = (turn = 1) => ({
@@ -319,4 +322,23 @@ describe('LivingMemorySessionHooks', () => {
         await settle()
         assert.equal(harness.extractions.length, 0)
     })
+})
+
+it('uses the triggering user for injection, recall and tool isolation even if another user spoke later', async () => {
+    const h = createHarness({ rules: id => ({
+        enableUserProfileInjection: id === 'alice', enableConversationIsolation: id === 'alice',
+        recallIntervalMessages: id === 'alice' ? 1 : 0
+    }) })
+    await h.observed(1, '问', { userId: 'alice' })
+    await h.observed(2, '旁听', { userId: 'bob' })
+    const a = h.agent()
+    await h.engineTurn(a, 1, 1)
+    const result = await h.prepare(a, [1])
+    assert.match(contentText(result!.contribute![0].content), /测试画像/)
+    assert.equal(h.hooks.settingsForTurn(a)?.enableConversationIsolation, true)
+    const b = h.agent(2)
+    await h.engineTurn(b, 2, 2)
+    assert.equal(await h.prepare(b, [2]), undefined)
+    assert.equal(h.hooks.settingsForTurn(b)?.enableConversationIsolation, false)
+    assert.equal(h.recalls.length, 1)
 })

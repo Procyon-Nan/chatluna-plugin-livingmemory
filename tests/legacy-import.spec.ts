@@ -15,7 +15,7 @@ const indexSink = {
 
 /**
  * v1 `exportPresetData` 的输出形状：版本 5，条目不含 `topic`/`title`/`fields`。
- * v2 的解析必须按缺省规则补齐，否则导入后原生记忆页拿不到标题与主题。
+ * v2 的解析必须按缺省规则补齐，否则导入后管理页拿不到标题与主题。
  */
 const v1Export = (sourcePresetId: string): LivingMemoryPresetExport =>
     ({

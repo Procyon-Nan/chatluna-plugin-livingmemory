@@ -29,7 +29,6 @@ export const normalizeManualUserProfileContent = (content: string) => {
 
 type LivingMemoryUserProfileConfig = Pick<
     LivingMemoryConfig,
-    | 'enableUserProfileInjection'
     | 'userProfileMinMemoryCount'
     | 'userProfileMemoryLimit'
     | 'mainModel'
@@ -433,9 +432,6 @@ export class LivingMemoryUserProfileService {
     }
 
     async renderForSpeakers(presetId: string, speakerKeys: string[]) {
-        if (!this.config.enableUserProfileInjection) {
-            return ''
-        }
 
         const orderedKeys = [
             ...new Set(speakerKeys.map((key) => key.trim()).filter(Boolean))

@@ -1,0 +1,16 @@
+# Bilingual section hashes: English and Chinese.
+/agent-note-standalone-memory-and-conversation-rules:
+  en: 6eeef8d190d5a979
+  zh: 681d65622d419612
+/agent-note-standalone-memory-and-conversation-rules/problem:
+  en: 7be1d06d8f1699a5
+  zh: f0db32dad5bb1666
+/agent-note-standalone-memory-and-conversation-rules/decision:
+  en: f53b1d74ebb49c11
+  zh: 203096fab897e7b9
+/agent-note-standalone-memory-and-conversation-rules/alternatives-considered:
+  en: ea0cd85ce7d67b41
+  zh: ae29b825ee9001d1
+/agent-note-standalone-memory-and-conversation-rules/consequences:
+  en: 2d2507420afed341
+  zh: e242b4a6d766815b

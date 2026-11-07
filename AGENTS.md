@@ -43,16 +43,16 @@ livingmemory/
 ├── tsconfig.client.json        # 客户端 TypeScript 配置，继承本插件配置
 ├── src/
 │   ├── index.ts                # 插件入口、配置 schema、依赖声明与服务启动
-│   ├── service.ts              # Cordis 服务：装配仓储、后端、历史读取、索引、工作流与工具
+│   ├── service.ts              # Cordis 服务：装配仓储、历史读取、索引、工作流与工具
+│   ├── routing.ts              # 对话规则注册与本轮有效配置读取
 │   ├── query.ts                # 记忆、快照、任务、画像的列表过滤、分面统计与分页
 │   ├── worker_artifacts.ts     # 解析 Worker 打包产物路径（源码与构建包共用）
 │   ├── contracts/              # 跨模块契约：记忆与任务、工作流、向量索引、管理接口；框架类型直接导入公共包
 │   ├── service/
-│   │   ├── backend.ts          # v2 MemoryBackend 实现，映射到 v1 仓储
 │   │   ├── user_profile.ts     # 人物画像生成、审阅与注入渲染
 │   │   ├── chat_history.ts     # 无缓存读取框架聊天历史，转换真实时间、昵称与正文，筛选消费范围
 │   │   ├── session_hooks.ts    # 会话钩子：本轮召回与注入、旁听触发、实际交付等待、历史与预设消费边界
-│   │   ├── app/                # 应用层组装：管理服务与命令、WebUI 数据面、启动与每日维护、变更服务、查询投影与任务面
+│   │   ├── app/                # 应用层组装：管理服务与命令、WebUI 数据面、启动与每日维护、变更服务、管理页视图与任务通知
 │   │   ├── logging/            # 诊断日志构造、凭据脱敏与模型调用记录
 │   │   ├── memory/             # 字段规范化、说话人身份、主题标题推导、来源消息、人设卡片
 │   │   │   ├── origins/        # 来源消息的规范化与迁移
@@ -114,7 +114,7 @@ livingmemory/
 | [doc/migration-plan.md](doc/migration-plan.md) | 迁移目标、确认事项、任务编号与依赖、设计/实施/验收进度、双方接口及职责草案、旧数据迁移范围 |
 | [doc/migration-stages.md](doc/migration-stages.md) | S1—S8 实施阶段划分、各阶段交付物、模块归属、向量索引与测试处置、提交粒度与阻塞项 |
 | [doc/message-pool.md](doc/message-pool.md) | M05 框架聊天历史、纯聊天消息筛选、插件消费进度、重新计数与实施验收 |
-| [doc/framework-requirements.md](doc/framework-requirements.md) | 由 ChatLuna v2 承担的接口项：统一采集、交付归属、会话与预设通知、调度归属、任务受理与取消、原生任务页面接入，含当前源码事实与验收条件 |
+| [doc/framework-requirements.md](doc/framework-requirements.md) | 由 ChatLuna v2 承担的接口项：统一采集、交付归属、会话与预设通知、对话规则注册与任务归属，含当前源码事实与验收条件 |
 | [doc/v1-behavior-inventory.md](doc/v1-behavior-inventory.md) | D11 的 v1 全量业务行为清单、源码/测试核对入口、v2 适配归属和执行标记 |
 | [.agent/note/README.zh.md](.agent/note/README.zh.md) | Agent Note 工作流、目录约定、状态转换和归档规则 |
 

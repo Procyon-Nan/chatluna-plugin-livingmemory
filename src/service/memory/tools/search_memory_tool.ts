@@ -9,6 +9,7 @@ import {
 import { memorySearchTool } from '../../prompts/memory_tools.ts'
 import {
     agentOfTool,
+    type LivingMemoryToolAgent,
     describeLivingMemoryToolScopeFailure,
     resolveToolMemoryPresetId,
     resolveToolMemoryScope
@@ -28,7 +29,7 @@ interface SearchArgs {
 export const createSearchMemoryTool = (
     searchProvider: LivingMemorySearchProvider,
     includeMemoryIds: boolean,
-    enableConversationIsolation = false
+    isConversationIsolated: (agent?: LivingMemoryToolAgent) => boolean = () => false
 ): ToolDefinition<SearchArgs> =>
     defineTool({
         name: memorySearchTool.name,
@@ -39,7 +40,7 @@ export const createSearchMemoryTool = (
             const agent = agentOfTool(call.agent)
             let presetId: string
             let conversationId: string | undefined
-            if (enableConversationIsolation) {
+            if (isConversationIsolated(agent)) {
                 const resolution = resolveToolMemoryScope(agent)
                 if (resolution.ok === false) {
                     throw new Error(describeLivingMemoryToolScopeFailure(resolution.reason))

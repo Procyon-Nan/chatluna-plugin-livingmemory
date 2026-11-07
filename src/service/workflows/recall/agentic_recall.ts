@@ -1,3 +1,4 @@
+import type { RouteSettings } from '../../../routing.ts'
 import type { Context } from 'cordis'
 import type {
     AgenticMemorySearchToolCallSummary,
@@ -24,13 +25,9 @@ import type { LivingMemoryLoopTool } from '../tool_call.ts'
 import { LivingMemoryToolLoop } from '../tool_loop.ts'
 import type { LivingMemorySearchEngine } from './memory_search_engine.ts'
 
-type LivingMemoryAgenticRecallConfig = Pick<
-    LivingMemoryConfig,
-    | 'snapshotMaxLines'
-    | 'subModel'
-    | 'memorySearchToolMaxResults'
-    | 'enableConversationIsolation'
->
+type RecallModels = Pick<LivingMemoryConfig, 'subModel' | 'memorySearchToolMaxResults'>
+type RecallRule = Pick<RouteSettings, 'snapshotMaxLines' | 'enableConversationIsolation'>
+type LivingMemoryAgenticRecallConfig = RecallModels & RecallRule
 
 interface SearchArgs {
     searchTexts: string[]
@@ -218,12 +215,13 @@ export class LivingMemoryAgenticRecallExecutor {
 
     constructor(
         private readonly ctx: Context,
-        private readonly config: LivingMemoryAgenticRecallConfig,
+        private readonly config: RecallModels,
         private readonly searchEngine: LivingMemorySearchEngine,
         private readonly logger: LivingMemoryLogger
     ) {}
 
     async run(
+        rules: RecallRule,
         scope: MemoryScope,
         currentMessage: LivingMemoryTranscriptMessage,
         historyMessages: LivingMemoryTranscriptMessage[],
@@ -237,7 +235,8 @@ export class LivingMemoryAgenticRecallExecutor {
             scope,
             currentMessage,
             historyMessages,
-            snapshotLines
+            snapshotLines,
+            rules.snapshotMaxLines
         )
         const recordedSearchCalls: RecordedAgenticSearchCall[] = []
         let savedSnapshot: AgenticMemorySnapshotItem | null = null
@@ -249,7 +248,7 @@ export class LivingMemoryAgenticRecallExecutor {
             input: prompt.inputPrompt,
             tools: createRecallTools({
                 searchEngine: this.searchEngine,
-                config: this.config,
+                config: { ...this.config, ...rules },
                 scope,
                 snapshotLines,
                 recordedSearchCalls,
@@ -283,7 +282,8 @@ export class LivingMemoryAgenticRecallExecutor {
         scope: MemoryScope,
         currentMessage: LivingMemoryTranscriptMessage,
         historyMessages: LivingMemoryTranscriptMessage[],
-        snapshotLines: readonly string[]
+        snapshotLines: readonly string[],
+        snapshotMaxLines: number
     ) {
         const assistantLabel = resolveScopeAssistantLabel(scope)
         const lastMessage = this.formatter.toExtractionPayload([
@@ -296,7 +296,7 @@ export class LivingMemoryAgenticRecallExecutor {
             lastMessage,
             chatHistory,
             snapshotLines,
-            snapshotMaxLines: this.config.snapshotMaxLines
+            snapshotMaxLines
         })
     }
 }

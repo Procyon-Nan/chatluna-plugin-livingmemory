@@ -5,6 +5,8 @@ import type { MemoryTranscriptOrigin } from '../transcript/origin_context.ts'
 import { toNonEmptyString } from '../shared/utils.ts'
 
 export interface QueueExtractionOptions {
+    windowMessages: number
+    enableAutoDream: boolean
     includeOverheard: boolean
     resolveTranscriptOrigin: () => Promise<MemoryTranscriptOrigin>
 }

@@ -38,11 +38,8 @@ const createCoordinator = (options: {
     logger?: LivingMemoryLogger
 }) => {
     const run = options.run ?? defaultRun
-    return new LivingMemoryRecallCoordinator(
-        {
-            recallIntervalMessages: options.recallIntervalMessages ?? 1,
-            subModel: options.subModel ?? 'test/sub-model'
-        },
+    return Object.assign(new LivingMemoryRecallCoordinator(
+        options.subModel ?? 'test/sub-model',
         {
             head: async () => options.tailSeq?.() ?? 100,
             after: async (_scope, after, before = Infinity) => {
@@ -61,6 +58,7 @@ const createCoordinator = (options: {
         },
         {
             run: async (
+                _rules,
                 _scope,
                 _message,
                 historyMessages,
@@ -75,7 +73,7 @@ const createCoordinator = (options: {
             }
         },
         options.logger ?? logger
-    )
+    ), { rules: { recallIntervalMessages: options.recallIntervalMessages ?? 1, snapshotMaxLines: 5, enableConversationIsolation: false } })
 }
 
 it('persists the agentic snapshot without persisting a successful job', async () => {
@@ -94,7 +92,7 @@ it('persists the agentic snapshot without persisting a successful job', async ()
         logger: captured.logger
     })
 
-    await coordinator.queue(scope, currentMessage, async () => [])
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [])
     await waitFor(
         () =>
             captured.info.some((message) =>
@@ -128,7 +126,7 @@ it('keeps the previous snapshot without persisting a job when the agent passes',
         logger: captured.logger
     })
 
-    await coordinator.queue(scope, currentMessage, async () => [])
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [])
     await waitFor(
         () =>
             captured.info.some((message) =>
@@ -152,7 +150,7 @@ it('skips recall without persisting a job when the current message is empty', as
         }
     })
 
-    await coordinator.queue(
+    await coordinator.queue(coordinator.rules,
         scope,
         { ...currentMessage, contentLines: ['  '] },
         async () => []
@@ -177,7 +175,7 @@ it('skips recall without persisting a job when subModel is not configured', asyn
         logger: captured.logger
     })
 
-    await coordinator.queue(scope, currentMessage, async () => [])
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [])
 
     assert.equal(runCalls, 0)
     assert.equal(jobStore.jobs.length, 0)
@@ -209,10 +207,10 @@ it('serializes recall runs for the same scope without persisted running state', 
         logger: captured.logger
     })
 
-    await coordinator.queue(scope, currentMessage, async () => [])
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [])
     // 间隔已满足：第二次请求越过间隔检查，只能被运行锁拦下
     tail = 101
-    await coordinator.queue(scope, currentMessage, async () => [])
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [])
     await new Promise((resolve) => setTimeout(resolve, 20))
     assert.equal(runCalls, 1)
 
@@ -238,7 +236,7 @@ it('persists one failed recall job when the agentic executor throws', async () =
         }
     })
 
-    await coordinator.queue(scope, currentMessage, async () => [])
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [])
     await waitFor(() => jobStore.jobs.length === 1, 'failed agentic recall')
 
     const job = jobStore.jobs[0]
@@ -260,7 +258,7 @@ it('persists one failed recall job when snapshot persistence throws', async () =
         }
     })
 
-    await coordinator.queue(scope, currentMessage, async () => [])
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [])
     await waitFor(() => jobStore.jobs.length === 1, 'failed snapshot write')
 
     assert.match(jobStore.jobs[0]?.error ?? '', /snapshot write failure/u)
@@ -281,12 +279,12 @@ it('retries immediately after a failed recall instead of waiting out the interva
         recallIntervalMessages: 10
     })
 
-    await coordinator.queue(scope, currentMessage, async () => [])
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [])
     await waitFor(() => jobStore.jobs.length === 1, 'failed first recall')
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     // 日志没有新消息：锚点若未清除，这次请求会被间隔拦下
-    await coordinator.queue(scope, currentMessage, async () => [])
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [])
     await waitFor(() => runCalls === 2, 'immediate retry')
 })
 
@@ -309,7 +307,7 @@ it('records history loading failure without invoking recall or updating the snap
         logger: captured.logger
     })
 
-    await coordinator.queue(scope, currentMessage, async () => {
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => {
         throw new Error('private history failure detail')
     })
     await waitFor(() => jobStore.jobs.length === 1, 'failed history loading')
@@ -333,23 +331,23 @@ it('gates recall by message gap since the last executed recall', async () => {
     })
 
     // 首启无锚点：立即召回
-    await coordinator.queue(scope, currentMessage, async () => [])
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [])
     await waitFor(() => snapshots.length === 1, 'first immediate recall')
 
     // 间隔不足：跳过
     tail = 105
-    await coordinator.queue(scope, currentMessage, async () => [])
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [])
     await new Promise((resolve) => setTimeout(resolve, 20))
     assert.equal(snapshots.length, 1)
 
     // 达到间隔：再次执行并前移锚点
     tail = 110
-    await coordinator.queue(scope, currentMessage, async () => [])
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [])
     await waitFor(() => snapshots.length === 2, 'second recall after gap')
 
     // 锚点已前移到 110：新一轮间隔从上次执行点重新计
     tail = 115
-    await coordinator.queue(scope, currentMessage, async () => [])
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [])
     await new Promise((resolve) => setTimeout(resolve, 20))
     assert.equal(snapshots.length, 2)
 })
@@ -364,22 +362,22 @@ it('counts chat messages rather than sparse history positions for recall interva
         repository: { upsertSnapshot: async () => { snapshots += 1 } }
     })
 
-    await coordinator.queue(scope, currentMessage, async () => [], 100)
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [], 100)
     await waitFor(() => snapshots === 1, 'first recall at position 100')
     await new Promise<void>((resolve) => setImmediate(resolve))
 
     // 中间的 899 个日志位置可以属于工具与标记；这里只多了一条聊天。
     positions.push(1000)
-    await coordinator.queue(scope, currentMessage, async () => [], 1000)
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [], 1000)
     assert.equal(snapshots, 1)
 
     positions.push(1500)
-    await coordinator.queue(scope, currentMessage, async () => [], 1500)
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [], 1500)
     await waitFor(() => snapshots === 2, 'recall after two actual chats')
     await new Promise<void>((resolve) => setImmediate(resolve))
 
     positions.push(3000)
-    await coordinator.queue(scope, currentMessage, async () => [], 3000)
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [], 3000)
     assert.equal(snapshots, 2, 'the next interval starts at the last recalled chat')
     await coordinator.stop()
 })
@@ -395,12 +393,12 @@ it('starts a new recall interval on every preset switch including switching back
 
     for (const [index, active] of [scope, presetB, scope].entries()) {
         coordinator.clearByConversation(scope.conversationId)
-        await coordinator.queue(active, currentMessage, async () => [], 100)
+        await coordinator.queue(coordinator.rules, active, currentMessage, async () => [], 100)
         await waitFor(() => snapshots === index + 1, 'first recall after preset change')
         await new Promise<void>((resolve) => setImmediate(resolve))
     }
 
-    await coordinator.queue(scope, currentMessage, async () => [], 100)
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [], 100)
     assert.equal(snapshots, 3, 'unchanged scope still obeys its current interval')
     await coordinator.stop()
 })
@@ -421,7 +419,7 @@ it('cancels an in-flight recall without recording a failed job', async () => {
         }
     })
     // 先让运行器拿到取消信号：队列在下一轮事件循环才启动运行。
-    const queued = coordinator.queue(scope, currentMessage, async () => [])
+    const queued = coordinator.queue(coordinator.rules, scope, currentMessage, async () => [])
     await waitFor(() => signalSeen !== undefined, 'recall running')
     void queued
 
@@ -429,7 +427,7 @@ it('cancels an in-flight recall without recording a failed job', async () => {
     assert.deepEqual(jobStore.jobs, [])
 
     // 停止后不再接收新触发
-    await coordinator.queue(scope, currentMessage, async () => [])
+    await coordinator.queue(coordinator.rules, scope, currentMessage, async () => [])
     await new Promise((resolve) => setTimeout(resolve, 20))
     assert.deepEqual(jobStore.jobs, [])
 })

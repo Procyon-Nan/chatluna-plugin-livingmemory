@@ -1,3 +1,4 @@
+import type { RouteSettings } from '../../../routing.ts'
 import { randomUUID } from 'node:crypto'
 import { isModelConfigured } from '../../shared/utils.ts'
 import { normalizeText, scopeKey } from '../../memory/helpers.ts'
@@ -6,7 +7,6 @@ import { renderSnapshotText } from '../../memory/snapshot/snapshot_text.ts'
 import type { LivingMemoryAgenticRecallExecutor } from './agentic_recall.ts'
 import type {
     JobRepository,
-    LivingMemoryConfig,
     SnapshotRepository
 } from '../../../contracts/workflows.ts'
 import type { ChatHistoryScope, LivingMemoryChatHistory } from '../../chat_history.ts'
@@ -15,10 +15,7 @@ import type {
     MemoryScope
 } from '../../../contracts/memory.ts'
 
-type LivingMemoryRecallCoordinatorConfig = Pick<
-    LivingMemoryConfig,
-    'recallIntervalMessages' | 'subModel'
->
+type RecallSettings = Pick<RouteSettings, 'recallIntervalMessages' | 'snapshotMaxLines' | 'enableConversationIsolation'>
 
 /** 召回间隔锚点所需的消息日志读取面。 */
 type RecallMessageLog = Pick<LivingMemoryChatHistory, 'head' | 'after'>
@@ -44,7 +41,7 @@ export class LivingMemoryRecallCoordinator {
     private readonly tasks = new Set<Promise<void>>()
 
     constructor(
-        private readonly config: LivingMemoryRecallCoordinatorConfig,
+        private readonly subModel: string,
         private readonly messageLog: RecallMessageLog,
         private readonly repository: RecallWorkflowRepository,
         private readonly agenticRecall: RecallAgenticExecutor,
@@ -52,14 +49,15 @@ export class LivingMemoryRecallCoordinator {
     ) {}
 
     async queue(
+        settings: RecallSettings,
         scope: ChatHistoryScope,
         currentMessage: LivingMemoryTranscriptMessage,
         loadHistoryMessages: () => Promise<LivingMemoryTranscriptMessage[]>,
         currentPosition?: number
     ) {
-        if (this.config.recallIntervalMessages === 0) return
+        if (settings.recallIntervalMessages === 0) return
         if (this.controller.signal.aborted) return
-        if (!isModelConfigured(this.config.subModel)) {
+        if (!isModelConfigured(this.subModel)) {
             this.logger.diagnosticSummary(() => ({
                 event: '跳过记忆召回',
                 detail: `${formatLogScope(scope)}; 原因：召回模型未配置`
@@ -74,10 +72,10 @@ export class LivingMemoryRecallCoordinator {
         const anchorPosition = this.anchorPositionByScope.get(lockKey)
         if (anchorPosition !== undefined) {
             const messagesSinceRecall = (await this.messageLog.after(scope, anchorPosition, position + 1)).length
-            if (messagesSinceRecall < this.config.recallIntervalMessages) {
+            if (messagesSinceRecall < settings.recallIntervalMessages) {
                 this.logger.diagnosticSummary(() => ({
                     event: '跳过记忆召回',
-                    detail: `${formatLogScope(scope)}; 召回消息阈值：${messagesSinceRecall}/${this.config.recallIntervalMessages} 条`
+                    detail: `${formatLogScope(scope)}; 召回消息阈值：${messagesSinceRecall}/${settings.recallIntervalMessages} 条`
                 }))
                 return
             }
@@ -107,6 +105,7 @@ export class LivingMemoryRecallCoordinator {
             runId: randomUUID()
         })
         const task = this.run(
+            settings,
             scope,
             currentMessage,
             loadHistoryMessages,
@@ -159,6 +158,7 @@ export class LivingMemoryRecallCoordinator {
     }
 
     private async run(
+        settings: RecallSettings,
         scope: MemoryScope,
         currentMessage: LivingMemoryTranscriptMessage,
         loadHistoryMessages: () => Promise<LivingMemoryTranscriptMessage[]>,
@@ -178,6 +178,7 @@ export class LivingMemoryRecallCoordinator {
             const snapshotLines =
                 snapshotText === '' ? [] : snapshotText.split(/\r?\n/)
             const updatedSnapshot = await this.agenticRecall.run(
+                settings,
                 scope,
                 currentMessage,
                 historyMessages,

@@ -1,15 +1,14 @@
 import { Context, Service } from 'cordis'
 import type { Disposable } from 'cordis'
 import type {} from '@cordisjs/plugin-database'
-import type {} from '@chatluna/memory'
 import type {} from '@chatluna/tool'
-import { LivingMemoryBackend } from './service/backend.ts'
 import { LivingMemoryMutationService } from './service/app/mutation_service.ts'
 import { LivingMemoryMemoryProviders } from './service/app/memory_providers.ts'
 import { LivingMemoryLogger } from './service/logging/logger.ts'
 import { registerLivingMemoryTools } from './service/memory/tools/index.ts'
 import { defineLivingMemoryTables } from './service/persistence/tables.ts'
 import { LivingMemoryRepository } from './service/persistence/repository.ts'
+import { routeSettings } from './routing.ts'
 import { LivingMemoryChatHistory } from './service/chat_history.ts'
 import { LivingMemoryVectorIndexService } from './service/vector_index/service.ts'
 import { LivingMemorySearchEngine } from './service/workflows/recall/memory_search_engine.ts'
@@ -25,7 +24,6 @@ import { LivingMemoryDreamWorkerClient } from './service/workflows/dream/worker/
 import { LivingMemoryDreamJobRunner } from './service/workflows/dream/job_runner.ts'
 import { LivingMemoryDreamCoordinator } from './service/workflows/dream/coordinator.ts'
 import { LivingMemoryJobTracker } from './service/workflows/job_tracker.ts'
-import { LivingMemoryJobSurface } from './service/app/job_surface.ts'
 import { LivingMemoryMaintenance } from './service/app/maintenance.ts'
 import { LivingMemoryAdminService } from './service/app/admin_service.ts'
 import { livingMemoryCommands } from './service/app/commands.ts'
@@ -44,23 +42,14 @@ const serviceName = 'livingmemory'
 export interface LivingMemoryServiceConfig extends LivingMemoryConfig {}
 
 export const DEFAULT_CONFIG: LivingMemoryServiceConfig = {
-    enableConversationIsolation: false,
-    enableSnapshotInjection: true,
-    enableUserProfileInjection: false,
     enableUserProfileGeneration: true,
     enableDreamUserProfileGeneration: true,
-    enableAutoDream: true,
     mainModel: '无',
     subModel: '无',
     userProfileMinMemoryCount: 3,
     userProfileMemoryLimit: 20,
-    recallIntervalMessages: 20,
-    recallHistoryMessages: 20,
-    snapshotMaxLines: 5,
     embeddingModel: '无',
     rerankModel: '无',
-    extractionWindowMessages: 60,
-    extractionIncludeOverheard: false,
     enableExtractionWhitelist: false,
     extractionWhitelist: [],
     memorySearchToolMaxResults: 15,
@@ -76,7 +65,6 @@ export const DEFAULT_CONFIG: LivingMemoryServiceConfig = {
 
 export default class LivingmemoryService extends Service {
     readonly repository: LivingMemoryRepository
-    readonly backend: LivingMemoryBackend
     readonly history: LivingMemoryChatHistory
     readonly vectorIndex: LivingMemoryVectorIndexService
     readonly mutations: LivingMemoryMutationService
@@ -86,7 +74,6 @@ export default class LivingmemoryService extends Service {
     readonly recallCoordinator: LivingMemoryRecallCoordinator
     readonly extractionCoordinator: LivingMemoryExtractionCoordinator
     readonly dreamCoordinator: LivingMemoryDreamCoordinator
-    readonly jobs: LivingMemoryJobSurface
     readonly admin: LivingMemoryAdminService
     readonly maintenance: LivingMemoryMaintenance
     readonly providers: LivingMemoryMemoryProviders
@@ -109,8 +96,6 @@ export default class LivingmemoryService extends Service {
             this.vectorIndex,
             this.logger
         )
-        // 后端写路径委托变更服务，必须在变更服务之后构造。
-        this.backend = new LivingMemoryBackend(this.repository, this.mutations, this.logger)
         this.searchEngine = new LivingMemorySearchEngine(
             ctx,
             config,
@@ -120,7 +105,6 @@ export default class LivingmemoryService extends Service {
         )
         this.providers = new LivingMemoryMemoryProviders({
             repository: this.repository,
-            backend: this.backend,
             mutations: this.mutations,
             searchEngine: this.searchEngine
         })
@@ -169,8 +153,9 @@ export default class LivingmemoryService extends Service {
             this.repository,
             this.logger
         )
+        const settingsOf = (conversationId: string, userId?: string) => routeSettings(ctx, conversationId, userId)
         this.recallCoordinator = new LivingMemoryRecallCoordinator(
-            config,
+            config.subModel,
             this.history,
             this.repository,
             new LivingMemoryAgenticRecallExecutor(
@@ -190,19 +175,14 @@ export default class LivingmemoryService extends Service {
             new LivingMemoryExtractor(ctx, config.mainModel),
             this.presetPersona,
             this.logger,
-            (presetId, memoryIds, speakerKeys) => {
-                if (this.config.enableAutoDream) {
+            (presetId, memoryIds, speakerKeys, enableAutoDream) => {
+                if (enableAutoDream) {
                     this.dreamCoordinator.queueAfterExtraction(presetId, memoryIds)
                 } else if (this.config.enableUserProfileGeneration) {
                     this.userProfiles.queueGeneration(presetId, speakerKeys)
                 }
             }
         )
-        this.jobs = new LivingMemoryJobSurface({
-            repository: this.repository,
-            cancelJob: (jobId) => this.cancelJob(jobId),
-            logger: this.logger
-        })
         this.sessionHooks = new LivingMemorySessionHooks(ctx, {
             history: this.history,
             recall: this.recallCoordinator,
@@ -210,7 +190,7 @@ export default class LivingmemoryService extends Service {
             userProfiles: this.userProfiles,
             repository: this.repository,
             logger: this.logger,
-            config
+            settingsOf
         })
         this.admin = new LivingMemoryAdminService(ctx, {
             config,
@@ -252,7 +232,7 @@ export default class LivingmemoryService extends Service {
      * - 提取与召回只在失败时落任务行，`pending`/`running` 行只可能来自进程中断，
      *   没有在途执行，直接置终态。
      */
-    private async cancelJob(jobId: string) {
+    async cancelJob(jobId: string) {
         const job = await this.repository.getJob(jobId)
         if (
             job === undefined ||
@@ -267,21 +247,23 @@ export default class LivingmemoryService extends Service {
         return await this.repository.cancelJob(jobId, 'cancel requested')
     }
 
-    /** 注册后端、会话钩子与记忆工具；插件卸载时随 effect 一并注销。 */
+    /** 注册会话钩子与记忆工具；插件卸载时随 effect 一并注销。 */
     private register(): Disposable {
-        const unregister = this.ctx.memory.backend(this.backend.id, () => this.backend)
         const stopHooks = this.sessionHooks.register()
         this.registerCommands()
         this.registerWebUI()
         const tools = registerLivingMemoryTools(this.ctx, this.providers, {
             enabled: this.config.enabledMemoryTools,
             createToolMaxMemories: this.config.memoryCreateToolMaxMemories,
-            enableConversationIsolation: this.config.enableConversationIsolation
+            isConversationIsolated: (agent) => {
+                const current = agent && this.sessionHooks.settingsForTurn(agent)
+                if (current) return current.enableConversationIsolation
+                return routeSettings(this.ctx, agent?.options.conversationKey, agent?.options.location?.user).enableConversationIsolation
+            }
         })
         return () => {
             for (const dispose of tools) dispose()
             stopHooks()
-            unregister()
         }
     }
 
@@ -306,12 +288,11 @@ export default class LivingmemoryService extends Service {
         const ui = {
             admin: this.admin,
             repository: this.repository,
-            jobs: this.jobs,
             logger: this.logger
         }
         this.ctx.plugin({
             name: 'livingmemory-webui',
-            inject: ['chatluna_webui'],
+            inject: ['chatluna_webui', 'permissions'],
             apply: (ctx: Context) => {
                 ctx.chatluna_webui.addEntry({
                     baseUrl: import.meta.url,

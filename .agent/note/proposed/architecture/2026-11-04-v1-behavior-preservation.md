@@ -4,6 +4,8 @@ Status: proposed
 
 ## Problem
 
+2026-11-07：本文涉及原生后端的接入方式已由[独立插件决策](../../implemented/architecture/2026-11-07-standalone-memory.zh.md)取代；业务行为继续沿用。
+
 2026-11-06 对消息来源的后续决定见 [使用框架聊天历史](../../implemented/architecture/2026-11-06-framework-chat-history.md)。保留 v1 业务基线继续适用；本文涉及插件自建消息池的实现归属已由该 Note 调整为框架负责采集与保存、插件负责消费与转写。
 
 LivingMemory 从 v1 迁移到 ChatLuna v2 时，需要同时适配 v2 的插件接口、服务生命周期、消息接入、会话作用域和模型调用。若以 v2 现有的 memory 流程或某一个对话引擎为实现起点，容易把 v1 中已经存在的业务行为误当成可选能力，造成消息采集、召回、自动提取、Dream、画像、人设、数据管理或管理入口的语义丢失。

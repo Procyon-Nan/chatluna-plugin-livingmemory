@@ -103,5 +103,6 @@ declare module 'cordis' {
     interface Events<C = any> {
         /** 管理页的刷新信号：记忆、画像或任务发生变化。 */
         'livingmemory/change'(): void
+        'livingmemory/job-change'(): void
     }
 }

@@ -36,7 +36,7 @@ export function defineLivingMemoryTables(ctx: Context) {
         type: 'json',
         initial: []
       },
-      // v2 的结构化字段；v1 不使用，保留以支持原生工具与管理界面。
+      // v2 的结构化字段；v1 不使用，保留供工具与管理页面展示。
       fields: {
         type: 'json',
         nullable: true,

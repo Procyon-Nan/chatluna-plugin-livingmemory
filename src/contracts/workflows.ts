@@ -94,23 +94,14 @@ export type LivingMemoryToolName =
     | 'living_memory_delete_memory'
 
 export interface LivingMemoryConfig {
-    enableConversationIsolation: boolean
-    enableSnapshotInjection: boolean
-    enableUserProfileInjection: boolean
     enableUserProfileGeneration: boolean
     enableDreamUserProfileGeneration: boolean
-    enableAutoDream: boolean
     mainModel: string
     subModel: string
     userProfileMinMemoryCount: number
     userProfileMemoryLimit: number
-    recallIntervalMessages: number
-    recallHistoryMessages: number
-    snapshotMaxLines: number
     embeddingModel: string
     rerankModel: string
-    extractionWindowMessages: number
-    extractionIncludeOverheard: boolean
     enableExtractionWhitelist: boolean
     extractionWhitelist: string[]
     memorySearchToolMaxResults: number

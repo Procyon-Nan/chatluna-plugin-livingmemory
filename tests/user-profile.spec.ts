@@ -118,7 +118,6 @@ const createHarness = (
         ctx,
         {
             mainModel: 'test-model',
-            enableUserProfileInjection: true,
             userProfileMinMemoryCount: options.userProfileMinMemoryCount ?? 1,
             userProfileMemoryLimit: 20
         },

@@ -17,16 +17,7 @@ it('reports no warning when every enabled workflow has its model', () => {
     assert.deepEqual(validateLivingMemoryConfig(configured), [])
 })
 
-it('keeps a disabled recall interval from requiring a sub model', () => {
-    const warnings = validateLivingMemoryConfig({
-        ...configured,
-        subModel: '无',
-        recallIntervalMessages: 0
-    })
-    assert.deepEqual(warnings, [])
-})
-
-it('reports the recall model only while automatic recall is enabled', () => {
+it('reports the missing recall model at instance level', () => {
     const warnings = validateLivingMemoryConfig({
         ...configured,
         subModel: '  '
@@ -49,7 +40,7 @@ it('always requires an embedding model', () => {
     )
 })
 
-it('ties the extraction model to a non-zero extraction window', () => {
+it('reports the missing extraction model at instance level', () => {
     const enabled = validateLivingMemoryConfig({
         ...configured,
         mainModel: ''
@@ -58,13 +49,6 @@ it('ties the extraction model to a non-zero extraction window', () => {
         enabled.map((warning) => warning.code),
         ['extract-model-missing']
     )
-
-    const disabled = validateLivingMemoryConfig({
-        ...configured,
-        mainModel: '',
-        extractionWindowMessages: 0
-    })
-    assert.deepEqual(disabled, [])
 })
 
 it('lists every missing model in one status payload', () => {

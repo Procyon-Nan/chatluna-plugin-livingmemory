@@ -147,7 +147,7 @@ it('scopes the search to the conversation when isolation is enabled', async () =
             return []
         }
     }
-    const tool = createSearchMemoryTool(provider, true, true)
+    const tool = createSearchMemoryTool(provider, true, () => true)
 
     await runTool(
         tool,
@@ -155,7 +155,7 @@ it('scopes the search to the conversation when isolation is enabled', async () =
         { presetId: 'default', conversationKey: 'conversation-1' }
     )
     await runTool(
-        createSearchMemoryTool(provider, true, false),
+        createSearchMemoryTool(provider, true, () => false),
         { searchTexts: ['我们一起聊过的事情'] },
         { presetId: 'default', conversationKey: 'conversation-1' }
     )

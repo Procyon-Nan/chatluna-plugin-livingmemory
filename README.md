@@ -1,7 +1,7 @@
 # chatluna-plugin-livingmemory
 
 ChatLuna v2 的长期记忆插件。从对话中提取记忆、按需召回并注入提示词，支持 Dream
-整理、用户画像与预设人设卡片，并提供独立的 WebUI 管理页。
+整理、用户画像与预设人设卡片，并提供独立的 WebUI 管理页。可以单独使用，也可以和原生 memory 同时启用；两者各自提取、保存和注入记忆。
 
 ## 构建
 
@@ -17,12 +17,28 @@ yarn build
 
 插件加载要求以下服务在场，任一缺失时插件不会加载：
 
-`chatluna`、`memory`、`database`、`chat_observer`、`agents`、`chat`、`conversations`
+`chatluna`、`schemas`、`routing`、`model`、`database`、`ai`、`tools`、`presets`、`chat_observer`、`agents`、`chat`、`conversations`
 
-命令与 WebUI 是可选能力，分别在有 `koishi` 与 `chatluna_webui` 时注册；每日维护
+命令与 WebUI 是可选能力，分别在有 `koishi` 与 `chatluna_webui`（含 `permissions`）时注册；每日维护
 在有 `timer` 时调度。
 
-## Config
+## 对话规则
+
+在 **对话规则 → 能力 → LivingMemory** 设置全局默认值，也可以单独覆盖某个群、频道或用户。旧版本在插件配置里设置过以下选项的，请把需要保留的值填入全局对话规则。
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enableSnapshotInjection` | boolean | `true` | 开启记忆快照注入 |
+| `enableUserProfileInjection` | boolean | `false` | 开启画像注入 |
+| `enableConversationIsolation` | boolean | `false` | 只检索当前会话与全局记忆 |
+| `recallIntervalMessages` | number | `20` | 每累计多少条新消息召回一次，会话首次对话时立即召回；`0` 关闭 |
+| `recallHistoryMessages` | number | `20` | 召回取用的上下文消息条数 |
+| `snapshotMaxLines` | number | `5` | 记忆快照的最大行数 |
+| `extractionWindowMessages` | number | `60` | 未提取消息达到该条数时提取（0—360）；`0` 关闭 |
+| `enableAutoDream` | boolean | `true` | 提取保存新记忆后自动整理 |
+| `extractionIncludeOverheard` | boolean | `false` | 旁听提取：bot 未参与的闲聊是否计入提取；关闭时只提取对话与其前方一个窗口内的消息 |
+
+## 插件配置
 
 模型项取值 `无` 表示未配置，对应工作流会跳过并在管理页给出配置告警。
 
@@ -30,7 +46,6 @@ yarn build
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `enableSnapshotInjection` | boolean | `true` | 开启记忆快照注入 |
 | `debug` | boolean | `false` | 记录召回、提取、Dream 每次模型调用的完整提示词与原始响应 |
 
 ### 模型配置
@@ -55,28 +70,15 @@ yarn build
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `enableUserProfileInjection` | boolean | `false` | 开启画像注入 |
 | `enableUserProfileGeneration` | boolean | `true` | 提取后生成或更新画像 |
 | `enableDreamUserProfileGeneration` | boolean | `true` | Dream 后生成或更新画像 |
 | `userProfileMinMemoryCount` | number | `3` | 生成画像所需最少活跃记忆数 |
 | `userProfileMemoryLimit` | number | `20` | 送入模型的关联记忆上限 |
 
-### 记忆召回配置
-
-| Key | Type | Default | Description |
-| --- | --- | --- | --- |
-| `enableConversationIsolation` | boolean | `false` | 只检索当前会话与全局记忆 |
-| `recallIntervalMessages` | number | `20` | 每累计多少条新消息召回一次，会话首次对话时立即召回；`0` 关闭 |
-| `recallHistoryMessages` | number | `20` | 召回取用的上下文消息条数 |
-| `snapshotMaxLines` | number | `5` | 记忆快照的最大行数 |
-
 ### 记忆提取配置
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `extractionWindowMessages` | number | `60` | 未提取消息达到该条数时提取（0—360）；`0` 关闭 |
-| `enableAutoDream` | boolean | `true` | 提取保存新记忆后自动整理 |
-| `extractionIncludeOverheard` | boolean | `false` | 旁听提取：bot 未参与的闲聊是否计入提取；关闭时只提取对话与其前方一个窗口内的消息 |
 | `enableExtractionWhitelist` | boolean | `false` | 只对白名单会话自动提取 |
 | `extractionWhitelist` | string[] | `[]` | 白名单：群聊填群号，私聊填对方用户号 |
 

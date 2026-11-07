@@ -134,10 +134,7 @@ export class LivingMemoryJobRepository implements JobRepository {
         return cancelled
     }
 
-    /**
-     * 订阅任务行变化。与 `ctx.on('chatluna/memory-job')` 同义，但只覆盖本插件
-     * 写入的审计表；框架侧事件在后端任务接入时合并（M01-C3）。
-     */
+    /** 订阅本插件仓储的任务状态变更。 */
     watchJobs(listener: (job: MemoryJobRecord) => void): () => void {
         this.watchers.add(listener)
         return () => {

@@ -17,7 +17,6 @@ import type { ChatHistoryEntry, ChatHistoryScope, LivingMemoryChatHistory } from
 
 type LivingMemoryExtractionConfig = Pick<
     LivingMemoryConfig,
-    | 'extractionWindowMessages'
     | 'enableExtractionWhitelist'
     | 'extractionWhitelist'
 >
@@ -228,7 +227,8 @@ export class LivingMemoryExtractionCoordinator {
         private readonly onExtracted: (
             presetId: string,
             memoryIds: string[],
-            speakerKeys: string[]
+            speakerKeys: string[],
+            enableAutoDream: boolean
         ) => void
     ) {}
 
@@ -238,7 +238,7 @@ export class LivingMemoryExtractionCoordinator {
         initialPosition?: number,
         eligiblePosition?: number
     ) {
-        if (this.config.extractionWindowMessages === 0) return
+        if (options.windowMessages === 0) return
         if (this.controller.signal.aborted) return
         if (!this.isExtractionWhitelisted(scope)) return
 
@@ -274,7 +274,7 @@ export class LivingMemoryExtractionCoordinator {
     }
 
     private schedule(key: string, state: ExtractionScopeState) {
-        const { scope, options } = state
+        const { scope } = state
         if (this.runningScopeKeys.has(key)) {
             this.logger.diagnosticSummary(() => ({
                 event: '等待记忆提取',
@@ -289,7 +289,7 @@ export class LivingMemoryExtractionCoordinator {
             workflow: 'extraction',
             runId: randomUUID()
         })
-        const task = this.drain(key, state, scope, options, runLogger).catch(
+        const task = this.drain(key, state, scope, runLogger).catch(
             (error) => {
                 if (this.controller.signal.aborted) {
                     runLogger.summary(
@@ -365,13 +365,12 @@ export class LivingMemoryExtractionCoordinator {
         key: string,
         state: ExtractionScopeState,
         scope: ChatHistoryScope,
-        options: QueueExtractionOptions,
         runLogger: LivingMemoryLogger
     ) {
         this.runningScopeKeys.add(key)
 
         try {
-            let firstChunk = true
+            let previous: QueueExtractionOptions | undefined
             while (true) {
                 // 卸载取消：立即结束排干，不再进入下一块。
                 this.controller.signal.throwIfAborted()
@@ -385,14 +384,17 @@ export class LivingMemoryExtractionCoordinator {
                     }))
                     return
                 }
+                const options = state.options
+                const newWindow = previous?.windowMessages !== options.windowMessages ||
+                    previous.includeOverheard !== options.includeOverheard
                 const drainedMore = await this.drainNextChunk(
                     state,
                     scope,
                     options,
                     runLogger,
-                    firstChunk
+                    newWindow
                 )
-                firstChunk = false
+                previous = options
                 if (!drainedMore) {
                     return
                 }
@@ -427,14 +429,14 @@ export class LivingMemoryExtractionCoordinator {
             const entries = await this.messageLog.after(scope, state.cursorPosition, state.eligiblePosition + 1)
             this.controller.signal.throwIfAborted()
             if (this.stateByScope.get(scopeKey(scope)) !== state) return false
-            if ((firstChunk || options.includeOverheard) && entries.length < this.config.extractionWindowMessages) {
+            if ((firstChunk || options.includeOverheard) && entries.length < options.windowMessages) {
                 runLogger.diagnosticSummary(() => ({
                     event: '等待记忆提取',
-                    detail: `${formatLogScope(scope)}; 消息提取阈值：${entries.length}/${this.config.extractionWindowMessages} 条`
+                    detail: `${formatLogScope(scope)}; 消息提取阈值：${entries.length}/${options.windowMessages} 条`
                 }))
                 return false
             }
-            const [chunk] = planExtractionChunks(entries, this.config.extractionWindowMessages, options.includeOverheard)
+            const [chunk] = planExtractionChunks(entries, options.windowMessages, options.includeOverheard)
             if (chunk === undefined) return false
             state.chunk = { entries: chunk, scope, options }
         }
@@ -598,7 +600,8 @@ export class LivingMemoryExtractionCoordinator {
                     ...new Set(
                         saved.memories.flatMap((entry) => entry.speakerKeys)
                     )
-                ]
+                ],
+                options.enableAutoDream
             )
         }
 
