@@ -20,7 +20,6 @@ interface EditorProps {
 export function MemoryEntryEditor({ presetId, presets = [], entry, onSaved, onClose }: EditorProps) {
     const t = useTranslate('livingmemory')
     const [target, setTarget] = React.useState(presetId)
-    const [title, setTitle] = React.useState(entry?.title ?? '')
     const [summary, setSummary] = React.useState(entry?.summary ?? '')
     const [content, setContent] = React.useState(entry?.content ?? '')
     const [type, setType] = React.useState(entry?.type ?? 'fact')
@@ -51,7 +50,6 @@ export function MemoryEntryEditor({ presetId, presets = [], entry, onSaved, onCl
         setSaving(true)
         try {
             const fields = {
-                title: title.trim(),
                 content: content.trim(),
                 status,
                 keywords: words,
@@ -97,10 +95,6 @@ export function MemoryEntryEditor({ presetId, presets = [], entry, onSaved, onCl
                             </datalist>
                         </Field>
                     )}
-                    <Field>
-                        <FieldLabel htmlFor="memory-title">{t('field.title')}</FieldLabel>
-                        <Input id="memory-title" value={title} onChange={(event) => setTitle(event.target.value)} />
-                    </Field>
                     <Field>
                         <EditorLabel required={requiredSummary} htmlFor="memory-summary">{t('field.summary')}</EditorLabel>
                         <Textarea id="memory-summary" rows={2} value={summary} required={requiredSummary}

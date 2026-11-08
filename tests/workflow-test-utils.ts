@@ -95,30 +95,12 @@ export const createJobStore = () => {
     const listJobsByPreset: JobRepository['listJobsByPreset'] = async (
         presetId
     ) => jobs.filter((job) => job.presetId === presetId)
-    const getJob: JobRepository['getJob'] = async (id) =>
-        jobs.find((job) => job.id === id)
     const updateJob: JobRepository['updateJob'] = async (id, patch) => {
         const job = jobs.find((item) => item.id === id)
         if (job == null) {
             throw new Error(`missing test job: ${id}`)
         }
         Object.assign(job, patch)
-    }
-
-    const cancelJob: JobRepository['cancelJob'] = async (id, reason) => {
-        const job = jobs.find((item) => item.id === id)
-        if (job == null) return undefined
-        if (job.status !== 'pending' && job.status !== 'running') {
-            return undefined
-        }
-        const now = new Date()
-        Object.assign(job, {
-            status: 'cancelled',
-            error: reason,
-            finishedAt: now,
-            updatedAt: now
-        })
-        return job
     }
 
     const watchJobs: JobRepository['watchJobs'] = () => () => {}
@@ -132,8 +114,6 @@ export const createJobStore = () => {
         createFailedJob,
         updateJob,
         listJobsByPreset,
-        getJob,
-        cancelJob,
         watchJobs,
         markStaleRunningJobsAsFailed
     }

@@ -16,7 +16,6 @@ import type {
     LivingMemoryPersonaView,
     LivingMemoryProfilesSnapshot,
     LivingMemoryProfileView,
-    LivingMemoryScopesSnapshot,
     LivingMemorySearchHitView,
     LivingMemorySnapshotsSnapshot,
     LivingMemorySnapshotView,
@@ -37,8 +36,6 @@ import { memoryEntryStatuses, memoryEntryTypes } from '../../contracts/memory.ts
 const WRITE_LEVEL = 4
 
 const entryFields = {
-    topic: Schema.string(),
-    title: Schema.string(),
     summary: Schema.string(),
     sentiment: Schema.string(),
     importance: Schema.number().min(0).max(1),
@@ -61,30 +58,6 @@ interface LivingMemoryWebUI {
 export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
     ctx.effect(() => ui.repository.watchJobs(() => ctx.emit('livingmemory/job-change')))
     const refreshOn = ['livingmemory/change'] as const
-
-    ctx.chatluna_webui.state('livingmemory.scopes', {
-        get: async (): Promise<LivingMemoryScopesSnapshot> => {
-            const presets = await ui.admin.listPresetIds()
-            return {
-                scopes: [
-                    {
-                        key: '*',
-                        scope: { kind: 'global' },
-                        name: '全部预设',
-                        count: 0,
-                        children: presets.map((presetId) => ({
-                            key: presetId,
-                            scope: { kind: 'preset', presetId },
-                            name: presetId,
-                            count: 0,
-                            children: []
-                        }))
-                    }
-                ]
-            }
-        },
-        refreshOn
-    })
 
     ctx.chatluna_webui.state('livingmemory.entries', {
         params: Schema.object({
@@ -467,8 +440,6 @@ const toEntryView = (entry: MemoryEntryRecord): LivingMemoryEntryView => ({
     presetId: entry.presetId,
     type: entry.type,
     status: entry.status,
-    topic: entry.topic,
-    title: entry.title,
     content: entry.content,
     summary: entry.summary,
     sentiment: entry.sentiment,

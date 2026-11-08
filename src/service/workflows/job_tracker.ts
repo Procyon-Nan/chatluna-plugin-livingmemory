@@ -36,14 +36,4 @@ export class LivingMemoryJobTracker {
             error: formatErrorDetails(error)
         })
     }
-
-    /** 任务被取消：保留已产生的 detail，错误列写明取消原因。 */
-    async markCancelled(id: string, reason: string) {
-        await this.repository.updateJob(id, {
-            status: 'cancelled',
-            finishedAt: new Date(),
-            updatedAt: new Date(),
-            error: reason
-        })
-    }
 }

@@ -25,7 +25,6 @@ import {
     normalizeMemoryText,
     normalizeOptionalMemoryText
 } from '../memory/entry_fields.ts'
-import { normalizeMemoryTitle, normalizeMemoryTopic } from '../memory/entry_identity.ts'
 import {
     createSourceOriginsFromMessages,
     mergeMemorySourceOrigins
@@ -60,11 +59,8 @@ const memoryEntryFields: (keyof MemoryEntryRecord)[] = [
     'speakerKeys',
     'type',
     'status',
-    'topic',
-    'title',
     'content',
     'keywords',
-    'fields',
     'summary',
     'sentiment',
     'importance',
@@ -89,8 +85,6 @@ const dreamEntryFields: (keyof MemoryEntryRecord)[] = [
     'presetId',
     'speakerKeys',
     'type',
-    'topic',
-    'title',
     'content',
     'keywords',
     'summary',
@@ -103,8 +97,6 @@ const dreamEntryFields: (keyof MemoryEntryRecord)[] = [
 const recallEntryFields: (keyof MemoryEntryRecord)[] = [
     'id',
     'type',
-    'topic',
-    'title',
     'content',
     'keywords',
     'summary',
@@ -556,16 +548,13 @@ export class LivingMemoryEntryRepository
     ): MemoryEntryRecord {
         const content = normalizeMemoryText(fields.content)
         return {
-            id: fields.id ?? randomUUID(),
+            id: randomUUID(),
             presetId: scope.presetId,
             speakerKeys: normalizeSpeakerKeys(speakerKeys),
             type: fields.type,
             status: fields.status ?? 'active',
-            topic: normalizeMemoryTopic(fields),
-            title: normalizeMemoryTitle(fields, content),
             content,
             keywords: normalizeMemoryKeywords(fields.keywords),
-            fields: fields.fields ?? null,
             summary: normalizeOptionalMemoryText(fields.summary),
             sentiment: normalizeOptionalMemoryText(fields.sentiment),
             importance: normalizeMemoryImportance(fields.importance),
@@ -871,23 +860,8 @@ export class LivingMemoryEntryRepository
             speakerKeys,
             type: patch.type ?? current.type,
             status,
-            topic:
-                patch.topic === undefined
-                    ? patch.type === undefined
-                        ? current.topic
-                        : normalizeMemoryTopic({ type: patch.type, topic: undefined })
-                    : normalizeMemoryTopic({ type: patch.type ?? current.type, topic: patch.topic }),
-            title:
-                patch.title === undefined && patch.summary === undefined && patch.content === undefined
-                    ? current.title
-                    : normalizeMemoryTitle(
-                          { title: patch.title, summary },
-                          content,
-                          current.id
-                      ),
             content,
             keywords,
-            fields: patch.fields === undefined ? current.fields : patch.fields,
             summary,
             sentiment: normalizeOptionalMemoryText(sentiment),
             importance: normalizeMemoryImportance(importance)

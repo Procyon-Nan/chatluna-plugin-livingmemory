@@ -13,10 +13,6 @@ const indexSink = {
     startRebuild: () => {}
 }
 
-/**
- * v1 `exportPresetData` 的输出形状：版本 5，条目不含 `topic`/`title`/`fields`。
- * v2 的解析必须按缺省规则补齐，否则导入后管理页拿不到标题与主题。
- */
 const v1Export = (sourcePresetId: string): LivingMemoryPresetExport =>
     ({
         version: 5,
@@ -97,28 +93,19 @@ const mutationsOf = (repository: never) =>
         createCapturedLogger().logger
     )
 
-it('imports a v1 export and derives the v2 topic and title', async () => {
+it('round-trips the memory entries in a v1 preset file', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
         const mutations = mutationsOf(repository as never)
-        const result = await mutations.importPreset(
-            'preset-1',
-            v1Export('preset-1')
-        )
+        const file = v1Export('preset-1')
+        const result = await mutations.importPreset('preset-1', file)
 
         assert.deepEqual(
             { entries: result.entries, userProfiles: result.userProfiles, presetSpeakers: result.presetSpeakers },
             { entries: 2, userProfiles: 1, presetSpeakers: 1 }
         )
 
-        const [entry] = await repository.getEntriesByPresetAndIds('preset-1', ['memory-1'])
-        assert.equal(entry.topic, 'preference')
-        assert.equal(entry.title, '喜欢美式咖啡')
-        assert.equal(entry.importance, 0.8)
-        assert.deepEqual(entry.sourceOrigins, v1Export('preset-1').entries[0]!.sourceOrigins)
-
-        const [archived] = await repository.getEntriesByPresetAndIds('preset-1', ['memory-2'])
-        assert.equal(archived.topic, 'fact')
-        assert.equal(archived.title, '旧的一条归档记忆')
+        const exported = await repository.exportPresetData('preset-1')
+        assert.deepEqual(exported.entries, file.entries)
     })
 })
 

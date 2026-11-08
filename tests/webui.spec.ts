@@ -139,11 +139,7 @@ it('projects entries with their facets and total', async () => {
         const snapshot = (await ui.read('livingmemory.entries', {
             presetId: 'preset-1',
             status: 'all'
-        })) as {
-            entries: { title: string | null }[]
-            total: number
-            facets: { statuses: Record<string, number> }
-        }
+        })) as LivingMemoryEntriesSnapshot
 
         assert.equal(snapshot.total, 2)
         assert.equal(snapshot.facets.statuses.active, 1)
@@ -156,7 +152,7 @@ it('creates the first memory in a preset and reads edited fields back from the l
     await withWebUI(async (_ctx, _repository, ui) => {
         const presetId = 'new-preset'
         const memory = {
-            type: 'fact', status: 'archived', title: '聚餐', topic: '生活',
+            type: 'fact', status: 'archived',
             content: '周五聚餐', summary: '聚餐安排', sentiment: '期待',
             importance: 0, keywords: ['晚餐'], speakerKeys: ['alice']
         }
@@ -172,7 +168,7 @@ it('creates the first memory in a preset and reads edited fields back from the l
         assert.partialDeepStrictEqual(await read(), { ...memory, sentiment: '开心', importance: 0.85 })
 
         const revision = {
-            type: 'plan', status: 'active', title: '新安排', content: '改到周六',
+            type: 'plan', status: 'active', content: '改到周六',
             summary: '更改日期', keywords: [], sentiment: null, importance: null, speakerKeys: []
         }
         await ui.call('livingmemory.update', { id, ...revision })

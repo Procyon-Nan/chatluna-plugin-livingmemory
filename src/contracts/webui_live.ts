@@ -5,7 +5,6 @@ import type {
     LivingMemoryJobView,
     LivingMemoryPersonaView,
     LivingMemoryProfilesSnapshot,
-    LivingMemoryScopesSnapshot,
     LivingMemorySearchHitView,
     LivingMemorySpeakerView,
     LivingMemorySnapshotsSnapshot,
@@ -18,10 +17,7 @@ import type {
 } from './memory.ts'
 import type { DreamTriggerResult } from './workflows.ts'
 
-type EntryInput = Pick<
-    MemoryMutationInput,
-    'type' | 'status' | 'content' | 'summary' | 'sentiment' | 'importance' | 'keywords' | 'topic' | 'title'
-> & { speakerKeys?: string[] }
+type EntryInput = MemoryMutationInput & { speakerKeys?: string[] }
 
 /**
  * WebUI 的 live state 与 action 声明。
@@ -33,7 +29,6 @@ type EntryInput = Pick<
  */
 declare module '@chatluna/ui-client/client' {
     interface States {
-        'livingmemory.scopes': LivingMemoryScopesSnapshot
         'livingmemory.entries': LivingMemoryEntriesSnapshot
         'livingmemory.speakers': LivingMemorySpeakerView[]
         'livingmemory.jobs': LivingMemoryJobView[]

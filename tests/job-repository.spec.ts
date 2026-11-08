@@ -40,46 +40,6 @@ it('persists partial Dream completion without treating it as an abandoned runnin
         assert.ok(stored.finishedAt)
     })
 })
-it('cancels a running job and keeps the progress text it already produced', async () => {
-    await withLivingMemoryRepository(async (_ctx, repository) => {
-        const job = await repository.createJob(
-            { conversationId: 'dream:manual:preset', presetId: 'preset' },
-            'dream',
-            'manual:preset'
-        )
-        const tracker = new LivingMemoryJobTracker(repository)
-        await tracker.markRunning(job.id)
-        await repository.updateJob(job.id, { detail: 'checked 10; unprocessed: 21' })
-
-        const cancelled = await repository.cancelJob(job.id, 'cancel requested')
-        assert.equal(cancelled?.status, 'cancelled')
-        assert.match(cancelled?.detail ?? '', /checked 10/u)
-        assert.equal(cancelled?.error, 'cancel requested')
-        assert.ok(cancelled?.finishedAt)
-
-        const [stored] = await repository.listJobsByPreset('preset')
-        assert.equal(stored.status, 'cancelled')
-    })
-})
-
-it('refuses to cancel a job that has already finished or never existed', async () => {
-    await withLivingMemoryRepository(async (_ctx, repository) => {
-        const job = await repository.createJob(
-            { conversationId: 'dream:manual:preset', presetId: 'preset' },
-            'dream',
-            'manual:preset'
-        )
-        await new LivingMemoryJobTracker(repository).markCompleted(
-            job.id,
-            'no changes'
-        )
-        assert.equal(await repository.cancelJob(job.id, 'cancel requested'), undefined)
-        assert.equal(await repository.cancelJob('missing', 'cancel requested'), undefined)
-        const [stored] = await repository.listJobsByPreset('preset')
-        assert.equal(stored.status, 'completed')
-    })
-})
-
 it('notifies watchers on every job transition', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
         const seen: string[] = []
@@ -91,8 +51,8 @@ it('notifies watchers on every job transition', async () => {
         )
         const tracker = new LivingMemoryJobTracker(repository)
         await tracker.markRunning(job.id)
-        await tracker.markCancelled(job.id, 'cancel requested')
+        await tracker.markCompleted(job.id, 'no changes')
 
-        assert.deepEqual(seen, ['pending', 'running', 'cancelled'])
+        assert.deepEqual(seen, ['pending', 'running', 'completed'])
     })
 })

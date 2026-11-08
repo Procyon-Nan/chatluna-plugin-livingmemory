@@ -30,7 +30,6 @@ type.other: Other
 entries.search: Search content, summary or keywords
 entries.total: '{count} entries'
 entries.empty: No memories here yet
-entries.untitled: Untitled
 entries.edit: Edit
 entries.create: New memory
 entries.editTitle: Edit memory
@@ -41,7 +40,6 @@ entries.noSpeakers: No users linked
 entries.archive: Archive
 entries.purge: Delete
 
-field.title: Title
 field.keywords: Keywords (one per line, up to {max})
 field.preset: Preset
 field.summary: Summary
@@ -67,7 +65,6 @@ job.status.running: Running
 job.status.completed: Completed
 job.status.partial: Partial
 job.status.failed: Failed
-job.status.cancelled: Cancelled
 
 personas.empty: No preset persona cards have been generated
 personas.stale: Preset changed

@@ -99,39 +99,9 @@ export class LivingMemoryJobRepository implements JobRepository {
         return jobs.sort((left, right) => +right.createdAt - +left.createdAt)
     }
 
-    async getJob(id: string): Promise<MemoryJobRecord | undefined> {
+    private async getJob(id: string): Promise<MemoryJobRecord | undefined> {
         const [job] = await this.database.get('living_memory_job', { id })
         return job
-    }
-
-    /**
-     * 置为取消态并返回取消后的行。只有 pending/running 可取消：已完成或已失败
-     * 的任务没有可撤销的工作，直接返回 undefined 让调用方区分结果。
-     *
-     * 取消原因写 `error`，保留 `detail` 里已产生的进度文本。
-     */
-    async cancelJob(
-        id: string,
-        reason: string
-    ): Promise<MemoryJobRecord | undefined> {
-        const job = await this.getJob(id)
-        if (
-            job === undefined ||
-            (job.status !== 'pending' && job.status !== 'running')
-        ) {
-            return undefined
-        }
-        const now = new Date()
-        const patch = {
-            status: 'cancelled' as const,
-            error: reason,
-            finishedAt: now,
-            updatedAt: now
-        }
-        await this.database.set('living_memory_job', { id }, patch)
-        const cancelled = { ...job, ...patch }
-        this.notify(cancelled)
-        return cancelled
     }
 
     /** 订阅本插件仓储的任务状态变更。 */

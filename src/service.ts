@@ -218,30 +218,6 @@ export default class LivingmemoryService extends Service {
         this.conversationHooks.reset(conversationId)
     }
 
-    /**
-     * 取消任务的路由。终态只由任务的执行方写入，避免与运行器的收尾写入互相覆盖。
-     *
-     * - Dream 交给协调器：中止在途运行、等任务行落到终态后返回。
-     * - 索引任务运行在向量索引的维护队列内，没有逐任务中止信号；标记取消会与
-     *   运行器的收尾写入冲突，返回 undefined 由调用方报告不可取消。
-     * - 提取与召回只在失败时落任务行，`pending`/`running` 行只可能来自进程中断，
-     *   没有在途执行，直接置终态。
-     */
-    async cancelJob(jobId: string) {
-        const job = await this.repository.getJob(jobId)
-        if (
-            job === undefined ||
-            (job.status !== 'pending' && job.status !== 'running')
-        ) {
-            return undefined
-        }
-        if (job.kind === 'dream') {
-            return await this.dreamCoordinator.cancelJob(jobId)
-        }
-        if (job.kind === 'index') return undefined
-        return await this.repository.cancelJob(jobId, 'cancel requested')
-    }
-
     /** 注册会话钩子与记忆工具；插件卸载时随 effect 一并注销。 */
     private register(): Disposable {
         const stopHooks = this.conversationHooks.register()

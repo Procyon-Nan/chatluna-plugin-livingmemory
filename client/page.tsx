@@ -261,14 +261,11 @@ function EntriesPanel({ presetId, initialStatus }: { presetId: string; initialSt
                             className="flex flex-col gap-1 rounded-md border border-border p-3"
                         >
                             <div className="flex flex-wrap items-center gap-2">
-                                <span className="font-medium">
-                                    {entry.title ?? t('entries.untitled')}
-                                </span>
+                                {entry.summary && <span className="font-medium">{entry.summary}</span>}
                                 <Badge variant="outline">{t(`type.${entry.type}`)}</Badge>
                                 <Badge variant="secondary">{t(`status.${entry.status}`)}</Badge>
                                 {entry.sentiment && <Badge variant="outline">{t('field.sentiment')} · {entry.sentiment}</Badge>}
                             </div>
-                            {entry.summary && <p className="text-sm font-medium">{entry.summary}</p>}
                             <p className="whitespace-pre-wrap break-words text-sm">{entry.content}</p>
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                                 <span className="inline-flex items-center gap-1">

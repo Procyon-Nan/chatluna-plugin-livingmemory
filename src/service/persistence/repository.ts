@@ -52,10 +52,6 @@ import {
 import type { LivingMemoryTransaction } from './types.ts'
 import { SerialTaskQueue } from '../shared/serial_task_queue.ts'
 import { normalizeMemorySourceOrigins } from '../memory/origins/source_origins.ts'
-import {
-    normalizeMemoryTitle,
-    normalizeMemoryTopic
-} from '../memory/entry_identity.ts'
 
 const PRESET_IMPORT_BATCH_SIZE = 100
 const TRANSACTION_QUEUE_KEY = 'living-memory-transaction'
@@ -375,17 +371,6 @@ export class LivingMemoryRepository
         return this.jobs.listJobsByPreset(presetId)
     }
 
-    getJob(id: string): Promise<MemoryJobRecord | undefined> {
-        return this.jobs.getJob(id)
-    }
-
-    cancelJob(
-        id: string,
-        reason: string
-    ): Promise<MemoryJobRecord | undefined> {
-        return this.jobs.cancelJob(id, reason)
-    }
-
     watchJobs(listener: (job: MemoryJobRecord) => void): () => void {
         return this.jobs.watchJobs(listener)
     }
@@ -500,9 +485,6 @@ export class LivingMemoryRepository
                 speakerKeys: [...entry.speakerKeys],
                 type: entry.type,
                 status: entry.status,
-                topic: entry.topic,
-                title: entry.title,
-                fields: entry.fields,
                 content: entry.content,
                 keywords: [...entry.keywords],
                 summary: entry.summary,
@@ -659,29 +641,13 @@ export class LivingMemoryRepository
             speakerKeys: string[],
             sourceLabel: string | null
         ) => {
-            const content = entry.content
             return {
                 id: resolveEntryImportId(entry.id),
                 presetId: targetPresetId,
                 speakerKeys,
                 type: entry.type,
                 status: entry.status,
-                // v2 之前导出的文件没有 topic/title：按写入侧的同一规则补齐，
-                // 使导入行与新建行在读取侧无需再推导。
-                topic: normalizeMemoryTopic({
-                    type: entry.type,
-                    topic: entry.topic
-                }),
-                title: normalizeMemoryTitle(
-                    {
-                        title: entry.title ?? undefined,
-                        summary: entry.summary
-                    },
-                    content,
-                    entry.id
-                ),
-                fields: entry.fields ?? null,
-                content,
+                content: entry.content,
                 keywords: entry.keywords,
                 summary: entry.summary,
                 sentiment: entry.sentiment,

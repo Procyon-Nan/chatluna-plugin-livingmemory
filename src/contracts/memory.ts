@@ -4,7 +4,7 @@ export const MAX_MEMORY_KEYWORDS = 12
 
 export const memoryJobKinds = ['recall', 'extract', 'dream', 'index'] as const
 
-export const memoryJobStatuses = ['pending', 'running', 'completed', 'partial', 'failed', 'cancelled'] as const
+export const memoryJobStatuses = ['pending', 'running', 'completed', 'partial', 'failed'] as const
 
 export const memoryEntryStatuses = ['active', 'archived'] as const
 
@@ -110,14 +110,8 @@ export interface MemoryEntryRecord {
   speakerKeys: string[]
   type: MemoryEntryType
   status: MemoryEntryStatus
-  /** v2 的记忆主题，索引行与目录按其分组；v1 数据统一落为 other。 */
-  topic: string
-  /** v2 的条目标题；缺省时由内容首行派生。 */
-  title: string | null
   content: string
   keywords: string[]
-  /** v2 的结构化字段，v1 不使用。 */
-  fields: Record<string, string | number> | null
   summary: string | null
   sentiment: string | null
   importance: number | null
@@ -241,17 +235,10 @@ export interface PresetPersonaResolver {
 }
 
 export interface MemoryMutationInput {
-  /** 显式 id，仅用于导入等需要保持原有身份的场景；缺省由仓储生成。 */
-  id?: string
   type: MemoryEntryType
   status?: MemoryEntryStatus
-  /** v2 的记忆主题；缺省时按 type 归类。 */
-  topic?: string
-  /** v2 的条目标题；缺省时由摘要或内容首行派生。 */
-  title?: string
   content: string
   keywords?: string[]
-  fields?: Record<string, string | number> | null
   summary?: string | null
   sentiment?: string | null
   importance?: number | null
@@ -265,10 +252,6 @@ export interface LivingMemoryPresetExportEntry {
   id: string
   type: MemoryEntryType
   status: MemoryEntryStatus
-  /** v2 新增字段；旧导出文件没有这几项，导入时按缺省规则补齐。 */
-  topic?: string
-  title?: string | null
-  fields?: Record<string, string | number> | null
   content: string
   keywords: string[]
   summary: string | null

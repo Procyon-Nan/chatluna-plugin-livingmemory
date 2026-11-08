@@ -30,7 +30,6 @@ type.other: 其他
 entries.search: 搜索内容、摘要或关键词
 entries.total: 共 {count} 条
 entries.empty: 这里还没有记忆
-entries.untitled: 无标题
 entries.edit: 编辑
 entries.create: 新建记忆
 entries.editTitle: 编辑记忆
@@ -41,7 +40,6 @@ entries.noSpeakers: 未关联用户
 entries.archive: 归档
 entries.purge: 彻底删除
 
-field.title: 标题
 field.keywords: 关键词（每行一个，最多 {max} 个）
 field.preset: 预设
 field.summary: 摘要
@@ -67,7 +65,6 @@ job.status.running: 运行中
 job.status.completed: 已完成
 job.status.partial: 部分完成
 job.status.failed: 失败
-job.status.cancelled: 已取消
 
 personas.empty: 还没有生成过预设人设卡片
 personas.stale: 预设已变更

@@ -2,36 +2,11 @@ import type { MemoryEntryRecord, MemoryJobRecord } from './memory.ts'
 import type { MemoryListQuery } from './rpc.ts'
 import type { DreamTriggerResult, MemoryServiceStatus } from './workflows.ts'
 
-/** 记忆页的作用域视图：供管理页选择预设及会话。 */
-export interface LivingMemoryScopeView {
-    kind: 'global' | 'preset' | 'guild' | 'user' | 'conversation'
-    presetId?: string | undefined
-    platform?: string | undefined
-    guildId?: string | undefined
-    userId?: string | undefined
-    conversationId?: string | undefined
-}
-
-export interface LivingMemoryScopeNode {
-    key: string
-    scope: LivingMemoryScopeView
-    name: string
-    count: number
-    children: LivingMemoryScopeNode[]
-}
-
-export interface LivingMemoryScopesSnapshot {
-    scopes: LivingMemoryScopeNode[]
-    unavailable?: true
-}
-
 export interface LivingMemoryEntryView {
     id: string
     presetId: string
     type: MemoryEntryRecord['type']
     status: MemoryEntryRecord['status']
-    topic: string
-    title: string | null
     content: string
     summary: string | null
     sentiment: string | null
