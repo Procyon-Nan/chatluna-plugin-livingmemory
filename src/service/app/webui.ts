@@ -8,6 +8,8 @@ import type {} from '@chatluna/server'
 import type { LivingMemoryAdminService } from './admin_service.ts'
 import type { LivingMemoryRepository } from '../persistence/repository.ts'
 import type { LivingMemoryLogger } from '../logging/logger.ts'
+import { renderSnapshotText } from '../memory/snapshot/snapshot_text.ts'
+import { formatSource, resolveConversationSources, type SourcePeer } from '../transcript/origin_context.ts'
 import type {
     LivingMemoryEntriesSnapshot,
     LivingMemoryEntryView,
@@ -28,7 +30,7 @@ import type {
     PresetPersonaCardInfo,
     UserProfileRecord
 } from '../../contracts/memory.ts'
-import type { MemoryListQuery } from '../../contracts/rpc.ts'
+import type { MemoryListQuery, UserProfileListQuery, SnapshotListQuery } from '../../contracts/rpc.ts'
 import { memoryEntryStatuses, memoryEntryTypes } from '../../contracts/memory.ts'
 
 /** 管理页写操作要求的权限等级。 */
@@ -123,22 +125,10 @@ export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
             page: Schema.natural(),
             pageSize: Schema.natural()
         }),
-        get: async ({
-            presetId,
-            page,
-            pageSize
-        }: {
-            presetId: string
-            page?: number
-            pageSize?: number
-        }): Promise<LivingMemoryProfilesSnapshot> => {
-            const result = await ui.admin.listUserProfiles({
-                presetId,
-                ...(page === undefined ? {} : { page }),
-                ...(pageSize === undefined ? {} : { pageSize })
-            })
+        get: async (query: UserProfileListQuery): Promise<LivingMemoryProfilesSnapshot> => {
+            const result = await ui.admin.listUserProfiles(query)
             return {
-                presetId,
+                presetId: query.presetId,
                 profiles: result.items.map(toProfileView),
                 total: result.total,
                 page: result.page,
@@ -154,23 +144,13 @@ export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
             page: Schema.natural(),
             pageSize: Schema.natural()
         }),
-        get: async ({
-            presetId,
-            page,
-            pageSize
-        }: {
-            presetId: string
-            page?: number
-            pageSize?: number
-        }): Promise<LivingMemorySnapshotsSnapshot> => {
-            const result = await ui.admin.listSnapshots({
-                presetId,
-                ...(page === undefined ? {} : { page }),
-                ...(pageSize === undefined ? {} : { pageSize })
-            })
+        get: async (query: SnapshotListQuery): Promise<LivingMemorySnapshotsSnapshot> => {
+            const result = await ui.admin.listSnapshots(query)
+            const conversationIds = result.items.map(item => item.conversationId)
+            const sources = await resolveConversationSources(ctx, conversationIds)
             return {
-                presetId,
-                snapshots: result.items.map(toSnapshotView),
+                presetId: query.presetId,
+                snapshots: result.items.map(snapshot => toSnapshotView(snapshot, sources.get(snapshot.conversationId))),
                 total: result.total,
                 page: result.page,
                 pageSize: result.pageSize
@@ -483,12 +463,23 @@ const toProfileView = (profile: UserProfileRecord): LivingMemoryProfileView => (
     updatedAt: profile.updatedAt.getTime()
 })
 
-const toSnapshotView = (
-    snapshot: MemorySnapshotRecord
-): LivingMemorySnapshotView => ({
-    id: snapshot.id,
-    conversationId: snapshot.conversationId,
-    query: snapshot.query,
-    itemCount: snapshot.items.length,
-    createdAt: snapshot.createdAt.getTime()
-})
+function toSnapshotView(snapshot: MemorySnapshotRecord, source?: SourcePeer): LivingMemorySnapshotView {
+    const searchTexts = new Set<string>()
+    const searchKeywords = new Set<string>()
+    const matchedMemories: LivingMemorySnapshotView['matchedMemories'] = []
+    for (const { toolCallSummary, matchedMemories: matches } of snapshot.items) {
+        for (const text of toolCallSummary.searchTexts) searchTexts.add(text)
+        for (const keyword of toolCallSummary.searchKeywords) searchKeywords.add(keyword)
+        for (const { type, content } of matches) matchedMemories.push({ type, content })
+    }
+    return {
+        id: snapshot.id,
+        conversationId: snapshot.conversationId,
+        conversationLabel: source ? formatSource(source) : null,
+        content: renderSnapshotText(snapshot.items),
+        searchTexts: [...searchTexts],
+        searchKeywords: [...searchKeywords],
+        matchedMemories,
+        createdAt: snapshot.createdAt.getTime()
+    }
+}

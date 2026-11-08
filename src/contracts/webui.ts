@@ -92,8 +92,11 @@ export interface LivingMemoryProfileView {
 export interface LivingMemorySnapshotView {
     id: string
     conversationId: string
-    query: string
-    itemCount: number
+    conversationLabel: string | null
+    content: string
+    searchTexts: string[]
+    searchKeywords: string[]
+    matchedMemories: Pick<MemoryEntryRecord, 'type' | 'content'>[]
     createdAt: number
 }
 

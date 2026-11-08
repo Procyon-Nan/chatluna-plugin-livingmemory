@@ -8,7 +8,7 @@ import { routeIdOf, type RouteIdentity } from '@chatluna/satori'
 import { LivingMemoryChatHistory } from '../src/service/chat_history.ts'
 import { historyMessage } from './chat-history-test-utils.ts'
 import type { Schema } from '@chatluna/schema'
-import type { LivingMemoryEntriesSnapshot } from '../src/contracts/webui.ts'
+import type { LivingMemoryEntriesSnapshot, LivingMemorySnapshotsSnapshot } from '../src/contracts/webui.ts'
 import { withLivingMemoryRepository } from './persistence-test-utils.ts'
 import { livingMemoryWebUI } from '../src/service/app/webui.ts'
 import { LivingMemoryAdminService } from '../src/service/app/admin_service.ts'
@@ -105,6 +105,8 @@ const withWebUI = async (
                 effect: ctx.effect.bind(ctx),
                 chatluna_webui: ui.chatluna_webui,
                 permissions: ui.permissions,
+                get database() { return ctx.database },
+                get routing() { return ctx.routing },
                 emit: ui.emit
             } as never,
             {
@@ -224,29 +226,52 @@ it('projects a profile with the memories it was built from', async () => {
     })
 })
 
-it('projects a snapshot row without its item payload', async () => {
+async function seedConversation(ctx: Context, kind: 'guild' | 'user', name: string) {
+    const platform = 'onebot'
+    const selfId = 'bot'
+    const id = '42'
+    const conversationId = routeIdOf({ platform, selfId, isDirect: kind === 'user', userId: id, channelId: id })
+    const peer = `${platform}:${selfId}:${kind}:${id}`
+    await ctx.database.create('chatluna_conversations', { key: conversationId, peer, headSessionId: kind })
+    await ctx.database.create('chatluna_peers', { key: peer, platform, selfId, kind, id, name })
+    return { conversationId, peer }
+}
+
+it('shows the saved snapshot text and the matches recorded at recall time', async () => {
     await withWebUI(async (ctx, repository, ui) => {
-        await ctx.database.create('living_memory_snapshot', {
-            id: 'snapshot-1',
-            presetId: 'preset-1',
-            conversationId: 'conversation-1',
-            query: '用户喜欢什么',
-            items: [{ finalText: '命中一条', toolCallSummary: {}, matchedMemories: [] }],
-            createdAt: new Date('2026-11-05T00:00:00.000Z')
-        })
-
-        const snapshot = (await ui.read('livingmemory.snapshots', {
-            presetId: 'preset-1'
-        })) as {
-            snapshots: { query: string; itemCount: number; createdAt: number }[]
+        await ctx.plugin(Routing)
+        await ctx.database.prepared()
+        const presetId = 'preset-1'
+        const search = { searchTexts: ['用户喜欢什么', '用户的周末计划'], searchKeywords: ['咖啡'], maxCandidates: 15 }
+        const finalText = '用户喜欢咖啡。\n周末去书店。'
+        const item = {
+            finalText, toolCallSummary: search,
+            matchedMemories: ['常喝咖啡', '周六逛书店'].map(content => ({
+                type: 'fact' as const, content, summary: null, keywords: [], sentiment: null,
+                importance: null, createdAt: new Date(), updatedAt: new Date()
+            }))
         }
+        const group = await seedConversation(ctx, 'guild', '读书群')
+        const dm = await seedConversation(ctx, 'user', '小林')
+        for (const { conversationId } of [group, dm]) {
+            await repository.upsertSnapshot({ presetId, conversationId }, JSON.stringify(search), [item])
+        }
+        await ctx.database.create('chatluna_conversations', { key: 'shared', peer: group.peer })
+        await repository.upsertSnapshot({ presetId, conversationId: 'shared' }, '', [])
 
-        assert.equal(snapshot.snapshots[0]?.query, '用户喜欢什么')
-        assert.equal(snapshot.snapshots[0]?.itemCount, 1)
-        assert.equal(
-            snapshot.snapshots[0]?.createdAt,
-            Date.parse('2026-11-05T00:00:00.000Z')
-        )
+        const { snapshots } = await ui.read('livingmemory.snapshots', { presetId }) as LivingMemorySnapshotsSnapshot
+        const byConversation = new Map(snapshots.map(row => [row.conversationId, row]))
+        assert.equal(byConversation.get(dm.conversationId)?.conversationLabel, '「小林」（用户 ID：42）')
+        assert.partialDeepStrictEqual(byConversation.get(group.conversationId), {
+            conversationLabel: '「读书群」（群聊 ID：42）',
+            content: finalText,
+            searchTexts: search.searchTexts,
+            searchKeywords: ['咖啡'],
+            matchedMemories: [{ type: 'fact', content: '常喝咖啡' }, { type: 'fact', content: '周六逛书店' }]
+        })
+        assert.partialDeepStrictEqual(byConversation.get('shared'), {
+            conversationLabel: null, content: '', searchTexts: [], matchedMemories: []
+        })
     })
 })
 
@@ -332,10 +357,7 @@ it('uses the source conversation for the management list, model tools and export
             ['guild', '读书群', '「读书群」（群聊 ID：42）'],
             ['user', '小林', '「小林」（用户 ID：42）']
         ] as const) {
-            const conversationId = routeIdOf({ platform: 'onebot', selfId: 'bot', isDirect: kind === 'user', userId: '42', channelId: '42' })
-            const peer = `onebot:bot:${kind}:42`
-            await ctx.database.create('chatluna_conversations', { key: conversationId, peer, headSessionId: kind })
-            await ctx.database.create('chatluna_peers', { key: peer, platform: 'onebot', selfId: 'bot', kind, id: '42', name })
+            const { conversationId, peer } = await seedConversation(ctx, kind, name)
             const entry = await repository.createMemory({ presetId, conversationId }, { type: 'fact', content: name })
             await ctx.database.set('living_memory_entry', { id: entry.id }, { sourceLabel: '文件中的名称' })
 

@@ -102,8 +102,12 @@ profiles.regenerate: 重新生成
 profiles.delete: 删除
 
 snapshots.empty: 还没有召回快照
-snapshots.noQuery: 无查询
-snapshots.items: '命中 {count} 组'
+snapshots.conversation: '会话 {id}'
+snapshots.noContent: 快照内容为空
+snapshots.details: 召回详情
+snapshots.searchTexts: 搜索词
+snapshots.noSearch: 本次没有搜索
+snapshots.matches: '召回的记忆（{count} 条）'
 
 common.delete: 删除
 

@@ -102,8 +102,12 @@ profiles.regenerate: Regenerate
 profiles.delete: Delete
 
 snapshots.empty: No recall snapshot yet
-snapshots.noQuery: No query
-snapshots.items: '{count} matches'
+snapshots.conversation: 'Conversation {id}'
+snapshots.noContent: This snapshot is empty
+snapshots.details: Recall details
+snapshots.searchTexts: Search terms
+snapshots.noSearch: No search was made
+snapshots.matches: 'Recalled memories ({count})'
 
 common.delete: Delete
 

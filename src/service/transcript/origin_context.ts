@@ -14,18 +14,20 @@ export interface SourcePeer {
     name?: string | undefined
 }
 
-const formatSource = (peer: SourcePeer, name?: string) => {
+export const formatSource = (peer: SourcePeer) => {
     const address = `${peer.kind === 'guild' ? '群聊' : '用户'} ID：${peer.id}`
-    return name ? `「${name}」（${address}）` : address
+    return peer.name ? `「${peer.name}」（${address}）` : address
 }
 
 function knownName(id: string, name?: string | null) {
-    return name && name !== id ? name : undefined
+    if (name && name !== id) return name
 }
 
 async function peerName(ctx: Context, peer: SourcePeer, storedName?: string) {
     const name = knownName(peer.id, peer.name) ?? knownName(peer.id, storedName)
-    return name ?? knownName(peer.id, (await ctx.routing.peers.profile(peer.key)).name)
+    if (name) return name
+    const profile = await ctx.routing.peers.profile(peer.key)
+    return knownName(peer.id, profile.name)
 }
 
 function ownsRoute(key: string, platform: string, selfId: string, { kind, id }: SourcePeer) {
@@ -36,20 +38,23 @@ function ownsRoute(key: string, platform: string, selfId: string, { kind, id }: 
 
 /** 仅当群/用户本身可生成这条标准路由时才补名称；共享会话记录的是首个联系人。 */
 export async function resolveConversationSources(ctx: Context, conversationIds: readonly string[]) {
-    const sources = new Map<string, string>()
-    if (!conversationIds.length) return sources
+    const sources = new Map<string, SourcePeer>()
+    if (conversationIds.length === 0) return sources
+
     const rows = await ctx.database.get('chatluna_conversations', { key: [...new Set(conversationIds)] }, ['key', 'peer'])
-    const keys = [...new Set(rows.flatMap(row => row.peer ? [row.peer] : []))]
-    if (!keys.length) return sources
-    const peers = await ctx.routing.peers.get(keys)
+    const peerKeys = new Set(rows.map(row => row.peer).filter(key => key !== null))
+    if (peerKeys.size === 0) return sources
+
+    const peers = await ctx.routing.peers.get([...peerKeys])
     for (const { key, peer } of rows) {
-        const ref = peer && peers.get(peer)
+        if (!peer) continue
+        const ref = peers.get(peer)
         if (!ref || (ref.kind !== 'guild' && ref.kind !== 'user')) continue
         const { platform, selfId, kind, id } = ref
         const source = { key: ref.key, kind, id, name: ref.name }
         if (!ownsRoute(key, platform, selfId, source)) continue
-        const name = await peerName(ctx, source)
-        if (name) sources.set(key, formatSource(source, name))
+        source.name = await peerName(ctx, source)
+        sources.set(key, source)
     }
     return sources
 }
@@ -65,7 +70,7 @@ export async function resolveTranscriptOrigin(ctx: Context, entries: readonly Ch
     const labels: string[] = []
     for (const peer of peers.values()) {
         const name = await peerName(ctx, peer, stored.get(peer.key)?.name)
-        labels.push(formatSource(peer, name))
+        labels.push(formatSource({ ...peer, name }))
     }
     const sourceLabel = labels.join('、')
     return { header: `以下是来自${sourceLabel}的聊天记录：`, sourceLabel }

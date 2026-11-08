@@ -27,7 +27,7 @@ import type {
     UserProfileMemoryRepository,
     UserProfileRepository
 } from '../../contracts/workflows.ts'
-import { resolveConversationSources } from '../transcript/origin_context.ts'
+import { formatSource, resolveConversationSources } from '../transcript/origin_context.ts'
 import { LivingMemoryEntryRepository } from './entries.ts'
 import { LivingMemoryJobRepository } from './jobs.ts'
 import {
@@ -151,12 +151,18 @@ export class LivingMemoryRepository
     }
 
     async withSourceLabels<T extends Pick<MemoryEntryRecord, 'sourceConversationId' | 'sourceLabel'>>(entries: T[]): Promise<T[]> {
-        const sources = await resolveConversationSources(this.ctx, entries.flatMap(entry =>
-            entry.sourceConversationId ? [entry.sourceConversationId] : []
-        ))
+        const conversationIds: string[] = []
+        for (const entry of entries) {
+            if (entry.sourceConversationId) conversationIds.push(entry.sourceConversationId)
+        }
+        const sources = await resolveConversationSources(this.ctx, conversationIds)
         return entries.map(entry => {
-            const label = entry.sourceConversationId && sources.get(entry.sourceConversationId)
-            return label ? { ...entry, sourceLabel: label } : entry
+            if (!entry.sourceConversationId) return entry
+
+            const source = sources.get(entry.sourceConversationId)
+            if (!source?.name) return entry
+
+            return { ...entry, sourceLabel: formatSource(source) }
         })
     }
 

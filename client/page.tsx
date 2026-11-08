@@ -85,6 +85,24 @@ export function LivingMemoryPage() {
         setSelection(previous => ({ presetId, status, revision: previous.revision + 1 }))
     }
 
+    function renderPanel() {
+        if (active === undefined) return <EmptyState title={t('empty.noPreset')} />
+        switch (tab) {
+            case 'entries':
+                return <EntriesPanel key={`${selection.revision}:${active}`} presetId={active} initialStatus={selection.status} />
+            case 'profiles':
+                return <ProfilesPanel presetId={active} />
+            case 'personas':
+                return <PersonasPanel />
+            case 'snapshots':
+                return <SnapshotsPanel presetId={active} />
+            case 'jobs':
+                return <JobsPanel presetId={active} />
+            case 'search':
+                return <SearchPanel presetId={active} />
+        }
+    }
+
     return (
         <div className="flex h-full min-w-0 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
             <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
@@ -124,21 +142,7 @@ export function LivingMemoryPage() {
                     }} />
             )}
             <Warnings warnings={status.data?.warnings ?? []} />
-            {active === undefined ? (
-                <EmptyState title={t('empty.noPreset')} />
-            ) : tab === 'entries' ? (
-                <EntriesPanel key={`${selection.revision}:${active}`} presetId={active} initialStatus={selection.status} />
-            ) : tab === 'profiles' ? (
-                <ProfilesPanel presetId={active} />
-            ) : tab === 'snapshots' ? (
-                <SnapshotsPanel presetId={active} />
-            ) : tab === 'jobs' ? (
-                <JobsPanel presetId={active} />
-            ) : tab === 'search' ? (
-                <SearchPanel presetId={active} />
-            ) : (
-                <PersonasPanel />
-            )}
+            {renderPanel()}
         </div>
     )
 }
@@ -565,32 +569,60 @@ function SnapshotsPanel({ presetId }: { presetId: string }) {
 
 function SnapshotRow({ snapshot }: { snapshot: LivingMemorySnapshotView }) {
     const t = useT()
+    function deleteSnapshot() {
+        void callAction('livingmemory.deleteSnapshot', { id: snapshot.id }).catch(report)
+    }
     return (
-        <li className="flex flex-col gap-1 rounded-md border border-border p-3 text-sm">
-            <div className="flex items-center gap-2">
-                <span className="font-medium">
-                    {snapshot.query || t('snapshots.noQuery')}
+        <li className="flex flex-col gap-2 rounded-md border border-border p-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+                <span className="min-w-0 break-words font-medium">
+                    {snapshot.conversationLabel ?? t('snapshots.conversation', { id: snapshot.conversationId })}
                 </span>
-                <Badge variant="outline">
-                    {t('snapshots.items', { count: snapshot.itemCount })}
-                </Badge>
-                <span className="ml-auto text-xs opacity-60">
+                <span className="ml-auto text-xs text-muted-foreground">
                     {formatTime(snapshot.createdAt)}
                 </span>
-                <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                        void callAction('livingmemory.deleteSnapshot', {
-                            id: snapshot.id
-                        }).catch(report)
-                    }
-                >
+                <Button size="sm" variant="ghost" onClick={deleteSnapshot}>
                     {t('common.delete')}
                 </Button>
             </div>
-            <span className="text-xs opacity-60">{snapshot.conversationId}</span>
+            <p className="whitespace-pre-wrap break-words">{snapshot.content || t('snapshots.noContent')}</p>
+            <details className="border-t border-border pt-2">
+                <summary className="cursor-pointer text-xs text-muted-foreground">{t('snapshots.details')}</summary>
+                <div className="mt-3 flex flex-col gap-3">
+                    <section>
+                        <h4 className="font-medium">{t('snapshots.searchTexts')}</h4>
+                        <SnapshotSearchTerms searchTexts={snapshot.searchTexts} searchKeywords={snapshot.searchKeywords} />
+                    </section>
+                    <section>
+                        <h4 className="font-medium">{t('snapshots.matches', { count: snapshot.matchedMemories.length })}</h4>
+                        <ol className="list-decimal space-y-1 pl-5">
+                            {snapshot.matchedMemories.map((memory, index) => (
+                                <li key={index} className="whitespace-pre-wrap break-words">
+                                    <Badge variant="outline" className="mr-2">{t(`type.${memory.type}`)}</Badge>{memory.content}
+                                </li>
+                            ))}
+                        </ol>
+                    </section>
+                </div>
+            </details>
         </li>
+    )
+}
+
+function SnapshotSearchTerms({ searchTexts, searchKeywords }: Pick<LivingMemorySnapshotView, 'searchTexts' | 'searchKeywords'>) {
+    const t = useT()
+    if (searchTexts.length === 0 && searchKeywords.length === 0) return <p>{t('snapshots.noSearch')}</p>
+    return (
+        <>
+            <ul className="list-disc space-y-1 pl-5">
+                {searchTexts.map(text => <li key={text} className="break-words">{text}</li>)}
+            </ul>
+            {searchKeywords.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                    {searchKeywords.map(word => <Badge key={word} variant="outline">{word}</Badge>)}
+                </div>
+            )}
+        </>
     )
 }
 
@@ -662,9 +694,8 @@ function SearchPanel({ presetId }: { presetId: string }) {
                     {t('search.run')}
                 </Button>
             </div>
-            {hits === undefined ? null : hits.length === 0 ? (
-                <EmptyState title={t('search.empty')} />
-            ) : (
+            {hits?.length === 0 && <EmptyState title={t('search.empty')} />}
+            {hits && hits.length > 0 && (
                 <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
                     {hits.map((hit, index) => (
                         <li
