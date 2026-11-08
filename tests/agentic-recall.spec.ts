@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import type { Context } from 'cordis'
 import type { ChatBlock, ChatSpecMessage, ChatToolCallBlock } from '@chatluna/message'
+import { deepFreeze } from '@chatluna/utils/kit'
 import { LivingMemoryLogger } from '../src/service/logging/logger.ts'
 import type {
     LivingMemorySearchInput,
@@ -117,7 +118,7 @@ const createHarness = (options: HarnessOptions) => {
     const ctx = {
         chatluna: {
             chat: async (request: ChatInvocation) => {
-                invocations.push(request)
+                invocations.push(deepFreeze(request))
                 const next = responses.shift()
                 if (next === undefined) throw new Error('missing fake response')
                 if (next instanceof Error) throw next

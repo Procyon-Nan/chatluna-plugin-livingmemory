@@ -216,7 +216,7 @@ export class LivingMemoryToolLoop {
             const fold = await ctx.chatluna.chat({
                 model,
                 system: this.options.system,
-                messages,
+                messages: [...messages],
                 toolSpecs: this.specs
             })
             logger.diagnosticSummary((fields) => {
