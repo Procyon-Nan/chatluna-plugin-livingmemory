@@ -7,7 +7,7 @@ import { apiErrorMessage, callAction, toast, useLive, useTranslate } from '@chat
 import { MAX_MEMORY_KEYWORDS, memoryEntryTypes, type MemoryEntryStatus } from '../src/contracts/memory.ts'
 import type { LivingMemoryEntryView } from '../src/contracts/webui.ts'
 
-type SavedEntry = { id: string; presetId: string; status: MemoryEntryStatus }
+type SavedEntry = { presetId: string; status: MemoryEntryStatus }
 
 interface EditorProps {
     presetId: string
@@ -58,16 +58,13 @@ export function MemoryEntryEditor({ presetId, presets = [], entry, onSaved, onCl
                 ...(sentiment.trim() ? { sentiment: sentiment.trim() } : {}),
                 ...(weight !== null ? { importance: weight } : {})
             }
-            let id: string
             if (entry) {
-                id = entry.id
-                await callAction('livingmemory.update', { id, ...fields, ...(type === entry.type ? {} : { type }) })
+                await callAction('livingmemory.update', { id: entry.id, ...fields, ...(type === entry.type ? {} : { type }) })
             } else {
-                const result = await callAction('livingmemory.create', { presetId: targetId, type, ...fields })
-                id = result.id
+                await callAction('livingmemory.create', { presetId: targetId, type, ...fields })
             }
             toast.success(t(entry ? 'entries.saved' : 'entries.created'))
-            onSaved({ id, presetId: targetId, status })
+            onSaved({ presetId: targetId, status })
         } catch (error) {
             toast.error(apiErrorMessage(error))
         } finally {

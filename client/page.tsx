@@ -2,6 +2,7 @@ import * as React from 'react'
 import {
     Badge,
     Button,
+    Checkbox,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -29,6 +30,8 @@ import {
 import type { Translate } from '@chatluna/ui-client/client'
 import { MemoryImportExport } from './memory-import-export.tsx'
 import { MemoryEntryEditor } from './memory-entry-editor.tsx'
+import { MemoryDeletionDialog, type DeleteMemoriesTarget } from './memory-deletion-dialog.tsx'
+import type { MemoryListFilter } from '../src/contracts/rpc.ts'
 import type {
     LivingMemoryEntryView,
     LivingMemoryJobView,
@@ -70,15 +73,18 @@ export function LivingMemoryPage() {
     const t = useT()
     const status = useLive('livingmemory.status')
     const presets = status.data?.presets ?? []
-    const [selection, setSelection] = React.useState<{
-        presetId: string
-        createdId?: string
-        status?: MemoryEntryRecord['status']
-    }>()
+    const [selection, setSelection] = React.useState<{ presetId: string | undefined; status: StatusFilter; revision: number }>({
+        presetId: undefined, status: 'active', revision: 0
+    })
     const [creating, setCreating] = React.useState(false)
+    const [clearTarget, setClearTarget] = React.useState<string>()
     const [tab, setTab] = React.useState<Tab>('entries')
 
-    const active = selection?.presetId ?? presets[0]
+    const active = selection.presetId ?? presets[0]
+
+    function selectPreset(presetId?: string, status: StatusFilter = 'active') {
+        setSelection(previous => ({ presetId, status, revision: previous.revision + 1 }))
+    }
 
     return (
         <div className="flex h-full flex-col gap-4 p-6">
@@ -87,18 +93,30 @@ export function LivingMemoryPage() {
                 description={t('description')}
                 actions={
                     <div className="flex flex-wrap items-center gap-2">
-                        <PresetPicker presets={presets} value={active} onChange={(presetId) => setSelection({ presetId })} />
+                        <PresetPicker presets={presets} value={active} onChange={selectPreset} />
                         <Button size="sm" onClick={() => setCreating(true)}>{t('entries.create')}</Button>
                         <MemoryImportExport presetId={active} />
+                        <Button size="sm" variant="outline" disabled={!active} onClick={() => setClearTarget(active)}>
+                            {t('deletion.clearPreset')}
+                        </Button>
                     </div>
                 }
             />
             {creating && (
                 <MemoryEntryEditor presetId={active ?? ''} presets={presets}
                     onClose={() => setCreating(false)}
-                    onSaved={({ id, presetId, status }) => {
-                        setSelection({ presetId, status, createdId: id })
+                    onSaved={({ presetId, status }) => {
+                        selectPreset(presetId, status)
                         setCreating(false)
+                        setTab('entries')
+                    }} />
+            )}
+            {clearTarget !== undefined && (
+                <MemoryDeletionDialog target={{ kind: 'preset', presetId: clearTarget }}
+                    onClose={() => setClearTarget(undefined)}
+                    onDeleted={() => {
+                        setClearTarget(undefined)
+                        selectPreset()
                         setTab('entries')
                     }} />
             )}
@@ -127,7 +145,7 @@ export function LivingMemoryPage() {
             {active === undefined ? (
                 <EmptyState title={t('empty.noPreset')} />
             ) : tab === 'entries' ? (
-                <EntriesPanel key={selection?.createdId ?? active} presetId={active} initialStatus={selection?.status ?? 'active'} />
+                <EntriesPanel key={`${selection.revision}:${active}`} presetId={active} initialStatus={selection.status} />
             ) : tab === 'profiles' ? (
                 <ProfilesPanel presetId={active} />
             ) : tab === 'snapshots' ? (
@@ -154,9 +172,9 @@ function PresetPicker({
 }) {
     const t = useT()
     return (
-        <Select value={value} onValueChange={(next) => onChange(next as string)}>
+        <Select value={value ?? null} onValueChange={(next) => { if (next !== null) onChange(next) }}>
             <SelectTrigger className="w-56">
-                <SelectValue placeholder={t('preset.placeholder')} />
+                <SelectValue placeholder={t('preset.placeholder')}>{value}</SelectValue>
             </SelectTrigger>
             <SelectContent>
                 {presets.map((preset) => (
@@ -189,28 +207,11 @@ function EntriesPanel({ presetId, initialStatus }: { presetId: string; initialSt
     const [status, setStatus] = React.useState<StatusFilter>(initialStatus)
     const [type, setType] = React.useState<string>('all')
     const [keyword, setKeyword] = React.useState('')
-    const [page, setPage] = React.useState(1)
-    const [editing, setEditing] = React.useState<LivingMemoryEntryView>()
-
-    const params = React.useMemo(
-        () => ({
-            presetId,
-            page,
-            pageSize: PAGE_SIZE,
-            status,
-            ...(type === 'all'
-                ? {}
-                : { type: type as MemoryEntryRecord['type'] }),
-            ...(keyword.trim().length === 0 ? {} : { keyword: keyword.trim() })
-        }),
-        [presetId, page, status, type, keyword]
-    )
-    const entries = useLive('livingmemory.entries', params)
+    const filter: MemoryListFilter = { presetId, status }
+    if (type !== 'all') filter.type = type as MemoryEntryRecord['type']
+    if (keyword.trim()) filter.keyword = keyword.trim()
     const speakers = useLive('livingmemory.speakers', { presetId })
     const names = new Map(speakers.data?.map((speaker) => [speaker.speakerKey, speaker.speakerLabel]))
-    const items = entries.data?.entries ?? []
-
-    React.useEffect(() => setPage(1), [presetId, status, type, keyword])
 
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -226,7 +227,7 @@ function EntriesPanel({ presetId, initialStatus }: { presetId: string; initialSt
                     onValueChange={(next) => setStatus(next as StatusFilter)}
                 >
                     <SelectTrigger className="w-32">
-                        <SelectValue />
+                        <SelectValue>{t(`status.${status}`)}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="active">{t('status.active')}</SelectItem>
@@ -236,7 +237,7 @@ function EntriesPanel({ presetId, initialStatus }: { presetId: string; initialSt
                 </Select>
                 <Select value={type} onValueChange={(next) => setType(next as string)}>
                     <SelectTrigger className="w-32">
-                        <SelectValue />
+                        <SelectValue>{t(`type.${type}`)}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="all">{t('type.all')}</SelectItem>
@@ -247,9 +248,65 @@ function EntriesPanel({ presetId, initialStatus }: { presetId: string; initialSt
                         ))}
                     </SelectContent>
                 </Select>
-                <span className="ml-auto text-sm opacity-70">
-                    {t('entries.total', { count: entries.data?.total ?? 0 })}
-                </span>
+            </div>
+            <EntriesList key={JSON.stringify(filter)} filter={filter} names={names} />
+        </div>
+    )
+}
+
+function EntriesList({ filter, names }: { filter: MemoryListFilter; names: Map<string, string> }) {
+    const t = useT()
+    const { presetId } = filter
+    const [page, setPage] = React.useState(1)
+    const [editing, setEditing] = React.useState<LivingMemoryEntryView>()
+    const [selected, setSelected] = React.useState(() => new Set<string>())
+    const [selecting, setSelecting] = React.useState(false)
+    const [deletion, setDeletion] = React.useState<DeleteMemoriesTarget>()
+    const entries = useLive('livingmemory.entries', { ...filter, page, pageSize: PAGE_SIZE })
+    const items = entries.data?.entries ?? []
+    const total = entries.data?.total
+    React.useEffect(() => {
+        if (total !== undefined) setPage(current => Math.min(current, Math.max(1, Math.ceil(total / PAGE_SIZE))))
+    }, [total])
+
+    function selectIds(ids: string[], checked: boolean) {
+        setSelected(previous => {
+            const next = new Set(previous)
+            for (const id of ids) {
+                if (checked) next.add(id)
+                else next.delete(id)
+            }
+            return next
+        })
+    }
+
+    async function selectMatches() {
+        setSelecting(true)
+        try {
+            setSelected(new Set(await callAction('livingmemory.listMemoryIds', filter)))
+        } catch (error) {
+            report(error)
+        } finally {
+            setSelecting(false)
+        }
+    }
+
+    return (
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="outline" disabled={selecting || items.length === 0}
+                    onClick={() => selectIds(items.map(entry => entry.id), true)}>{t('deletion.selectPage')}</Button>
+                <Button size="sm" variant="outline" disabled={selecting || !total}
+                    onClick={() => void selectMatches()}>{t('deletion.selectAll')}</Button>
+                {selected.size > 0 && <>
+                    <Button size="sm" variant="ghost" disabled={selecting}
+                        onClick={() => setSelected(new Set())}>{t('deletion.deselect')}</Button>
+                    <Button size="sm" variant="destructive" disabled={selecting}
+                        onClick={() => setDeletion({ kind: 'entries', presetId, ids: [...selected] })}>
+                        {t('deletion.deleteSelected', { count: selected.size })}
+                    </Button>
+                </>}
+                <span className="ml-auto text-sm opacity-70">{t('entries.total', { count: total ?? 0 })}</span>
             </div>
             {items.length === 0 ? (
                 <EmptyState title={t('entries.empty')} />
@@ -261,6 +318,9 @@ function EntriesPanel({ presetId, initialStatus }: { presetId: string; initialSt
                             className="flex flex-col gap-1 rounded-md border border-border p-3"
                         >
                             <div className="flex flex-wrap items-center gap-2">
+                                <Checkbox aria-label={t('deletion.selectEntry', { label: entry.summary || entry.content })}
+                                    disabled={selecting} checked={selected.has(entry.id)}
+                                    onCheckedChange={checked => selectIds([entry.id], checked)} />
                                 {entry.summary && <span className="font-medium">{entry.summary}</span>}
                                 <Badge variant="outline">{t(`type.${entry.type}`)}</Badge>
                                 <Badge variant="secondary">{t(`status.${entry.status}`)}</Badge>
@@ -296,19 +356,16 @@ function EntriesPanel({ presetId, initialStatus }: { presetId: string; initialSt
                                 >
                                     {t('entries.edit')}
                                 </Button>
-                                <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() =>
-                                        void callAction('livingmemory.remove', {
-                                            id: entry.id,
-                                            purge: entry.status === 'archived'
-                                        }).catch(report)
-                                    }
-                                >
-                                    {entry.status === 'archived'
-                                        ? t('entries.purge')
-                                        : t('entries.archive')}
+                                {entry.status === 'active' && (
+                                    <Button size="sm" variant="ghost" onClick={() =>
+                                        void callAction('livingmemory.update', { id: entry.id, status: 'archived' })
+                                            .then(() => selectIds([entry.id], false)).catch(report)
+                                    }>{t('entries.archive')}</Button>
+                                )}
+                                <Button size="sm" variant="ghost" onClick={() => setDeletion({
+                                    kind: 'entries', presetId, ids: [entry.id], preview: entry.summary || entry.content
+                                })}>
+                                    {t('entries.purge')}
                                 </Button>
                             </div>
                         </li>
@@ -324,6 +381,13 @@ function EntriesPanel({ presetId, initialStatus }: { presetId: string; initialSt
             {editing !== undefined && (
                 <MemoryEntryEditor presetId={presetId} entry={editing}
                     onSaved={() => setEditing(undefined)} onClose={() => setEditing(undefined)} />
+            )}
+            {deletion && (
+                <MemoryDeletionDialog target={deletion} onClose={() => setDeletion(undefined)}
+                    onDeleted={() => {
+                        selectIds(deletion.ids, false)
+                        setDeletion(undefined)
+                    }} />
             )}
         </div>
     )

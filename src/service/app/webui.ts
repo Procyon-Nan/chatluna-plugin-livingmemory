@@ -4,7 +4,6 @@ import type {} from '../../contracts/webui_live.ts'
 import { requireActionLevel } from '@chatluna/ui-server'
 import type {} from '@chatluna/ui-server'
 import type {} from '@chatluna/permission'
-import { ApiError } from '@chatluna/server'
 import type {} from '@chatluna/server'
 import type { LivingMemoryAdminService } from './admin_service.ts'
 import type { LivingMemoryRepository } from '../persistence/repository.ts'
@@ -59,15 +58,19 @@ export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
     ctx.effect(() => ui.repository.watchJobs(() => ctx.emit('livingmemory/job-change')))
     const refreshOn = ['livingmemory/change'] as const
 
+    const entryFilters = {
+        presetId: Schema.string().required(),
+        status: Schema.union(['active', 'archived', 'all'] as const),
+        type: Schema.union(memoryEntryTypes),
+        keyword: Schema.string(),
+        speakerKey: Schema.string()
+    }
+
     ctx.chatluna_webui.state('livingmemory.entries', {
         params: Schema.object({
-            presetId: Schema.string().required(),
+            ...entryFilters,
             page: Schema.natural(),
-            pageSize: Schema.natural(),
-            status: Schema.union(['active', 'archived', 'all'] as const),
-            type: Schema.union(memoryEntryTypes),
-            keyword: Schema.string(),
-            speakerKey: Schema.string()
+            pageSize: Schema.natural()
         }),
         get: async (
             params: { presetId: string } & Partial<MemoryListQuery>
@@ -231,24 +234,22 @@ export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
     )
 
     ctx.chatluna_webui.action(
-        'livingmemory.remove',
-        {
-            input: Schema.object({
-                id: Schema.string().required(),
-                purge: Schema.boolean()
-            })
-        },
-        async ({ id, purge }, action) => {
+        'livingmemory.listMemoryIds',
+        { input: Schema.object(entryFilters) },
+        async (filter, action) => {
             await requireActionLevel(ctx, action, WRITE_LEVEL)
-            if (purge === true) await ui.admin.deleteMemory(id)
-            else {
-                const memory = await ui.admin.getMemory(id)
-                if (memory === undefined) {
-                    throw new ApiError('NOT_FOUND', `no such memory: ${id}`)
-                }
-                await ui.admin.archiveMemories(memory.presetId, [id])
-            }
+            return ui.admin.listMemoryIds(filter)
+        }
+    )
+
+    ctx.chatluna_webui.action(
+        'livingmemory.deleteMemories',
+        { input: Schema.object({ presetId: Schema.string().required(), ids: Schema.array(Schema.string()).required() }) },
+        async ({ presetId, ids }, action) => {
+            await requireActionLevel(ctx, action, WRITE_LEVEL)
+            const result = await ui.admin.deleteMemories(presetId, ids)
             notifyChanged(ctx)
+            return result
         }
     )
 

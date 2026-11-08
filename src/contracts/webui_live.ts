@@ -15,6 +15,7 @@ import type {
     MemoryMutationInput,
     MemorySearchStatus
 } from './memory.ts'
+import type { MemoryListFilter } from './rpc.ts'
 import type { DreamTriggerResult } from './workflows.ts'
 
 type EntryInput = MemoryMutationInput & { speakerKeys?: string[] }
@@ -45,7 +46,8 @@ declare module '@chatluna/ui-client/client' {
             channelId?: string
         }): { id: string }
         'livingmemory.update'(input: Partial<EntryInput> & { id: string }): void
-        'livingmemory.remove'(input: { id: string; purge?: boolean }): void
+        'livingmemory.listMemoryIds'(filter: MemoryListFilter): string[]
+        'livingmemory.deleteMemories'(input: { presetId: string; ids: string[] }): { deleted: number }
         'livingmemory.search'(input: {
             presetId: string
             searchTexts: string[]

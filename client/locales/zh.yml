@@ -40,6 +40,21 @@ entries.noSpeakers: 未关联用户
 entries.archive: 归档
 entries.purge: 彻底删除
 
+deletion.selectEntry: 选择记忆：{label}
+deletion.selectPage: 选择本页
+deletion.selectAll: 选择全部筛选结果
+deletion.deselect: 清除选择
+deletion.deleteSelected: 彻底删除所选（{count}）
+deletion.confirmDelete: 确认彻底删除
+deletion.entryWarning: 将永久删除预设「{preset}」中的 {count} 条记忆，删除后无法恢复。
+deletion.deleted: 已删除 {count} 条记忆
+deletion.clearPreset: 清空预设数据
+deletion.clearWarning: 预设「{preset}」的数据清空后无法恢复。
+deletion.typePhrase: 输入以下完整语句以确认清空
+deletion.phrase: 我确认清空预设 {preset} 的全部记忆、用户画像、人设卡片、快照和任务记录
+deletion.confirmClear: 确认清空
+deletion.cleared: 已清空预设「{preset}」的数据
+
 field.keywords: 关键词（每行一个，最多 {max} 个）
 field.preset: 预设
 field.summary: 摘要

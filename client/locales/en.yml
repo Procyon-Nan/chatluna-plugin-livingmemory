@@ -40,6 +40,21 @@ entries.noSpeakers: No users linked
 entries.archive: Archive
 entries.purge: Delete
 
+deletion.selectEntry: 'Select memory: {label}'
+deletion.selectPage: Select this page
+deletion.selectAll: Select all matching memories
+deletion.deselect: Clear selection
+deletion.deleteSelected: 'Permanently delete selected ({count})'
+deletion.confirmDelete: Confirm permanent deletion
+deletion.entryWarning: 'Permanently delete {count} memories from “{preset}”? This cannot be undone.'
+deletion.deleted: 'Deleted {count} memories'
+deletion.clearPreset: Clear preset data
+deletion.clearWarning: 'Clearing the data in “{preset}” cannot be undone.'
+deletion.typePhrase: Type the following sentence to confirm
+deletion.phrase: 'I confirm clearing all memories, user profiles, persona cards, snapshots and job records for preset {preset}'
+deletion.confirmClear: Confirm clearing
+deletion.cleared: 'Cleared data for “{preset}”'
+
 field.keywords: Keywords (one per line, up to {max})
 field.preset: Preset
 field.summary: Summary

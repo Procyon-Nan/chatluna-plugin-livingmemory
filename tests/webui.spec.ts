@@ -262,18 +262,27 @@ it('removes a snapshot and signals the page to refresh', async () => {
     })
 })
 
-it('archives an entry by default and purges it when asked', async () => {
+it('selects all matching rows and deletes only the requested preset’s memories', async () => {
     await withWebUI(async (ctx, repository, ui) => {
-        const memory = await seed(ctx, repository, '一条记忆')
-
-        await ui.call('livingmemory.remove', { id: memory.id })
-        assert.equal(
-            (await repository.getEntryById(memory.id))?.status,
-            'archived'
+        const active = await seed(ctx, repository, '周五聚餐')
+        const archived = await seed(ctx, repository, '周六聚餐')
+        const kept = await seed(ctx, repository, '读书')
+        const other = await repository.createMemory(
+            { presetId: 'other', conversationId: '' }, { type: 'fact', content: '异地聚餐' }
         )
-
-        await ui.call('livingmemory.remove', { id: memory.id, purge: true })
-        assert.equal(await repository.getEntryById(memory.id), undefined)
+        await ui.call('livingmemory.update', { id: archived.id, status: 'archived' })
+        const filter = { presetId: 'preset-1', keyword: '聚餐', status: 'all' }
+        const page = await ui.read('livingmemory.entries', { ...filter, pageSize: 1 }) as LivingMemoryEntriesSnapshot
+        assert.equal(page.entries.length, 1)
+        assert.equal(page.total, 2)
+        const ids = await ui.call('livingmemory.listMemoryIds', filter) as string[]
+        assert.deepEqual(new Set(ids), new Set([active.id, archived.id]))
+        const result = await ui.call('livingmemory.deleteMemories', {
+            presetId: filter.presetId, ids: [...ids, other.id, active.id]
+        })
+        assert.deepEqual(result, { deleted: 2 })
+        assert.deepEqual((await repository.listEntriesByPreset(filter.presetId)).map(item => item.id), [kept.id])
+        assert.ok(await repository.getEntryById(other.id))
     })
 })
 
