@@ -28,6 +28,7 @@ import {
 } from '@chatluna/ui-client/client'
 import type { Translate } from '@chatluna/ui-client/client'
 import { MemoryImportExport } from './memory-import-export.tsx'
+import { MemoryEntryEditor } from './memory-entry-editor.tsx'
 import type {
     LivingMemoryEntryView,
     LivingMemoryJobView,
@@ -69,10 +70,15 @@ export function LivingMemoryPage() {
     const t = useT()
     const status = useLive('livingmemory.status')
     const presets = status.data?.presets ?? []
-    const [presetId, setPresetId] = React.useState<string>()
+    const [selection, setSelection] = React.useState<{
+        presetId: string
+        createdId?: string
+        status?: MemoryEntryRecord['status']
+    }>()
+    const [creating, setCreating] = React.useState(false)
     const [tab, setTab] = React.useState<Tab>('entries')
 
-    const active = presetId ?? presets[0]
+    const active = selection?.presetId ?? presets[0]
 
     return (
         <div className="flex h-full flex-col gap-4 p-6">
@@ -81,11 +87,21 @@ export function LivingMemoryPage() {
                 description={t('description')}
                 actions={
                     <div className="flex flex-wrap items-center gap-2">
-                        <PresetPicker presets={presets} value={active} onChange={setPresetId} />
+                        <PresetPicker presets={presets} value={active} onChange={(presetId) => setSelection({ presetId })} />
+                        <Button size="sm" onClick={() => setCreating(true)}>{t('entries.create')}</Button>
                         <MemoryImportExport presetId={active} />
                     </div>
                 }
             />
+            {creating && (
+                <MemoryEntryEditor presetId={active ?? ''} presets={presets}
+                    onClose={() => setCreating(false)}
+                    onSaved={({ id, presetId, status }) => {
+                        setSelection({ presetId, status, createdId: id })
+                        setCreating(false)
+                        setTab('entries')
+                    }} />
+            )}
             <Warnings warnings={status.data?.warnings ?? []} />
             <div className="flex gap-2">
                 {(
@@ -111,7 +127,7 @@ export function LivingMemoryPage() {
             {active === undefined ? (
                 <EmptyState title={t('empty.noPreset')} />
             ) : tab === 'entries' ? (
-                <EntriesPanel presetId={active} />
+                <EntriesPanel key={selection?.createdId ?? active} presetId={active} initialStatus={selection?.status ?? 'active'} />
             ) : tab === 'profiles' ? (
                 <ProfilesPanel presetId={active} />
             ) : tab === 'snapshots' ? (
@@ -168,9 +184,9 @@ function Warnings({
     )
 }
 
-function EntriesPanel({ presetId }: { presetId: string }) {
+function EntriesPanel({ presetId, initialStatus }: { presetId: string; initialStatus: StatusFilter }) {
     const t = useT()
-    const [status, setStatus] = React.useState<StatusFilter>('active')
+    const [status, setStatus] = React.useState<StatusFilter>(initialStatus)
     const [type, setType] = React.useState<string>('all')
     const [keyword, setKeyword] = React.useState('')
     const [page, setPage] = React.useState(1)
@@ -190,6 +206,8 @@ function EntriesPanel({ presetId }: { presetId: string }) {
         [presetId, page, status, type, keyword]
     )
     const entries = useLive('livingmemory.entries', params)
+    const speakers = useLive('livingmemory.speakers', { presetId })
+    const names = new Map(speakers.data?.map((speaker) => [speaker.speakerKey, speaker.speakerLabel]))
     const items = entries.data?.entries ?? []
 
     React.useEffect(() => setPage(1), [presetId, status, type, keyword])
@@ -242,23 +260,37 @@ function EntriesPanel({ presetId }: { presetId: string }) {
                             key={entry.id}
                             className="flex flex-col gap-1 rounded-md border border-border p-3"
                         >
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                                 <span className="font-medium">
                                     {entry.title ?? t('entries.untitled')}
                                 </span>
                                 <Badge variant="outline">{t(`type.${entry.type}`)}</Badge>
-                                {entry.status === 'archived' && (
-                                    <Badge variant="secondary">
-                                        {t('status.archived')}
-                                    </Badge>
-                                )}
-                                <span className="ml-auto text-xs opacity-60">
-                                    {formatTime(entry.updatedAt)}
-                                </span>
+                                <Badge variant="secondary">{t(`status.${entry.status}`)}</Badge>
+                                {entry.sentiment && <Badge variant="outline">{t('field.sentiment')} · {entry.sentiment}</Badge>}
                             </div>
-                            <p className="line-clamp-3 text-sm opacity-80">
-                                {entry.summary ?? entry.content}
-                            </p>
+                            {entry.summary && <p className="text-sm font-medium">{entry.summary}</p>}
+                            <p className="whitespace-pre-wrap break-words text-sm">{entry.content}</p>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                <span className="inline-flex items-center gap-1">
+                                    {t('field.importance')} {entry.importance ?? '—'}
+                                    {entry.importance !== null && (
+                                        <meter min={0} max={1} value={entry.importance} aria-label={t('field.importance')} />
+                                    )}
+                                </span>
+                                <span>{t('field.speakers')} · {entry.speakerKeys.map((key) => names.get(key) ?? key).join(', ') || t('entries.noSpeakers')}</span>
+                                {(entry.sourceLabel || entry.sourceConversationId) && (
+                                    <span>{t('field.source')} · {entry.sourceLabel || entry.sourceConversationId}</span>
+                                )}
+                            </div>
+                            {entry.keywords.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                    {entry.keywords.map((word) => <Badge key={word} variant="outline">{word}</Badge>)}
+                                </div>
+                            )}
+                            <div className="flex flex-wrap gap-x-4 text-xs text-muted-foreground">
+                                <span>{t('field.createdAt')} {formatTime(entry.createdAt)}</span>
+                                <span>{t('field.updatedAt')} {formatTime(entry.updatedAt)}</span>
+                            </div>
                             <div className="flex gap-2">
                                 <Button
                                     size="sm"
@@ -293,75 +325,10 @@ function EntriesPanel({ presetId }: { presetId: string }) {
                 onChange={setPage}
             />
             {editing !== undefined && (
-                <EntryDialog entry={editing} onClose={() => setEditing(undefined)} />
+                <MemoryEntryEditor presetId={presetId} entry={editing}
+                    onSaved={() => setEditing(undefined)} onClose={() => setEditing(undefined)} />
             )}
         </div>
-    )
-}
-
-function EntryDialog({
-    entry,
-    onClose
-}: {
-    entry: LivingMemoryEntryView
-    onClose(): void
-}) {
-    const t = useT()
-    const [content, setContent] = React.useState(entry.content)
-    const [title, setTitle] = React.useState(entry.title ?? '')
-    const [keywords, setKeywords] = React.useState(entry.keywords.join(', '))
-    return (
-        <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
-            <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
-                <DialogHeader>
-                    <DialogTitle>{t('entries.edit')}</DialogTitle>
-                    <DialogDescription>
-                        {formatTime(entry.createdAt)}
-                    </DialogDescription>
-                </DialogHeader>
-                <Field>
-                    <FieldLabel>{t('field.title')}</FieldLabel>
-                    <Input value={title} onChange={(event) => setTitle(event.target.value)} />
-                </Field>
-                <Field>
-                    <FieldLabel>{t('field.keywords')}</FieldLabel>
-                    <Input
-                        value={keywords}
-                        onChange={(event) => setKeywords(event.target.value)}
-                    />
-                </Field>
-                <Field>
-                    <FieldLabel>{t('field.content')}</FieldLabel>
-                    <Textarea
-                        rows={10}
-                        value={content}
-                        onChange={(event) => setContent(event.target.value)}
-                    />
-                </Field>
-                <div className="flex justify-end gap-2">
-                    <Button variant="ghost" onClick={onClose}>
-                        {t('common.cancel')}
-                    </Button>
-                    <Button
-                        onClick={() =>
-                            void callAction('livingmemory.update', {
-                                id: entry.id,
-                                content,
-                                title,
-                                keywords: keywords
-                                    .split(',')
-                                    .map((item) => item.trim())
-                                    .filter((item) => item.length > 0)
-                            })
-                                .then(onClose)
-                                .catch(report)
-                        }
-                    >
-                        {t('common.save')}
-                    </Button>
-                </div>
-            </DialogContent>
-        </Dialog>
     )
 }
 

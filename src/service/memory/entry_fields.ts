@@ -1,6 +1,7 @@
+import { MAX_MEMORY_KEYWORDS } from '../../contracts/memory.ts'
 import type { AttributedMemoryItem, ExtractedMemoryItem } from '../../contracts/workflows.ts'
 
-export const MAX_MEMORY_KEYWORDS = 12
+export { MAX_MEMORY_KEYWORDS }
 export const DEFAULT_MEMORY_IMPORTANCE = 0.5
 
 export const normalizeMemoryText = (value: string) => value.trim()

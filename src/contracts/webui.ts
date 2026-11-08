@@ -34,6 +34,7 @@ export interface LivingMemoryEntryView {
     title: string | null
     content: string
     summary: string | null
+    sentiment: string | null
     keywords: string[]
     speakerKeys: string[]
     importance: number | null
@@ -41,6 +42,11 @@ export interface LivingMemoryEntryView {
     sourceConversationId: string | null
     createdAt: number
     updatedAt: number
+}
+
+export interface LivingMemorySpeakerView {
+    speakerKey: string
+    speakerLabel: string
 }
 
 /** 与 `query.ts` 的 `MemoryListFacets` 同形；这里只做界面投影。 */

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import type { Context } from 'cordis'
+import type { Schema } from '@chatluna/schema'
+import type { LivingMemoryEntriesSnapshot } from '../src/contracts/webui.ts'
 import { withLivingMemoryRepository } from './persistence-test-utils.ts'
 import { livingMemoryWebUI } from '../src/service/app/webui.ts'
 import { LivingMemoryAdminService } from '../src/service/app/admin_service.ts'
@@ -26,8 +28,8 @@ const createWebUI = () => {
             refresh.set(key, options.refreshOn)
             return () => {}
         },
-        action: (name: string, _options: unknown, handler: (...args: any[]) => unknown) => {
-            actions.set(name, handler)
+        action: (name: string, options: { input: Schema }, handler: (...args: any[]) => unknown) => {
+            actions.set(name, (input, action) => handler(options.input.parse(input), action))
             return () => {}
         }
     }
@@ -147,6 +149,47 @@ it('projects entries with their facets and total', async () => {
         assert.equal(snapshot.facets.statuses.active, 1)
         assert.equal(snapshot.facets.statuses.archived, 1)
         assert.equal(snapshot.entries.length, 2)
+    })
+})
+
+it('creates the first memory in a preset and reads edited fields back from the list', async () => {
+    await withWebUI(async (_ctx, _repository, ui) => {
+        const presetId = 'new-preset'
+        const memory = {
+            type: 'fact', status: 'archived', title: '聚餐', topic: '生活',
+            content: '周五聚餐', summary: '聚餐安排', sentiment: '期待',
+            importance: 0, keywords: ['晚餐'], speakerKeys: ['alice']
+        }
+        const { id } = await ui.call('livingmemory.create', { presetId, ...memory }) as { id: string }
+        const read = async () => (await ui.read('livingmemory.entries', {
+            presetId, status: 'all'
+        }) as LivingMemoryEntriesSnapshot).entries[0]
+
+        assert.partialDeepStrictEqual(await read(), {
+            ...memory, id, presetId, sourceConversationId: null, sourceLabel: null
+        })
+        await ui.call('livingmemory.update', { id, sentiment: '开心', importance: 0.85 })
+        assert.partialDeepStrictEqual(await read(), { ...memory, sentiment: '开心', importance: 0.85 })
+
+        const revision = {
+            type: 'plan', status: 'active', title: '新安排', content: '改到周六',
+            summary: '更改日期', keywords: [], sentiment: null, importance: null, speakerKeys: []
+        }
+        await ui.call('livingmemory.update', { id, ...revision })
+        const edited = await read()
+        assert.partialDeepStrictEqual(edited, revision)
+        assert.deepEqual(edited?.keywords, [])
+        assert.deepEqual(edited?.speakerKeys, [])
+    })
+})
+
+it('offers registered speakers in the selected preset even without a profile', async () => {
+    await withWebUI(async (_ctx, repository, ui) => {
+        const alice = { speakerKey: 'alice', speakerLabel: '爱丽丝' }
+        await repository.upsertPresetSpeaker({ presetId: 'preset-1', ...alice })
+        await repository.upsertPresetSpeaker({ presetId: 'preset-2', speakerKey: 'bob', speakerLabel: '鲍勃' })
+
+        assert.deepEqual(await ui.read('livingmemory.speakers', { presetId: 'preset-1' }), [alice])
     })
 })
 

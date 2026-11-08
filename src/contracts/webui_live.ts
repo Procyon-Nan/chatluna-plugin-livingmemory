@@ -7,15 +7,21 @@ import type {
     LivingMemoryProfilesSnapshot,
     LivingMemoryScopesSnapshot,
     LivingMemorySearchHitView,
+    LivingMemorySpeakerView,
     LivingMemorySnapshotsSnapshot,
     LivingMemoryStatusSnapshot
 } from './webui.ts'
 import type {
     LivingMemorySearchMemoryType,
-    MemoryEntryRecord,
+    MemoryMutationInput,
     MemorySearchStatus
 } from './memory.ts'
 import type { DreamTriggerResult } from './workflows.ts'
+
+type EntryInput = Pick<
+    MemoryMutationInput,
+    'type' | 'status' | 'content' | 'summary' | 'sentiment' | 'importance' | 'keywords' | 'topic' | 'title'
+> & { speakerKeys?: string[] }
 
 /**
  * WebUI 的 live state 与 action 声明。
@@ -29,6 +35,7 @@ declare module '@chatluna/ui-client/client' {
     interface States {
         'livingmemory.scopes': LivingMemoryScopesSnapshot
         'livingmemory.entries': LivingMemoryEntriesSnapshot
+        'livingmemory.speakers': LivingMemorySpeakerView[]
         'livingmemory.jobs': LivingMemoryJobView[]
         'livingmemory.personas': LivingMemoryPersonaView[]
         'livingmemory.profiles': LivingMemoryProfilesSnapshot
@@ -36,27 +43,13 @@ declare module '@chatluna/ui-client/client' {
         'livingmemory.status': LivingMemoryStatusSnapshot
     }
     interface Actions {
-        'livingmemory.create'(input: {
+        'livingmemory.create'(input: EntryInput & {
             presetId: string
             conversationId?: string
             userId?: string
             channelId?: string
-            type: MemoryEntryRecord['type']
-            content: string
-            topic?: string
-            title?: string
-            keywords?: string[]
-            speakerKeys?: string[]
         }): { id: string }
-        'livingmemory.update'(input: {
-            id: string
-            content?: string
-            topic?: string
-            title?: string
-            keywords?: string[]
-            importance?: number
-            status?: MemoryEntryRecord['status']
-        }): void
+        'livingmemory.update'(input: Partial<EntryInput> & { id: string }): void
         'livingmemory.remove'(input: { id: string; purge?: boolean }): void
         'livingmemory.search'(input: {
             presetId: string

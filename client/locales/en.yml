@@ -9,7 +9,7 @@ transfer.merge: Memories with matching IDs and profiles for the same speaker wil
 transfer.confirm: Confirm import
 transfer.invalid: Choose a JSON file exported by LivingMemory (format versions 1–5).
 transfer.imported: 'Imported into “{target}”: {entries} memories, {profiles} profiles and {speakers} speakers.'
-empty.noPreset: No preset data yet. Produce memories in a conversation, or import an export file.
+empty.noPreset: No preset data yet. Create your first memory or import a file.
 
 tab.entries: Memories
 tab.jobs: Jobs
@@ -32,11 +32,27 @@ entries.total: '{count} entries'
 entries.empty: No memories here yet
 entries.untitled: Untitled
 entries.edit: Edit
+entries.create: New memory
+entries.editTitle: Edit memory
+entries.created: Memory created
+entries.saved: Memory saved
+entries.choosePreset: Select or enter a preset ID
+entries.noSpeakers: No users linked
 entries.archive: Archive
 entries.purge: Delete
 
 field.title: Title
-field.keywords: Keywords (comma separated)
+field.keywords: Keywords (one per line, up to {max})
+field.preset: Preset
+field.summary: Summary
+field.type: Type
+field.status: Status
+field.sentiment: Sentiment
+field.importance: Importance
+field.speakers: Linked users
+field.source: Source
+field.createdAt: Created
+field.updatedAt: Updated
 field.content: Content
 
 jobs.dream: Run Dream

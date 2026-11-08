@@ -199,8 +199,8 @@ S3 与 S5 各自完成单元级验证但拼不到一起：插件整体不加载�
 | 管理服务 | `src/service/app/admin_service.ts` 组合仓储、变更、检索、人设、画像、Dream 与索引的读写；预设列表取目录与库中存量的并集 |
 | 配置自检 | `src/service/app/config_status.ts` 沿用 v1 三条规则（召回模型、嵌入模型、提取模型），并入 `MemoryServiceStatus` |
 | 命令 | `src/service/app/commands.ts` 的 `/livingmemory <预设> delete <text\|user\|profile> <值>`，确认后归档记忆或删除画像；`-c` 选项因 v2 Character 引擎直接使用预设 id 而移除 |
-| 管理页数据面 | `src/service/app/webui.ts` 提供 `livingmemory.{scopes,entries,profiles,personas,snapshots,jobs,status}` 七个 state 与 13 个 action，写操作要求权限 4 |
-| 管理页 | `client/page.tsx` 六个面板：记忆检索编辑与归档、画像编辑重生成、人设卡片、快照、任务（含 Dream 与索引维护）、召回测试；`/livingmemory` 挂在 capabilities 分组 |
+| 管理页数据面 | `src/service/app/webui.ts` 提供预设、记忆、说话人、画像、人设、快照、任务及插件状态；写操作要求权限 4 |
+| 管理页 | 记忆可手动新建、编辑与归档，按预设选择关联用户。列表分别展示摘要、正文、情绪与重要度。画像、人设卡片、快照、任务、召回测试各有独立面板；`/livingmemory` 挂在 capabilities 分组 |
 | 旧数据导入 | `importPreset` 覆盖记忆、来源、画像与说话人卡片；补充缺省 `topic`/`title` 的推导，使 v1 版本 1—5 的导出文件导入后与新建行一致 |
 | 启动与每日维护 | `src/service/app/maintenance.ts` 接回四项数据修复、全局中断任务回收、过期任务清理与到期归档记忆清理；此前这些方法没有任何调用点 |
 | 快照与人设导出 | v1 的快照不进导出文件，人设卡片是预设级派生缓存，同样不进；两者沿用 v1 范围 |

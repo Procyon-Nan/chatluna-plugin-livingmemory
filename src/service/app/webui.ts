@@ -1,5 +1,5 @@
 import type { Context } from 'cordis'
-import Schema from 'schemastery'
+import { Schema } from '@chatluna/schema'
 import type {} from '../../contracts/webui_live.ts'
 import { requireActionLevel } from '@chatluna/ui-server'
 import type {} from '@chatluna/ui-server'
@@ -31,10 +31,22 @@ import type {
     UserProfileRecord
 } from '../../contracts/memory.ts'
 import type { MemoryListQuery } from '../../contracts/rpc.ts'
-import { memoryEntryTypes } from '../../contracts/memory.ts'
+import { memoryEntryStatuses, memoryEntryTypes } from '../../contracts/memory.ts'
 
 /** 管理页写操作要求的权限等级。 */
 const WRITE_LEVEL = 4
+
+const entryFields = {
+    topic: Schema.string(),
+    title: Schema.string(),
+    summary: Schema.string(),
+    sentiment: Schema.string(),
+    importance: Schema.number().min(0).max(1),
+    status: Schema.union(memoryEntryStatuses),
+    // 省略数组时保留原值；显式传 [] 才清空。
+    keywords: Schema.array(Schema.string()).optional().default(undefined),
+    speakerKeys: Schema.array(Schema.string()).optional().default(undefined)
+}
 
 interface LivingMemoryWebUI {
     admin: LivingMemoryAdminService
@@ -96,6 +108,15 @@ export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
                 page: result.page,
                 pageSize: result.pageSize
             }
+        },
+        refreshOn
+    })
+
+    ctx.chatluna_webui.state('livingmemory.speakers', {
+        params: Schema.object({ presetId: Schema.string().required() }),
+        get: async ({ presetId }: { presetId: string }) => {
+            const speakers = await ui.admin.listPresetSpeakers(presetId)
+            return speakers.map(({ speakerKey, speakerLabel }) => ({ speakerKey, speakerLabel }))
         },
         refreshOn
     })
@@ -200,31 +221,18 @@ export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
                 conversationId: Schema.string(),
                 userId: Schema.string(),
                 channelId: Schema.string(),
-                type: Schema.string().required(),
+                type: Schema.union(memoryEntryTypes).required(),
                 content: Schema.string().required(),
-                topic: Schema.string(),
-                title: Schema.string(),
-                keywords: Schema.array(Schema.string()),
-                speakerKeys: Schema.array(Schema.string())
-            })
+                ...entryFields
+            }).role('strict')
         },
         async (input, action) => {
             await requireActionLevel(ctx, action, WRITE_LEVEL)
+            const { presetId, conversationId, userId, channelId, speakerKeys, ...memory } = input
             const entry = await ui.admin.createMemory(
-                {
-                    presetId: input.presetId,
-                    conversationId: input.conversationId ?? '',
-                    ...(input.userId === undefined ? {} : { userId: input.userId }),
-                    ...(input.channelId === undefined ? {} : { channelId: input.channelId })
-                },
-                {
-                    type: input.type as MemoryEntryRecord['type'],
-                    content: input.content,
-                    ...(input.topic === undefined ? {} : { topic: input.topic }),
-                    ...(input.title === undefined ? {} : { title: input.title }),
-                    ...(input.keywords === undefined ? {} : { keywords: input.keywords })
-                },
-                input.speakerKeys
+                { presetId, conversationId: conversationId ?? '', userId, channelId },
+                memory,
+                speakerKeys
             )
             notifyChanged(ctx)
             return { id: entry.id }
@@ -236,13 +244,10 @@ export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
         {
             input: Schema.object({
                 id: Schema.string().required(),
+                type: Schema.union(memoryEntryTypes),
                 content: Schema.string(),
-                topic: Schema.string(),
-                title: Schema.string(),
-                keywords: Schema.array(Schema.string()),
-                importance: Schema.number(),
-                status: Schema.union(['active', 'archived'] as const)
-            })
+                ...entryFields
+            }).role('strict')
         },
         async (input, action) => {
             await requireActionLevel(ctx, action, WRITE_LEVEL)
@@ -466,6 +471,7 @@ const toEntryView = (entry: MemoryEntryRecord): LivingMemoryEntryView => ({
     title: entry.title,
     content: entry.content,
     summary: entry.summary,
+    sentiment: entry.sentiment,
     keywords: [...entry.keywords],
     speakerKeys: [...entry.speakerKeys],
     importance: entry.importance,
