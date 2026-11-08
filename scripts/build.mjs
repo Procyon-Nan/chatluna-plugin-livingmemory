@@ -25,5 +25,16 @@ try {
     await bundle.close()
 }
 
-await buildClient(projectRoot.replaceAll('\\', '/'))
+await buildClient(projectRoot.replaceAll('\\', '/'), {
+    logLevel: 'info',
+    build: {
+        rollupOptions: {
+            onwarn(warning, warn) {
+                // 管理页只在浏览器运行，组件的客户端标记不影响打包。
+                if (warning.code === 'MODULE_LEVEL_DIRECTIVE' && warning.message.includes('"use client"')) return
+                warn(warning)
+            }
+        }
+    }
+})
 await import('./build-workers.mjs')
