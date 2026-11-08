@@ -134,7 +134,7 @@ langchain 在 v1 中被 21 个文件引用，`ctx.ai` 提供 `chatluna.extract(s
 
 | 项 | 结果 |
 | --- | --- |
-| 内部工具循环 | 新增 `workflows/tool_call.ts` 与 `workflows/tool_loop.ts`，自行驱动 `ctx.chatluna.chat`：一次模型调用 → 解析零个或多个工具调用 → 执行 → 追加结果。召回与 Dream 共用同一实现，差异由 `maxModelCalls`、`multipleToolCalls`、`conclusiveTools`、`prepareMessages`、`onRound` 等选项表达 |
+| 内部工具循环 | 召回与 Dream 共用 `workflows/tool_loop.ts` 的单轮执行逻辑。召回等待模型确认沿用或更新快照；Dream 每轮执行工具后按本批剩余记忆决定是否继续 |
 | 不使用 v2 Agent | `AgentRegistry` 的 `AGENT_INJECT` 要求 9 个服务全部在场，本插件只注入 4 个；`chat-observer` 会索引每个带 `conversationKey` 的 agent，内部会话会污染用户消息池。Dream 的批次状态机、逐轮推进消息与历史压缩也无法用 turn driver 表达 |
 | 提取 | `workflows/extraction/` 保留 v1 的窗口、吸收预算、锚定筛选、旁听切片与连续失败三次放弃；失败处理区分「未达上限中断本次排干」与「达上限记任务并推进游标」 |
 | 召回 | `workflows/recall/` 的代理式召回改为 `LivingMemoryToolLoop`，模型调用上限 6 次，检索、更新快照、pass 三个工具以闭包持有作用域 |

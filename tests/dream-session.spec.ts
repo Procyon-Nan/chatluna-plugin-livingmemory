@@ -183,6 +183,7 @@ const userTexts = (request: ChatRequest | undefined) =>
 
 it('drives the dream conversation with stable prefixes and paired tools', async () => {
     const run = createRun({
+        batches: [['a', 'b']],
         respond: (_request, index) =>
             index === 1
                 ? callFold(
@@ -198,6 +199,10 @@ it('drives the dream conversation with stable prefixes and paired tools', async 
     await run.run()
 
     assert.equal(run.requests.length, 2)
+    const progress = userTexts(run.requests[1]).at(-1)!
+    assert.match(progress, /当前批次尚未处理的记忆 ID：b\n/u)
+    assert.doesNotMatch(progress, /本轮模型请求或工具执行失败|次模型调用内未完成/u)
+    assert.ok(!run.logs.some((log) => log.includes('Dream 本轮处理失败')))
     assert.deepEqual(getDreamCoverage(run.state), {
         targetCount: 2,
         processedCount: 2,
@@ -256,6 +261,12 @@ it('keeps successful work, retries ineffective rounds and moves on after three c
     await run.run()
 
     assert.equal(run.requests.length, 8)
+    const failures = run.logs.filter((log) => log.includes('Dream 本轮处理失败'))
+    assert.equal(failures.length, 2)
+    for (const failure of failures) assert.match(failure, /request failed/u)
+    for (const nextRequest of [run.requests[2], run.requests[5]]) {
+        assert.match(userTexts(nextRequest).at(-1)!, /request failed/u)
+    }
     assert.deepEqual(
         getDreamCoverage(run.state).unprocessedMemoryIds,
         ['b']

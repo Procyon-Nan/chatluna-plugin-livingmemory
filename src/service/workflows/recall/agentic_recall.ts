@@ -253,21 +253,15 @@ export class LivingMemoryAgenticRecallExecutor {
             }),
             logger: runLogger,
             stage: 'recall',
-            maxModelCalls: agenticRecallMaxModelCalls,
-            conclusiveTools: [memoryPassTool.name, memoryUpdateSnapshotTool.name],
             ...(signal === undefined ? {} : { signal })
         })
-        const result = await loop.run()
-        if (result.conclusion === null) {
-            runLogger.diagnosticSummary((fields) => ({
-                event: '召回结束',
-                detail: `${formatLogScope(fields)}; 结果：模型未提交快照更新`
-            }))
-            return null
-        }
+        const modelCalls = await loop.runUntilConclusion({
+            maxModelCalls: agenticRecallMaxModelCalls,
+            conclusiveTools: [memoryPassTool.name, memoryUpdateSnapshotTool.name]
+        })
         runLogger.diagnosticSummary((fields) => ({
             event: '召回模型调用结束',
-            detail: `${formatLogScope(fields)}; 模型调用：${result.modelCalls} 次; 检索调用：${recordedSearchCalls.length} 次`
+            detail: `${formatLogScope(fields)}; 模型调用：${modelCalls} 次; 检索调用：${recordedSearchCalls.length} 次`
         }))
         return savedSnapshot
     }

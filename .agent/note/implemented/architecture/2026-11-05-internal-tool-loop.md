@@ -16,19 +16,18 @@ LivingMemory 有三个内部工作流需要模型自行决定调用哪些记忆�
 
 插件自带一层最小的工具循环，直接驱动 `ctx.chatluna.chat`，不经过 `ctx.agents`。
 
-`src/service/workflows/tool_call.ts` 定义内部工具契约：`{ name, description, args: Schema, run(input) }`，并把执行结果规范成给模型看的一段文本（成功、参数不合法、未知工具、执行失败四种）。`src/service/workflows/tool_loop.ts` 是循环本体：每步先按 `prepareMessages` 取消息，调用一次模型，把助手消息推入历史，零个或多个工具调用按策略处理，结果以 `tool-result` 块推回，命中结论工具或达到调用上限即结束。
+`src/service/workflows/tool_call.ts` 负责执行工具并生成工具结果。`src/service/workflows/tool_loop.ts` 的 `runRound()` 每次调用一次模型，将接受的工具调用及对应结果写入历史，再返回本轮执行情况。
 
-召回与 Dream 共用这一个循环，差异全部由选项表达：
+召回与 Dream 共用单轮执行逻辑，各自决定何时结束：
 
-| 选项 | 召回 | Dream |
+| 行为 | 召回 | Dream |
 | --- | --- | --- |
-| `maxModelCalls` | 6 | 1（外层按批最多 60 轮） |
-| `multipleToolCalls` | 拒绝 | 顺序执行 |
-| `conclusiveTools` | 检索之外的 pass 与快照更新 | 无 |
-| `prepareMessages` | 无 | 按批次压缩历史后返回 |
-| `onRound` | 无 | 上报本轮是否有效，驱动连续 3 轮无效即跳过 |
+| 完成条件 | 成功执行 pass 或更新快照；6 次调用仍未收尾则报错 | 批次没有待处理记忆 |
+| 同一响应调用多个工具 | 整轮拒绝并提示逐个调用 | 顺序执行 |
+| 下一轮输入 | 工具结果或纠正提示 | 按批次管理历史，告知模型剩余记忆 |
+| 批次限制 | — | 连续 3 轮无有效操作或满 60 轮，跳过剩余记忆 |
 
-零个或多于一个工具调用时，助手消息不进入历史，只追加一条纠正提示，与 v1 的 scratchpad 语义一致。`signal.throwIfAborted()` 在每次模型调用与每次工具执行前检查。
+模型没有调用工具时，两个流程都会追加纠正提示。`signal.throwIfAborted()` 在每次模型调用与每次工具执行前检查。
 
 工具不注册到 `ctx.tools`：它们的作用域与批次状态由闭包持有，只在本循环内可见，不出现在模型工具的全局清单里。
 

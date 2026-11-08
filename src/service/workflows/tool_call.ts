@@ -18,10 +18,6 @@ export interface LivingMemoryLoopTool<I = any, O = unknown> {
     run(input: I): Promise<O>
 }
 
-export type LivingMemoryToolCallOutcome =
-    | { ok: true; text: string; value: unknown }
-    | { ok: false; text: string }
-
 const unknownToolMessage = (name: string) => `未知工具：${name}`
 
 const invalidToolArgsMessage = (name: string, reason: string) =>
@@ -46,7 +42,7 @@ export const renderToolOutput = (value: unknown) => {
 export const runLivingMemoryToolCall = async (
     tool: LivingMemoryLoopTool | undefined,
     call: ChatToolCallBlock
-): Promise<LivingMemoryToolCallOutcome> => {
+): Promise<{ ok: boolean; text: string }> => {
     if (tool === undefined) {
         return { ok: false, text: unknownToolMessage(call.toolName) }
     }
@@ -62,7 +58,7 @@ export const runLivingMemoryToolCall = async (
     }
     try {
         const value = await tool.run(args)
-        return { ok: true, text: renderToolOutput(value), value }
+        return { ok: true, text: renderToolOutput(value) }
     } catch (error) {
         if (!(error instanceof MemoryInputError)) throw error
         return {

@@ -98,6 +98,20 @@ export async function runDreamSession(input: DreamSessionRunInput) {
             blocks: [{ title: '用户消息', value: batchPrompt }]
         }))
 
+        const loop = new LivingMemoryToolLoop({
+            ctx,
+            model,
+            system: systemPrompt,
+            input: batchPrompt,
+            tools,
+            logger: batchLogger,
+            stage: 'dream',
+            multipleToolCalls: 'sequential',
+            history: history.history,
+            prepareMessages: () => history.prepareMessages(maxTokenLimit, signal),
+            onModelCall: ({ fold }) => history.recordUsage(fold.usage),
+            ...(signal === undefined ? {} : { signal })
+        })
         let ineffectiveRounds = 0
         for (let round = 1; round <= maxBatchRounds; round++) {
             signal?.throwIfAborted()
@@ -105,26 +119,8 @@ export async function runDreamSession(input: DreamSessionRunInput) {
             // 本轮是否有工具成功执行；与 v1 一致，重复操作也算有效。
             let effective = false
             try {
-                const loop = new LivingMemoryToolLoop({
-                    ctx,
-                    model,
-                    system: systemPrompt,
-                    input: batchPrompt,
-                    tools,
-                    logger: batchLogger,
-                    stage: 'dream',
-                    maxModelCalls: 1,
-                    multipleToolCalls: 'sequential',
-                    history: history.history,
-                    prepareMessages: async () =>
-                        await history.prepareMessages(maxTokenLimit, signal),
-                    onModelCall: ({ fold }) => history.recordUsage(fold.usage),
-                    onRound: (outcome) => {
-                        effective = outcome.effective
-                    },
-                    ...(signal === undefined ? {} : { signal })
-                })
-                await loop.run()
+                const successfulTools = await loop.runRound(round)
+                effective = successfulTools.length > 0
             } catch (error) {
                 signal?.throwIfAborted()
                 batchLogger.diagnosticSummary((fields) => ({
