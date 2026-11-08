@@ -46,8 +46,6 @@ const createExtractedMemory = (): AttributedMemoryItem => ({
 interface CoordinatorHarnessOptions {
     window?: number
     includeOverheard?: boolean
-    enableExtractionWhitelist?: boolean
-    extractionWhitelist?: string[]
     head?: () => Promise<number>
     extract?: () => Promise<LivingMemoryExtractionResult>
     createFailedJob?: ExtractionJobRepository['createFailedJob']
@@ -173,11 +171,6 @@ const createHarness = (
     if (options.head !== undefined) messageLog.head = options.head
 
     const coordinator = new LivingMemoryExtractionCoordinator(
-        {
-            enableExtractionWhitelist:
-                options.enableExtractionWhitelist ?? false,
-            extractionWhitelist: options.extractionWhitelist ?? []
-        },
         messageLog,
         repository,
         repository,
@@ -688,61 +681,6 @@ describe('LivingMemoryExtractionCoordinator', () => {
         await waitFor(() => calls === 2, 'configured model retry')
         assert.equal(harness.getExtractorInputs()[0], harness.getExtractorInputs()[1])
         assert.equal(harness.jobStore.jobs.length, 0)
-    })
-
-    it('does not initialize the cursor for non-whitelisted scopes', async () => {
-        const whitelistedScope: ChatHistoryScope = {
-            ...scope,
-            guildId: 'guild-1'
-        }
-        const harness = createHarness({
-            window: 2,
-            enableExtractionWhitelist: true,
-            extractionWhitelist: ['guild-1']
-        })
-        harness.messageLog.append(scope.conversationId, [
-            entry('user', 'q'),
-            entry('assistant', 'a')
-        ])
-
-        // 未命中白名单：跳过且游标不初始化
-        await queueExtraction(harness)
-        expect(harness.getExtractorCalls()).toBe(0)
-
-        // 命中白名单后的首个事件：从当时刻起算，不倾泻之前的积压
-        harness.messageLog.append(scope.conversationId, [
-            entry('user', 'q2'),
-            entry('assistant', 'a2')
-        ])
-        await harness.coordinator.queue(whitelistedScope, {
-            includeOverheard: harness.includeOverheard,
-            windowMessages: harness.windowMessages,
-            enableAutoDream: true,
-            resolveTranscriptOrigin: async () => ({
-                header: 'h',
-                sourceLabel: 's'
-            })
-        })
-        expect(harness.getExtractorCalls()).toBe(0)
-
-        harness.messageLog.append(whitelistedScope.conversationId, [
-            entry('user', 'q3'),
-            entry('assistant', 'a3')
-        ])
-        await harness.coordinator.queue(whitelistedScope, {
-            includeOverheard: harness.includeOverheard,
-            windowMessages: harness.windowMessages,
-            enableAutoDream: true,
-            resolveTranscriptOrigin: async () => ({
-                header: 'h',
-                sourceLabel: 's'
-            })
-        })
-        await waitFor(
-            () => harness.getExtractorCalls() === 1,
-            'whitelisted drain'
-        )
-        expect(harness.getExtractorInputs()[0]).toContain('q3')
     })
 
     it('writes extracted memories without creating jobs', async () => {

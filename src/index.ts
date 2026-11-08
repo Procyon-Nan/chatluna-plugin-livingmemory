@@ -134,16 +134,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .step(1)
             .description('生成单个用户画像时可送入模型的相关记忆条数上限。')
             .default(DEFAULT_CONFIG.userProfileMemoryLimit)
-    }).description('用户画像配置'),
-    Schema.object({
-        enableExtractionWhitelist: Schema.boolean()
-            .description('只对白名单内的会话自动提取记忆。')
-            .default(DEFAULT_CONFIG.enableExtractionWhitelist),
-        extractionWhitelist: Schema.array(Schema.string())
-            .role('table')
-            .description('自动提取白名单：群聊填群号，私聊填对方用户号。')
-            .default(DEFAULT_CONFIG.extractionWhitelist)
-    }).description('记忆提取配置')
+    }).description('用户画像配置')
 ])
 
 export async function apply(ctx: Context, config: Config = DEFAULT_CONFIG) {

@@ -80,7 +80,7 @@ M00 完成依据：脚手架的 9 个文件已生成；`chatluna.yml` 已注册�
 - [ ] **D11-L1**：完成 v1 源码、测试、配置、数据、任务、管理入口和引擎接入的行为盘点。
 - [ ] **D11-L2**：为每项行为补齐 v2 适配接口、负责模块和跨引擎覆盖范围。
 - [ ] **D11-V1**：建立 v1 与 v2 的行为对照验证，记录保持、适配或经独立决策批准的变化。
-- [ ] **D11-V2**：确认旧数据、旧配置和旧任务记录进入对应的 v2 业务流程。
+- [ ] **D11-V2**：确认导入的 v1 记忆数据能用于对应的 v2 业务流程。
 
 ## M01：独立插件与职责
 
@@ -272,10 +272,10 @@ v1 每次触发会重新读取未消费消息并分块。v2 重试期间在内�
   - `memorySearchToolMaxResults` 30 → 15。
   - `recallIntervalMessages` 10 → 20。
   - `extractionWindowMessages` 30 → 60，范围 0—200 → 0—360。
-  - 其余项沿用 v1 取值：`enableSnapshotInjection`、`enableUserProfileGeneration`、`enableDreamUserProfileGeneration`、`enableAutoDream` 为 `true`；`enableUserProfileInjection`、`enableConversationIsolation`、`extractionIncludeOverheard`、`enableExtractionWhitelist`、`debug` 为 `false`；`recallHistoryMessages` 20、`snapshotMaxLines` 5、`userProfileMinMemoryCount` 3、`userProfileMemoryLimit` 20、`memorySearchMinSimilarity` 0、`memoryCreateToolMaxMemories` 10、`extractionWhitelist` 空数组；四个模型项为 `无`；`enabledMemoryTools` 为检索、来源、创建三项。
-  - 旧配置没有自动导入通道，用户在配置界面重填；填入显式值时以显式值为准，不受上述默认值影响。
-- [x] **M08-L1 · LivingMemory**：按确认结果落实配置 schema 与说明，并明确旧配置导入时显式值的处理。schema 分六组，默认值统一取自 `DEFAULT_CONFIG`；旧配置没有自动导入通道，用户在配置界面重填。
-- [ ] **M08-V1**：核对新安装默认值、手动设置值与旧配置导入结果；文档、服务端配置及管理界面的值和含义一致。
+  - 其余项沿用 v1 取值：`enableSnapshotInjection`、`enableUserProfileGeneration`、`enableDreamUserProfileGeneration`、`enableAutoDream` 为 `true`；`enableUserProfileInjection`、`enableConversationIsolation`、`extractionIncludeOverheard`、`debug` 为 `false`；`recallHistoryMessages` 20、`snapshotMaxLines` 5、`userProfileMinMemoryCount` 3、`userProfileMemoryLimit` 20、`memorySearchMinSimilarity` 0、`memoryCreateToolMaxMemories` 10；四个模型项为 `无`；`enabledMemoryTools` 为检索、来源、创建三项。
+  - 旧版本仅迁移记忆数据，不迁移插件配置。
+- [x] **M08-L1 · LivingMemory**：插件配置分基础、模型、工具和画像四组；对话行为由 LivingMemory 对话规则控制，自动提取间隔为 0 时关闭。
+- [ ] **M08-V1**：核对新安装默认值与手动设置值；文档、服务端配置及管理界面的值和含义一致。
 
 ## 待讨论问题
 

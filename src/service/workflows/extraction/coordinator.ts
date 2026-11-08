@@ -4,8 +4,7 @@ import type { LivingMemoryMessageFormatter } from '../../transcript/message_form
 import { type QueueExtractionOptions, scopeKey } from '../../memory/helpers.ts'
 import type {
     ExtractionMemoryWriter,
-    JobRepository,
-    LivingMemoryConfig
+    JobRepository
 } from '../../../contracts/workflows.ts'
 import type {
     LivingMemoryTranscriptMessage,
@@ -14,12 +13,6 @@ import type {
 import { formatLogScope, type LivingMemoryLogger } from '../../logging/logger.ts'
 import { toHistoryTranscriptMessages } from '../../chat_history.ts'
 import type { ChatHistoryEntry, ChatHistoryScope, LivingMemoryChatHistory } from '../../chat_history.ts'
-
-type LivingMemoryExtractionConfig = Pick<
-    LivingMemoryConfig,
-    | 'enableExtractionWhitelist'
-    | 'extractionWhitelist'
->
 
 type ExtractionFormatter = Pick<
     LivingMemoryMessageFormatter,
@@ -216,7 +209,6 @@ export class LivingMemoryExtractionCoordinator {
     private readonly tasks = new Set<Promise<void>>()
 
     constructor(
-        private readonly config: LivingMemoryExtractionConfig,
         private readonly messageLog: ExtractionMessageLog,
         private readonly jobRepository: ExtractionJobRepository,
         private readonly memoryWriter: ExtractionMemoryWriter,
@@ -240,7 +232,6 @@ export class LivingMemoryExtractionCoordinator {
     ) {
         if (options.windowMessages === 0) return
         if (this.controller.signal.aborted) return
-        if (!this.isExtractionWhitelisted(scope)) return
 
         const key = scopeKey(scope)
         const state: ExtractionScopeState = this.stateByScope.get(key) ?? {
@@ -332,33 +323,6 @@ export class LivingMemoryExtractionCoordinator {
                 this.stateByScope.delete(key)
             }
         }
-    }
-
-    /** 白名单以用户可直接填写的平台 id 为准：群聊比对群号，私聊比对用户 id。 */
-    private resolveWhitelistId(scope: ChatHistoryScope) {
-        return scope.isDirect === true ? scope.userId : scope.guildId
-    }
-
-    /**
-     * 白名单门禁：未开启时全部放行；开启时仅放行 id 命中白名单的会话，
-     * 未命中记跳过诊断。白名单只约束自动提取，不影响日志采集与召回。
-     */
-    private isExtractionWhitelisted(scope: ChatHistoryScope): boolean {
-        if (!this.config.enableExtractionWhitelist) {
-            return true
-        }
-        const sessionId = this.resolveWhitelistId(scope)
-        if (
-            sessionId != null &&
-            this.config.extractionWhitelist.includes(sessionId)
-        ) {
-            return true
-        }
-        this.logger.diagnosticSummary(() => ({
-            event: '跳过记忆提取',
-            detail: `${formatLogScope(scope)}; 原因：会话未列入提取白名单`
-        }))
-        return false
     }
 
     private async drain(

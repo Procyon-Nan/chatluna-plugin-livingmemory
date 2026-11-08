@@ -24,7 +24,7 @@ yarn build
 
 在 **对话规则 → 能力 → LivingMemory** 设置全局默认值，或为指定群、频道单独配置。私聊可按频道或路由 ID 配置。
 
-旧版本在插件配置里设置过以下选项的，请把需要保留的值填入全局对话规则。
+如果只想在指定群自动提取记忆，把全局的「自动提取间隔」设为 `0`，再为这些群设置需要的消息条数。
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -74,13 +74,6 @@ yarn build
 | `enableDreamUserProfileGeneration` | boolean | `true` | Dream 后生成或更新画像 |
 | `userProfileMinMemoryCount` | number | `3` | 生成画像所需最少活跃记忆数 |
 | `userProfileMemoryLimit` | number | `20` | 送入模型的关联记忆上限 |
-
-### 记忆提取配置
-
-| Key | Type | Default | Description |
-| --- | --- | --- | --- |
-| `enableExtractionWhitelist` | boolean | `false` | 只对白名单会话自动提取 |
-| `extractionWhitelist` | string[] | `[]` | 白名单：群聊填群号，私聊填对方用户号 |
 
 ## 命令
 

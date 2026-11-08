@@ -50,8 +50,6 @@ export const DEFAULT_CONFIG: LivingMemoryServiceConfig = {
     userProfileMemoryLimit: 20,
     embeddingModel: '无',
     rerankModel: '无',
-    enableExtractionWhitelist: false,
-    extractionWhitelist: [],
     memorySearchToolMaxResults: 15,
     memorySearchMinSimilarity: 0,
     enabledMemoryTools: [
@@ -166,7 +164,6 @@ export default class LivingmemoryService extends Service {
             this.logger
         )
         this.extractionCoordinator = new LivingMemoryExtractionCoordinator(
-            config,
             this.history,
             this.repository,
             this.mutations,

@@ -102,8 +102,6 @@ export interface LivingMemoryConfig {
     userProfileMemoryLimit: number
     embeddingModel: string
     rerankModel: string
-    enableExtractionWhitelist: boolean
-    extractionWhitelist: string[]
     memorySearchToolMaxResults: number
     memorySearchMinSimilarity: number
     enabledMemoryTools: LivingMemoryToolName[]

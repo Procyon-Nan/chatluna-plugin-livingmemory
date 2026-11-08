@@ -51,6 +51,10 @@ test('LivingMemory rules load independently, inherit global settings and apply e
     })
     await ctx.routing.save({ id: 'global', values: { memory: { enabled: true }, livingmemory: { extractionWindowMessages: 0 } } })
     assert.equal(routeSettings(ctx, 'c', room).extractionWindowMessages, 0)
+    await ctx.routing.save({ id: 'group', filter: { kind: 'scope', field: 'guild', values: ['g'] },
+        values: { livingmemory: { enableUserProfileInjection: true, extractionWindowMessages: 30 } } })
+    assert.equal(routeSettings(ctx, 'c', room).extractionWindowMessages, 30)
+    assert.equal(routeSettings(ctx, 'another', { ...room, guild: 'g2' }).extractionWindowMessages, 0)
     unregister()
     assert.equal(routeSettings(ctx, 'c', room).enableUserProfileInjection, true)
 })
