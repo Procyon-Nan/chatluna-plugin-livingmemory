@@ -12,7 +12,7 @@ export default function apply(ctx: Context) {
     ctx.slots.route({
         path: '/livingmemory',
         page: async () => (await import('./page.tsx')).LivingMemoryPage,
-        title: '长期记忆',
+        title: 'LivingMemory',
         icon: 'brain',
         order: 36,
         group: 'capabilities',
