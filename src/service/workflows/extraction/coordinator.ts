@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import type { LivingMemoryExtractor } from './extractor.ts'
 import type { LivingMemoryMessageFormatter } from '../../transcript/message_formatter.ts'
 import { type QueueExtractionOptions, scopeKey } from '../../memory/helpers.ts'
@@ -276,11 +275,7 @@ export class LivingMemoryExtractionCoordinator {
         }
         state.requested = false
 
-        const runLogger = this.logger.with({
-            ...scope,
-            workflow: 'extraction',
-            runId: randomUUID()
-        })
+        const runLogger = this.logger.with({ ...scope })
         const task = this.drain(key, state, scope, runLogger).catch(
             (error) => {
                 if (this.controller.signal.aborted) {
@@ -503,7 +498,6 @@ export class LivingMemoryExtractionCoordinator {
         const result = await this.extractor.extract(
             input,
             {
-                conversationId: scope.conversationId,
                 presetId: scope.presetId,
                 presetLabel: scope.presetLabel,
                 presetPrompt,

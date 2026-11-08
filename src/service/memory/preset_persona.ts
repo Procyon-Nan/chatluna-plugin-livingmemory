@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import type { Context } from 'cordis'
 import { ModelError, NoModelError } from '@chatluna/ai'
 import type {} from '@chatluna/ai-runtime'
@@ -39,18 +39,12 @@ interface PresetPersonaRepository {
     deletePresetPersona(presetId: string): Promise<void>
 }
 
-/** 模型侧失败的原因；此类回退不落库，下次解析时重试。 */
-type PersonaPruneFailure =
-    | 'model-unavailable'
-    | 'invoke-failed'
-    | 'structured-output-failed'
-
 interface PersonaCardOutcome {
     card: string
     totalLines: number
     deletedLines: number
     usedRawFallback: boolean
-    failure: PersonaPruneFailure | null
+    failure: string | null
 }
 
 /**
@@ -180,18 +174,12 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
      * 落库行；模型侧失败时抛错，落库行保持原状。
      */
     async regenerateCard(presetId: string): Promise<void> {
-        const logger = this.logger.with({
-            workflow: 'persona',
-            presetId,
-            runId: randomUUID()
-        })
+        const logger = this.logger.with({ presetId })
         const epoch = this.getClearEpoch(presetId)
         const raw = await resolvePresetPrompt(this.ctx, presetId)
-        const outcome = await this.prune(presetId, raw, logger)
+        const outcome = await this.prune(raw, logger)
         if (outcome.failure !== null) {
-            throw new Error(
-                `persona card generation failed: ${outcome.failure}`
-            )
+            throw new Error(`人设卡片生成失败：${outcome.failure}`)
         }
 
         const rawHash = hashPresetText(raw)
@@ -223,12 +211,8 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
         rawHash: string,
         epoch: number
     ): Promise<string> {
-        const logger = this.logger.with({
-            workflow: 'persona',
-            presetId,
-            runId: randomUUID()
-        })
-        const outcome = await this.prune(presetId, raw, logger)
+        const logger = this.logger.with({ presetId })
+        const outcome = await this.prune(raw, logger)
         if (outcome.failure !== null) {
             return outcome.card
         }
@@ -267,14 +251,11 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
      * 原因。
      */
     private async prune(
-        presetId: string,
         raw: string,
         logger: LivingMemoryLogger
     ): Promise<PersonaCardOutcome> {
         const lines = splitLines(raw)
-        const fallback = (
-            failure: PersonaPruneFailure
-        ): PersonaCardOutcome => ({
+        const fallback = (failure: string): PersonaCardOutcome => ({
             card: raw,
             totalLines: lines.length,
             deletedLines: 0,
@@ -288,7 +269,7 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
                 (fields) => `${formatLogScope(fields)}; 原因：模型加载失败`,
                 'warn'
             )
-            return fallback('model-unavailable')
+            return fallback('模型不可用')
         }
 
         let structuredResult
@@ -306,12 +287,7 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
                         return `超出范围的行号：${invalid.join('、')}；有效范围 0-${lines.length - 1}`
                     }
                 },
-                logging: {
-                    logger,
-                    stage: 'persona-card',
-                    presetId,
-                    conversationId: 'persona-card'
-                }
+                logging: { logger, stage: 'persona-card' }
             })
         } catch (error) {
             if (!(error instanceof ModelError)) throw error
@@ -321,7 +297,7 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
                 'warn',
                 error
             )
-            return fallback('invoke-failed')
+            return fallback('模型调用失败')
         }
 
         if (structuredResult.parseError !== null) {
@@ -331,7 +307,7 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
                     `${formatLogScope(fields)}; 原因：${structuredResult.parseError}`,
                 'warn'
             )
-            return fallback('structured-output-failed')
+            return fallback('模型输出未通过校验')
         }
 
         return this.applyDeletions(

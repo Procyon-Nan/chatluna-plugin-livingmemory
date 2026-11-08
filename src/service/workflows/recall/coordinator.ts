@@ -1,5 +1,4 @@
 import type { RouteSettings } from '../../../routing.ts'
-import { randomUUID } from 'node:crypto'
 import { isModelConfigured } from '../../shared/utils.ts'
 import { scopeKey } from '../../memory/helpers.ts'
 import { formatLogScope, type LivingMemoryLogger } from '../../logging/logger.ts'
@@ -93,11 +92,7 @@ export class LivingMemoryRecallCoordinator {
         }
 
         const input = renderLivingMemoryTranscript(chatHistory)
-        const runLogger = this.logger.with({
-            ...scope,
-            workflow: 'recall',
-            runId: randomUUID()
-        })
+        const runLogger = this.logger.with({ ...scope })
         this.recallLockByConversation.add(lockKey)
         this.anchorPositionByScope.set(lockKey, currentPosition)
         const task = this.run(settings, scope, input, runLogger)

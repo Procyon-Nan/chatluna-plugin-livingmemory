@@ -55,7 +55,6 @@ export class LivingMemoryVectorIndexJobRunner {
         }
         const label = operationLabels[operationName] ?? operationName
         const logger = this.logger.with({
-            workflow: 'vector-index',
             jobId: job.id,
             presetId: job.presetId
         })

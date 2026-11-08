@@ -112,7 +112,7 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                     input: batchPrompt,
                     tools,
                     logger: batchLogger,
-                    stage: 'dream-decision',
+                    stage: 'dream',
                     maxModelCalls: 1,
                     multipleToolCalls: 'sequential',
                     history: history.history,

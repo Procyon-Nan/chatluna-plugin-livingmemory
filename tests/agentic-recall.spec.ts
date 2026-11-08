@@ -338,7 +338,7 @@ it('fails after six invalid tool calls without updating a recall result', async 
         )
     })
 
-    await assert.rejects(harness.run(), /did not finish within 6 model calls/u)
+    await assert.rejects(harness.run(), /召回在 6 次模型调用内未完成/u)
     assert.equal(harness.invocations.length, 6)
     assert.equal(harness.searchInvocations.length, 0)
 })

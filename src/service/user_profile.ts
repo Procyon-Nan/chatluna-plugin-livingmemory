@@ -142,10 +142,7 @@ export class LivingMemoryUserProfileService {
         signal: AbortSignal,
         force: boolean
     ): Promise<UserProfileGenerationResult> {
-        const runLogger = this.logger.with({
-            workflow: 'user-profile',
-            presetId
-        })
+        const runLogger = this.logger.with({ presetId })
         const speakers = await this.repository.listPresetSpeakers(presetId)
         const memoryGroups = await this.loadEligibleMemoryGroups(
             presetId,
@@ -367,16 +364,7 @@ export class LivingMemoryUserProfileService {
                         return '当前尚无人物画像，不能使用 keep，必须使用 update 生成画像'
                     }
                 },
-                logging: {
-                    logger,
-                    stage: 'user-profile',
-                    presetId,
-                    conversationId: [
-                        'user-profile',
-                        presetId,
-                        group.speakerKey
-                    ].join(':')
-                }
+                logging: { logger, stage: 'user-profile' }
             })
         } catch (error) {
             signal.throwIfAborted()

@@ -252,7 +252,7 @@ export class LivingMemoryAgenticRecallExecutor {
                 }
             }),
             logger: runLogger,
-            stage: 'agentic-decision',
+            stage: 'recall',
             maxModelCalls: agenticRecallMaxModelCalls,
             conclusiveTools: [memoryPassTool.name, memoryUpdateSnapshotTool.name],
             ...(signal === undefined ? {} : { signal })

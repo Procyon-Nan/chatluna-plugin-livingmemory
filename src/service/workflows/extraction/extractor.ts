@@ -29,7 +29,6 @@ export interface LivingMemoryExtractionResult {
 }
 
 export interface LivingMemoryExtractionContext {
-    conversationId: string
     presetId: string
     presetLabel?: string
     presetPrompt: string
@@ -94,12 +93,7 @@ export class LivingMemoryExtractor {
                 }
             },
             stringifiedArrayField: 'memories',
-            logging: {
-                logger,
-                stage: 'memory-extraction',
-                presetId: context.presetId,
-                conversationId: context.conversationId
-            }
+            logging: { logger, stage: 'memory-extraction' }
         })
         const extracted =
             result.value?.memories.map((item): AttributedMemoryItem => {

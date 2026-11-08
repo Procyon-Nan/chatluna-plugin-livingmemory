@@ -5,6 +5,7 @@ import type { ChatBlock, ChatToolCallBlock, JsonSchemaNode } from '@chatluna/mes
 import { schemasteryToJsonSchemaNode } from '@chatluna/schema'
 import { formatErrorDetails } from '../shared/utils.ts'
 import { formatLogScope, type LivingMemoryLogger } from '../logging/logger.ts'
+import { modelStageLabels } from '../logging/model_calls.ts'
 import {
     runLivingMemoryToolCall,
     textBlocks,
@@ -33,8 +34,7 @@ export interface LivingMemoryToolLoopOptions {
     input: string
     tools: readonly LivingMemoryLoopTool[]
     logger: LivingMemoryLogger
-    /** 日志阶段名，与 `modelStageLabels` 的键一致。 */
-    stage: string
+    stage: 'recall' | 'dream'
     maxModelCalls: number
     /** 调用这些工具即视为收尾，循环在它们执行成功后结束。 */
     conclusiveTools?: readonly string[]
@@ -199,7 +199,7 @@ export class LivingMemoryToolLoop {
         }
 
         throw new Error(
-            `${this.options.stage} did not finish within ${maxModelCalls} model calls`
+            `${modelStageLabels[this.options.stage]}在 ${maxModelCalls} 次模型调用内未完成`
         )
     }
 
@@ -207,7 +207,8 @@ export class LivingMemoryToolLoop {
         messages: readonly ChatSpecMessage[],
         step: number
     ): Promise<LivingMemoryChatFold> {
-        const { ctx, model, logger, stage } = this.options
+        const { ctx, model, logger } = this.options
+        const stage = modelStageLabels[this.options.stage]
         logger.diagnosticSummary((fields) => ({
             event: `${stage}模型调用`,
             detail: `${formatLogScope(fields)}; 模型：${model}; 调用序号：${step}`

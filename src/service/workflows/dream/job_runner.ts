@@ -22,7 +22,6 @@ export class LivingMemoryDreamJobRunner {
         input: DreamRunInput = { mode: 'full' }
     ) {
         const logger = this.logger.with({
-            workflow: 'dream',
             jobId,
             presetId: scope.presetId
         })

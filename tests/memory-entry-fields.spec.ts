@@ -80,7 +80,6 @@ it('applies shared field rules to extracted memories', async () => {
     const result = await extractor.extract(
         'input',
         {
-            conversationId: 'conversation-1',
             presetId: 'preset-1',
             presetPrompt: '你是测试助手。',
             speakers: [{ speakerLabel: '张三', speakerKey: 'speaker-key' }]

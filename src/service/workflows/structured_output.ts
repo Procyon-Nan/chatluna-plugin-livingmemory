@@ -11,9 +11,7 @@ const structuredOutputMaxModelCalls = 3
 
 export interface StructuredOutputLogging {
     logger: LivingMemoryLogger
-    stage: string
-    presetId: string
-    conversationId: string
+    stage: keyof typeof modelStageLabels
 }
 
 /**
@@ -55,6 +53,7 @@ export async function invokeStructuredOutput<T>(
     options: StructuredOutputOptions<T>
 ): Promise<StructuredOutputResult<T>> {
     const outputs: string[] = []
+    const { logging } = options
     let correction: string | undefined
     let lastError = 'structured output failed'
 
@@ -81,8 +80,8 @@ export async function invokeStructuredOutput<T>(
             lastError = formatErrorDetails(error)
             outputs.push(`[attempt ${attempt}]\n${lastError}`)
         }
-        options.logging?.logger.diagnosticSummary((fields) => ({
-            event: `${modelStageLabels[options.logging!.stage] ?? options.logging!.stage}结果解析失败`,
+        logging?.logger.diagnosticSummary((fields) => ({
+            event: `${modelStageLabels[logging.stage]}结果解析失败`,
             detail: [
                 formatLogScope(fields),
                 `调用序号：${attempt}`,

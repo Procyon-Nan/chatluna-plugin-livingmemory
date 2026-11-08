@@ -475,7 +475,7 @@ it('keeps the stored card and reports an error when regeneration fails', async (
 
     await assert.rejects(
         () => harness.service.regenerateCard('preset-1'),
-        /persona card generation failed: invoke-failed/u
+        /人设卡片生成失败：模型调用失败/u
     )
     assert.equal(harness.rows.get('preset-1')?.source, 'manual')
     assert.equal(harness.rows.get('preset-1')?.card, 'manual card')

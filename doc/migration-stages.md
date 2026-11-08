@@ -116,7 +116,7 @@ langchain 在 v1 中被 21 个文件引用，`ctx.ai` 提供 `chatluna.extract(s
 | 提示词与 schema | `src/service/prompts/schema.ts` 用 schemastery 重建字段约束；`memory_tools.ts` 把字段说明并入工具描述（v2 的 schema→JSON Schema 转换会丢弃 description，见框架需求 7） |
 | 工具 | `src/service/memory/tools/` 注册 7 个模型工具：检索、读取来源消息、创建、更新、合并、拆分、删除；作用域取自 `agent.options`，子代理调用按 `permissions.origin` 拒绝；S4 的快照编辑函数 `createUpdateSnapshotTool` 已移除。现由 `src/service/workflows/recall/agentic_recall.ts` 的 `createRecallTools` 为召回流程提供快照工具 |
 | 作用域适配 | 移除 v1 的 Character 预设后缀拼接：v2 的 Character 引擎把自己的预设 id 写入 `agent.options.presetId` |
-| 日志 | `src/service/logging/` 提供 `LivingMemoryLogger`（凭据脱敏、循环引用、日志故障隔离）与 `invokeLoggedModel` |
+| 日志 | `LivingMemoryLogger` 负责凭据脱敏、循环引用处理和日志故障隔离；召回与 Dream 的工具循环记录模型调用和响应 |
 | 向量索引 | `src/service/vector_index/` 从 v1 整体迁移（25 个文件），只替换 embedding 获取：`ctx.chatluna.embed` 包装成 `EmbeddingsLike`；数据目录改用 `resolveChatlunaDataDir` |
 | Worker 打包 | `scripts/build-workers.mjs` 用模板项目的 rolldown 打包单文件产物；`npm run build` 后续衔接 |
 | 装配 | `src/service/app/memory_providers.ts` 接通仓储、后端与索引；`src/service.ts` 启动向量索引，卸载时先停索引再注销 |
