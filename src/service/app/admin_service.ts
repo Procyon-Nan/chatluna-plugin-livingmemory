@@ -4,7 +4,6 @@ import type {
     LivingMemorySearchDetailedResult,
     LivingMemorySearchInput,
     MemoryEntryRecord,
-    MemoryEntryStatus,
     MemoryJobRecord,
     MemoryMutationInput,
     MemoryScope,
@@ -33,7 +32,6 @@ import type { LivingMemoryDreamCoordinator } from '../workflows/dream/coordinato
 import type { LivingMemoryVectorIndexService } from '../vector_index/service.ts'
 import type { LivingMemoryConfig } from '../../contracts/workflows.ts'
 import { createMemoryServiceStatus } from './config_status.ts'
-import { loadMemorySourceMessages } from './query_projections.ts'
 import {
     filterJobList,
     filterMemoryIds,
@@ -107,18 +105,6 @@ export class LivingMemoryAdminService {
         )
     }
 
-    getMemory(memoryId: string): Promise<MemoryEntryRecord | undefined> {
-        return this.deps.repository.getEntryById(memoryId)
-    }
-
-    getMemorySourceMessages(presetId: string, memoryId: string) {
-        return loadMemorySourceMessages(
-            this.deps.repository,
-            presetId,
-            memoryId
-        )
-    }
-
     createMemory(
         scope: MemoryScope,
         input: MemoryMutationInput,
@@ -129,10 +115,6 @@ export class LivingMemoryAdminService {
 
     async updateMemory(memoryId: string, patch: MemoryUpdatePatch) {
         await this.deps.mutations.updateMemory(memoryId, patch)
-    }
-
-    async deleteMemory(memoryId: string) {
-        await this.deps.mutations.deleteMemory(memoryId)
     }
 
     deleteMemories(presetId: string, ids: string[]) {
@@ -304,15 +286,5 @@ export class LivingMemoryAdminService {
     /** 会话级状态清理：快照、召回与提取消费位置。 */
     cleanupConversation(conversationId: string) {
         return this.deps.cleanupConversation(conversationId)
-    }
-
-    /** 只读的预设目录，供命令的补全与界面下拉使用。 */
-    presetIds(): Promise<string[]> {
-        return this.listPresetIds()
-    }
-
-    /** 记忆状态的展示名；界面与命令共用同一份措辞。 */
-    static statusLabel(status: MemoryEntryStatus) {
-        return status === 'active' ? '活跃' : '已归档'
     }
 }

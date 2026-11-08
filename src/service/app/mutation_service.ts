@@ -44,7 +44,6 @@ type MemoryFactRepository = Pick<
     | 'archiveActiveEntries'
     | 'mergeMemories'
     | 'splitMemory'
-    | 'deleteMemory'
     | 'deleteEntries'
     | 'deleteSnapshotsByPreset'
     | 'clearAllByPreset'
@@ -398,26 +397,6 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
                 `记忆已${operation}，但向量索引同步失败，已调度后台自动对账：${error.message}`
             ]
         }
-    }
-
-    async deleteMemory(id: string) {
-        const current = await this.repository.getEntryById(id)
-        if (current === undefined) {
-            return null
-        }
-        return this.runPresetMutation(current.presetId, async () => {
-            this.vectorIndex.assertPresetReady(current.presetId)
-            const record = await this.repository.deleteMemory(id)
-            if (record === null) {
-                return null
-            }
-            await this.syncCommittedMutationToIndex({
-                presetId: record.presetId,
-                upserts: [],
-                deletes: [{ id: record.id, presetId: record.presetId }]
-            })
-            return record
-        })
     }
 
     async deleteMemories(presetId: string, ids: string[]) {

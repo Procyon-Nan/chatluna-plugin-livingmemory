@@ -524,7 +524,7 @@ it('writes create, update, and delete facts through to the vector index', async 
         await mutations.updateMemory(memory.id, {
             content: 'updated content'
         })
-        await mutations.deleteMemory(memory.id)
+        await mutations.deleteMemories(memory.presetId, [memory.id])
 
         assert.equal(sink.mutations.length, 4)
         assert.equal(sink.mutations[0].upserts[0].vectorAction, 'replace')
@@ -903,7 +903,7 @@ it('registers scope-derived default speaker keys on create', async () => {
             createLoggerStub().logger
         )
         await mutations.createMemory(
-            { ...scope, platform: 'onebot', speakerId: 'user-9' },
+            { ...scope, platform: 'onebot', userId: 'user-9' },
             { type: 'fact', content: 'scope attributed memory' }
         )
         const derivedKey = createSpeakerKey('onebot', 'user-9')

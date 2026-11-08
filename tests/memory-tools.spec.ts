@@ -92,7 +92,6 @@ it('rebuilds the whole scope from the agent options', () => {
                 presetId: 'default',
                 platform: 'onebot',
                 userId: 'user-1',
-                speakerId: 'user-1',
                 guildId: 'guild-1',
                 channelId: 'channel-1'
             }

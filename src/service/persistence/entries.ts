@@ -761,21 +761,6 @@ export class LivingMemoryEntryRepository
         })
     }
 
-    async deleteMemory(id: string) {
-        const current = await this.getEntryById(id)
-        if (current == null) {
-            return null
-        }
-        await this.transact(async (database) => {
-            await database.remove('living_memory_entry', { id })
-            await database.remove('living_memory_entry_speaker', {
-                presetId: current.presetId,
-                memoryId: id
-            })
-        })
-        return current
-    }
-
     async deleteEntries(presetId: string, ids: string[]) {
         if (ids.length === 0) {
             return

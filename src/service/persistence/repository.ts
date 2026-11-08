@@ -318,10 +318,6 @@ export class LivingMemoryRepository
         return this.entries.mergeMemories(presetId, sourceMemoryIds, memory)
     }
 
-    deleteMemory(id: string) {
-        return this.entries.deleteMemory(id)
-    }
-
     deleteEntries(presetId: string, ids: string[]) {
         return this.entries.deleteEntries(presetId, ids)
     }

@@ -1,4 +1,3 @@
-import type { Context } from 'cordis'
 import { isRecord } from '@chatluna/utils/object'
 import type { MemoryScope } from '../../../contracts/memory.ts'
 
@@ -80,10 +79,7 @@ export const resolveToolMemoryScope = (
         presetId: presetIdResolution.presetId
     }
     if (location?.platform !== undefined) scope.platform = location.platform
-    if (location?.user !== undefined) {
-        scope.userId = location.user
-        scope.speakerId = location.user
-    }
+    if (location?.user !== undefined) scope.userId = location.user
     if (location?.guild !== undefined) scope.guildId = location.guild
     if (location?.channel !== undefined) scope.channelId = location.channel
     return { ok: true, scope }
@@ -100,10 +96,4 @@ export const describeLivingMemoryToolScopeFailure = (
         case 'missing-conversation-id':
             return 'Missing conversation id in the current tool call.'
     }
-}
-
-/** 工具 run 收到的调用上下文里本插件使用的字段。 */
-export interface LivingMemoryToolCall {
-    readonly agent?: object | undefined
-    readonly caller?: Context | undefined
 }

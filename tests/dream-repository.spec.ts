@@ -145,7 +145,7 @@ it('maintains active memory speaker links across memory lifecycle changes', asyn
             ['replacement-speaker']
         )
 
-        await repository.deleteMemory(memory.id)
+        await repository.deleteEntries(scope.presetId, [memory.id])
         assert.deepEqual(
             await repository.listActiveMemorySpeakerKeys(scope.presetId),
             []

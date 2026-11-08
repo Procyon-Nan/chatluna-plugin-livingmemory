@@ -26,7 +26,7 @@ export const createSyntheticSpeakerLabel = (speakerKey: string): string =>
 /** 调用方未显式给键时按 scope 身份推导默认关联键，应用层注册与仓储落库共用。 */
 export const resolveScopeSpeakerKeys = (scope: MemoryScope): string[] => {
     const platform = scope.platform?.trim()
-    const speakerId = (scope.speakerId ?? scope.userId)?.trim()
+    const speakerId = scope.userId?.trim()
     return platform && speakerId ? [createSpeakerKey(platform, speakerId)] : []
 }
 

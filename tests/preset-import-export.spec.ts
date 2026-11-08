@@ -34,7 +34,7 @@ it('copies preset data without moving source records', async () => {
                 conversationId: 'conversation-source',
                 presetId: sourcePresetId,
                 platform: 'onebot',
-                speakerId: 'user-1'
+                userId: 'user-1'
             },
             {
                 type: 'fact',
