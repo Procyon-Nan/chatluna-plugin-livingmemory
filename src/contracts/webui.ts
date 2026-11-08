@@ -14,7 +14,6 @@ export interface LivingMemoryEntryView {
     speakerKeys: string[]
     importance: number | null
     sourceLabel: string | null
-    sourceConversationId: string | null
     createdAt: number
     updatedAt: number
 }

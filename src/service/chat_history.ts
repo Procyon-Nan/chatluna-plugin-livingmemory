@@ -1,3 +1,4 @@
+import type { SourcePeer } from './transcript/origin_context.ts'
 import type { ObservedMessage, ChatObserverService } from '@chatluna/chat-observer'
 import type { LivingMemoryTranscriptMessage, MemoryScope } from '../contracts/memory.ts'
 import { createSpeakerKey } from './memory/speaker_identity.ts'
@@ -21,9 +22,12 @@ export interface ChatHistoryEntry {
     timestamp: number
     role: 'user' | 'assistant'
     backfilled: boolean
+    source?: SourcePeer | undefined
 }
 
-type HistoryService = Pick<ChatObserverService, 'recentOfConversation' | 'identityOfConversation'>
+type HistoryService = Pick<ChatObserverService, 'recentOfConversation' | 'identityOfConversation'> & {
+    channelOf(cid: string): Pick<NonNullable<ReturnType<ChatObserverService['channelOf']>>, 'routeId' | 'identity'> | undefined
+}
 
 /** 只给宿主缓冲对象标记消费位置与回复归属，不持有聊天正文。 */
 export class LivingMemoryChatHistory {
@@ -99,22 +103,21 @@ export class LivingMemoryChatHistory {
             const at = this.positions.get(row)!
             if (at <= position) break
             if (at >= before || row.backfilled || (row.self && this.replies.get(row) !== scope)) continue
-            const entry = this.entry(scope, row)
+            const entry = this.entry(row)
             if (entry !== undefined) entries.push(entry)
         }
         return entries.reverse()
     }
 
-    recent(scope: Pick<ChatHistoryScope, 'conversationId' | 'platform'>, count: number, through: number, after = -1): ChatHistoryEntry[] {
+    recent(scope: Pick<ChatHistoryScope, 'conversationId'>, count: number, through: number, after = -1): ChatHistoryEntry[] {
         if (count <= 0) return []
-        const platform = scope.platform ?? this.observer.identityOfConversation(scope.conversationId)?.platform
         this.lastPosition(scope.conversationId)
         const entries: ChatHistoryEntry[] = []
         for (const row of this.newest(scope.conversationId)) {
             const position = this.positions.get(row)!
             if (position <= after) break
             if (position > through) continue
-            const entry = this.entry({ platform }, row)
+            const entry = this.entry(row)
             if (entry !== undefined) entries.push(entry)
             if (entries.length === count) break
         }
@@ -131,13 +134,25 @@ export class LivingMemoryChatHistory {
         }
     }
 
-    private entry(scope: Pick<ChatHistoryScope, 'platform'>, row: ObservedMessage): ChatHistoryEntry | undefined {
+    private entry(row: ObservedMessage): ChatHistoryEntry | undefined {
         if (row.self && !this.replies.has(row)) return
         const content = blocksToLogText(row.content)
         if (!content) return
+        const channel = this.observer.channelOf(row.cid)
+        const identity = channel?.routeId === row.routeId ? channel.identity : undefined
+        let source: SourcePeer | undefined
+        if (identity) {
+            const kind = identity.isDirect ? 'user' : 'guild'
+            const id = identity.isDirect ? identity.userId : identity.guildId
+            if (id) {
+                const isPeerSpeaking = kind === 'user' && !row.self && row.userId === id
+                const name = isPeerSpeaking ? [row.name, row.nickname].find(value => value && value !== id) : undefined
+                source = { kind, id, key: `${identity.platform}:${identity.selfId}:${kind}:${id}`, name }
+            }
+        }
         return {
             position: this.positions.get(row)!, messageId: row.id, externalId: row.platformMessageId,
-            platform: scope.platform, userId: row.userId, name: row.name ?? row.nickname,
+            source, platform: identity?.platform, userId: row.userId, name: row.name ?? row.nickname,
             timestamp: row.time, role: row.self ? 'assistant' : 'user', content, backfilled: row.backfilled
         }
     }

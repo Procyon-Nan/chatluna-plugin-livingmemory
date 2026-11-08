@@ -104,7 +104,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],
         extracted: AttributedMemoryItem[],
-        sourceLabel: string,
+        sourceLabel: string | null,
         windowSpeakers: ExtractionPayload['speakers']
     ) {
         return this.runPresetMutation(scope.presetId, async () => {

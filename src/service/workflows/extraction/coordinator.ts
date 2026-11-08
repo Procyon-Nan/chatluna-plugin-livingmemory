@@ -11,6 +11,7 @@ import type {
     PresetPersonaResolver
 } from '../../../contracts/memory.ts'
 import { formatLogScope, type LivingMemoryLogger } from '../../logging/logger.ts'
+import type { MemoryTranscriptOrigin } from '../../transcript/origin_context.ts'
 import { toHistoryTranscriptMessages } from '../../chat_history.ts'
 import type { ChatHistoryEntry, ChatHistoryScope, LivingMemoryChatHistory } from '../../chat_history.ts'
 
@@ -409,7 +410,8 @@ export class LivingMemoryExtractionCoordinator {
         const messages = toHistoryTranscriptMessages(batch.scope, chunk)
         try {
             if (messages.length > 0) {
-                const consumed = await this.run(batch.scope, messages, batch.options, runLogger)
+                const origin = await batch.options.resolveTranscriptOrigin(chunk)
+                const consumed = await this.run(batch.scope, messages, origin, batch.options, runLogger)
                 if (!consumed) return false
             } else {
                 runLogger.diagnosticSummary(() => ({
@@ -482,12 +484,12 @@ export class LivingMemoryExtractionCoordinator {
     private async run(
         scope: ChatHistoryScope,
         messages: LivingMemoryTranscriptMessage[],
+        origin: MemoryTranscriptOrigin,
         options: QueueExtractionOptions,
         logger: LivingMemoryLogger
     ) {
         const startedAt = new Date()
         const payload = this.formatter.toExtractionPayload(messages)
-        const origin = await options.resolveTranscriptOrigin()
         const input = `${origin.header}\n\n${payload.input}`
 
         logger.diagnosticSummary(() => ({

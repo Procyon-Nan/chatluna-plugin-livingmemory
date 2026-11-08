@@ -9,6 +9,7 @@ export const historyMessage = (id: number, text: string, overrides: Partial<Obse
 })
 
 export class FrameworkHistoryFixture {
+    readonly channelOf = (_cid: string) => ({ routeId: 'route', identity: this.identityOfConversation() })
     readonly messages: ObservedMessage[] = []
     readonly recentOfConversation = (_key: string, limit: number) => this.messages.slice(-limit)
     readonly identityOfConversation = () => ({

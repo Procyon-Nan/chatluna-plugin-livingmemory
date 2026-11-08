@@ -30,6 +30,7 @@ import type {
     UserProfileMemoryRepository,
     UserProfileRepository
 } from '../../contracts/workflows.ts'
+import { resolveConversationSources } from '../transcript/origin_context.ts'
 import { LivingMemoryEntryRepository } from './entries.ts'
 import { LivingMemoryJobRepository } from './jobs.ts'
 import {
@@ -178,6 +179,16 @@ export class LivingMemoryRepository
         return this.entries.completeLegacyEmbeddingMigration()
     }
 
+    async withSourceLabels<T extends Pick<MemoryEntryRecord, 'sourceConversationId' | 'sourceLabel'>>(entries: T[]): Promise<T[]> {
+        const sources = await resolveConversationSources(this.ctx, entries.flatMap(entry =>
+            entry.sourceConversationId ? [entry.sourceConversationId] : []
+        ))
+        return entries.map(entry => {
+            const label = entry.sourceConversationId && sources.get(entry.sourceConversationId)
+            return label ? { ...entry, sourceLabel: label } : entry
+        })
+    }
+
     listEntriesByPreset(presetId: string): Promise<MemoryEntryRecord[]> {
         return this.entries.listEntriesByPreset(presetId)
     }
@@ -253,8 +264,12 @@ export class LivingMemoryRepository
         return this.entries.getEntriesByPresetAndIds(presetId, ids)
     }
 
-    getSearchEntriesByPresetAndIds(presetId: string, ids: string[]) {
-        return this.entries.getSearchEntriesByPresetAndIds(presetId, ids)
+    async getEntriesWithSources(presetId: string, ids: string[]) {
+        return this.withSourceLabels(await this.getEntriesByPresetAndIds(presetId, ids))
+    }
+
+    async getSearchEntriesByPresetAndIds(presetId: string, ids: string[]) {
+        return this.withSourceLabels(await this.entries.getSearchEntriesByPresetAndIds(presetId, ids))
     }
 
     appendMemories(
@@ -480,7 +495,7 @@ export class LivingMemoryRepository
             version: 5,
             exportedAt: new Date().toISOString(),
             sourcePresetId: presetId,
-            entries: entries.map((entry) => ({
+            entries: (await this.withSourceLabels(entries)).map((entry) => ({
                 id: entry.id,
                 speakerKeys: [...entry.speakerKeys],
                 type: entry.type,

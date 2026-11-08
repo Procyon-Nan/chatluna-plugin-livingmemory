@@ -341,7 +341,6 @@ interface MemoryCardProps {
 
 function MemoryCard({ entry, names, selected, selecting, onSelect, onEdit, onArchive, onDelete }: MemoryCardProps) {
     const t = useT()
-    const source = entry.sourceLabel || entry.sourceConversationId
     const speakers = entry.speakerKeys.map(key => names.get(key) ?? key).join(', ')
 
     return (
@@ -373,9 +372,9 @@ function MemoryCard({ entry, names, selected, selecting, onSelect, onEdit, onArc
                     </>}
                     <dt className="text-muted-foreground">{t('field.speakers')}</dt>
                     <dd>{speakers || t('entries.noSpeakers')}</dd>
-                    {source && <>
+                    {entry.sourceLabel && <>
                         <dt className="text-muted-foreground">{t('field.source')} ·</dt>
-                        <dd>{source}</dd>
+                        <dd>{entry.sourceLabel}</dd>
                     </>}
                 </dl>
             </div>

@@ -228,14 +228,14 @@ export interface ExtractionMemoryWriter {
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],
         extracted: AttributedMemoryItem[],
-        sourceLabel: string,
+        sourceLabel: string | null,
         windowSpeakers: ExtractionPayload['speakers']
     ): Promise<{ memories: MemoryEntryRecord[]; warnings: string[] }>
 }
 
 /** 按消费方命名：画像生成需要的记忆查询，实现在记忆仓储。 */
 export interface UserProfileMemoryRepository {
-    getEntriesByPresetAndIds(
+    getEntriesWithSources(
         presetId: string,
         ids: string[]
     ): Promise<MemoryEntryRecord[]>

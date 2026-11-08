@@ -3,12 +3,13 @@ import type {} from '@chatluna/preset'
 import type { MemoryScope } from '../../contracts/memory.ts'
 import type { MemoryTranscriptOrigin } from '../transcript/origin_context.ts'
 import { toNonEmptyString } from '../shared/utils.ts'
+import type { ChatHistoryEntry } from '../chat_history.ts'
 
 export interface QueueExtractionOptions {
     windowMessages: number
     enableAutoDream: boolean
     includeOverheard: boolean
-    resolveTranscriptOrigin: () => Promise<MemoryTranscriptOrigin>
+    resolveTranscriptOrigin: (entries: readonly ChatHistoryEntry[]) => Promise<MemoryTranscriptOrigin>
 }
 
 export interface CharacterPresetPromptSource {

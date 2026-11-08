@@ -16,8 +16,7 @@ import type {
 import type {
     AttributedMemoryItem,
     DreamMemoryEntryRecord,
-    RecallRepository,
-    UserProfileMemoryRepository
+    RecallRepository
 } from '../../contracts/workflows.ts'
 import {
     normalizeMemoryImportance,
@@ -102,13 +101,14 @@ const recallEntryFields: (keyof MemoryEntryRecord)[] = [
     'summary',
     'sentiment',
     'importance',
+    'sourceConversationId',
     'sourceLabel',
     'createdAt',
     'updatedAt'
 ]
 
 export class LivingMemoryEntryRepository
-    implements RecallRepository, UserProfileMemoryRepository
+    implements RecallRepository
 {
     constructor(
         private readonly ctx: Context,

@@ -448,7 +448,6 @@ const toEntryView = (entry: MemoryEntryRecord): LivingMemoryEntryView => ({
     speakerKeys: [...entry.speakerKeys],
     importance: entry.importance,
     sourceLabel: entry.sourceLabel,
-    sourceConversationId: entry.sourceConversationId,
     createdAt: entry.createdAt.getTime(),
     updatedAt: entry.updatedAt.getTime()
 })

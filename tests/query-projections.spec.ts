@@ -48,7 +48,7 @@ it('projects the source messages of one memory without sharing mutable arrays', 
     let requestedPresetId: string | undefined
     let requestedMemoryIds: string[] = []
     const repository: LivingMemoryQueryProjectionRepository = {
-        getEntriesByPresetAndIds: async (presetId, memoryIds) => {
+        getEntriesWithSources: async (presetId, memoryIds) => {
             requestedPresetId = presetId
             requestedMemoryIds = memoryIds
             return [memory]
@@ -80,7 +80,7 @@ it('projects the source messages of one memory without sharing mutable arrays', 
 
 it('returns null when the memory is absent from the preset', async () => {
     const repository: LivingMemoryQueryProjectionRepository = {
-        getEntriesByPresetAndIds: async () => []
+        getEntriesWithSources: async () => []
     }
 
     assert.equal(

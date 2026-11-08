@@ -272,7 +272,7 @@ export class LivingMemoryUserProfileService {
         )
         const activeEntryById = new Map(
             (
-                await this.repository.getEntriesByPresetAndIds(presetId, [
+                await this.repository.getEntriesWithSources(presetId, [
                     ...new Set(links.map((link) => link.memoryId))
                 ])
             )

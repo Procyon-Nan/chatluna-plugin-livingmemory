@@ -96,7 +96,8 @@ export class LivingMemoryAdminService {
         const items = await this.deps.repository.listEntriesByPreset(
             query.presetId
         )
-        return filterMemoryList(items, query)
+        const page = filterMemoryList(items, query)
+        return { ...page, items: await this.deps.repository.withSourceLabels(page.items) }
     }
 
     async listMemoryIds(filter: MemoryListFilter): Promise<string[]> {

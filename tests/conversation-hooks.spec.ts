@@ -34,7 +34,7 @@ function createHarness(config: {
     const framework = new FrameworkHistoryFixture()
     const listeners = new Map<string, ((payload: any) => unknown)[]>()
     const recalls: { scope: ChatHistoryScope; history: LivingMemoryTranscriptMessage[]; position: number }[] = []
-    const extractions: { scope: ChatHistoryScope; boundary: number; eligible?: number; origin: () => Promise<{ header: string }> }[] = []
+    const extractions: { scope: ChatHistoryScope; boundary: number; eligible?: number }[] = []
     const cleared: string[] = []
     const profiles: string[][] = []
     let onTurn!: TurnMiddleware
@@ -89,10 +89,10 @@ function createHarness(config: {
             clearByConversation: (key: string) => cleared.push(key)
         } as never,
         extraction: {
-            queue: async (scope: ChatHistoryScope, options: { resolveTranscriptOrigin: () => Promise<{ header: string }> },
+            queue: async (scope: ChatHistoryScope, _options: unknown,
                 boundary: number, eligible?: number) => {
                 order.push('extract')
-                extractions.push({ scope, boundary, eligible, origin: options.resolveTranscriptOrigin })
+                extractions.push({ scope, boundary, eligible })
             },
             clearByConversation: () => {}
         } as never,
@@ -334,7 +334,6 @@ describe('LivingMemoryConversationHooks', () => {
         await settle()
         assert.deepEqual(harness.order, ['drain', 'extract'])
         assert.equal(harness.extractions[0].eligible, 2)
-        assert.match((await harness.extractions[0].origin()).header, /测试群/)
     })
 
     it('waits for observation after drain and counts a multi-ID send only once', async () => {

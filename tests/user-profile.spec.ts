@@ -65,7 +65,7 @@ const createHarness = (
         })
     }
     const repository: UserProfileRepository & UserProfileMemoryRepository = {
-        getEntriesByPresetAndIds: async () => [memory],
+        getEntriesWithSources: async () => [memory],
         listActiveMemorySpeakerLinks: async () => [
             { speakerKey: '张三', memoryId: memory.id }
         ],

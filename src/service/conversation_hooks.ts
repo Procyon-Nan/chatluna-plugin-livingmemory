@@ -8,7 +8,7 @@ import { ChatMessage, type ChatMessageMeta } from '@chatluna/message'
 import type { LivingMemoryTranscriptMessage } from '../contracts/memory.ts'
 import type { LivingMemoryLogger } from './logging/logger.ts'
 import { formatLogScope } from './logging/logger.ts'
-import { buildMemoryTranscriptOrigin } from './transcript/origin_context.ts'
+import { resolveTranscriptOrigin } from './transcript/origin_context.ts'
 import { toHistoryTranscriptMessages } from './chat_history.ts'
 import type { ChatHistoryEntry, ChatHistoryScope, LivingMemoryChatHistory } from './chat_history.ts'
 import { collectUserProfileSpeakerKeys } from './user_profile.ts'
@@ -359,21 +359,8 @@ export class LivingMemoryConversationHooks {
             includeOverheard: settings.extractionIncludeOverheard,
             windowMessages: settings.extractionWindowMessages,
             enableAutoDream: settings.enableAutoDream,
-            resolveTranscriptOrigin: async () => this.transcriptOrigin(state.scope)
+            resolveTranscriptOrigin: entries => resolveTranscriptOrigin(this.ctx, entries)
         }, state.boundary, eligiblePosition)
-    }
-
-    private transcriptOrigin(scope: ChatHistoryScope) {
-        if (scope.isDirect === true) {
-            return buildMemoryTranscriptOrigin({
-                isDirect: true,
-                speakerLabel: scope.userId ?? '用户',
-                speakerId: scope.userId
-            })
-        }
-        const guildId = scope.guildId ?? scope.conversationId
-        const guildName = this.ctx.chat.environmentOf(scope.sessionId)?.guildName ?? guildId
-        return buildMemoryTranscriptOrigin({ isDirect: false, guildName, guildId })
     }
 
     private logScheduleError(conversationId: string, error: unknown) {

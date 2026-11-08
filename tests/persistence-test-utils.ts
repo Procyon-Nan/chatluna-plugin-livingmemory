@@ -1,4 +1,5 @@
 import { Context } from 'cordis'
+import { database as conversationsDatabase } from '@chatluna/conversations'
 import Database from '@cordisjs/plugin-database'
 import SQLiteDriver from '@cordisjs/plugin-database-sqlite'
 import { LivingMemoryRepository } from '../src/service/persistence/repository.ts'
@@ -19,6 +20,7 @@ export const withLivingMemoryRepository = async (
   const ctx = createTestContext()
   await ctx.plugin(Database)
   await ctx.plugin(SQLiteDriver, { path: ':memory:' })
+  await ctx.plugin(conversationsDatabase)
   const repository = new LivingMemoryRepository(ctx)
   repository.defineTables()
   await ctx.database.prepared()

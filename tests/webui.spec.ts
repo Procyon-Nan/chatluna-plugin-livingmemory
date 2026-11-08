@@ -1,5 +1,12 @@
 import assert from 'node:assert/strict'
 import type { Context } from 'cordis'
+import Routing from '@chatluna/routing'
+import { loadMemorySourceMessages } from '../src/service/app/query_projections.ts'
+import { contextMemoryFields, renderMemoriesForModel, renderMemorySourceMessagesForModel } from '../src/service/prompts/memory_entries.ts'
+import { resolveTranscriptOrigin } from '../src/service/transcript/origin_context.ts'
+import { routeIdOf, type RouteIdentity } from '@chatluna/satori'
+import { LivingMemoryChatHistory } from '../src/service/chat_history.ts'
+import { historyMessage } from './chat-history-test-utils.ts'
 import type { Schema } from '@chatluna/schema'
 import type { LivingMemoryEntriesSnapshot } from '../src/contracts/webui.ts'
 import { withLivingMemoryRepository } from './persistence-test-utils.ts'
@@ -162,7 +169,7 @@ it('creates the first memory in a preset and reads edited fields back from the l
         }) as LivingMemoryEntriesSnapshot).entries[0]
 
         assert.partialDeepStrictEqual(await read(), {
-            ...memory, id, presetId, sourceConversationId: null, sourceLabel: null
+            ...memory, id, presetId, sourceLabel: null
         })
         await ui.call('livingmemory.update', { id, sentiment: '开心', importance: 0.85 })
         assert.partialDeepStrictEqual(await read(), { ...memory, sentiment: '开心', importance: 0.85 })
@@ -313,5 +320,92 @@ it('refreshes the task list from its own repository and preserves partial Dream 
         assert.ok(ui.refresh.get('livingmemory.jobs')?.includes(ui.events[1]!))
         const rows = await ui.read('livingmemory.jobs', { presetId: 'preset-1' }) as { id: string; status: string }[]
         assert.deepEqual(rows.map(({ id, status }) => [id, status]), [[job.id, 'partial']])
+    })
+})
+
+it('uses the source conversation for the management list, model tools and exports', async () => {
+    await withWebUI(async (ctx, repository, ui) => {
+        await ctx.plugin(Routing)
+        await ctx.database.prepared()
+        const presetId = 'preset-1'
+        for (const [kind, name, label] of [
+            ['guild', '读书群', '「读书群」（群聊 ID：42）'],
+            ['user', '小林', '「小林」（用户 ID：42）']
+        ] as const) {
+            const conversationId = routeIdOf({ platform: 'onebot', selfId: 'bot', isDirect: kind === 'user', userId: '42', channelId: '42' })
+            const peer = `onebot:bot:${kind}:42`
+            await ctx.database.create('chatluna_conversations', { key: conversationId, peer, headSessionId: kind })
+            await ctx.database.create('chatluna_peers', { key: peer, platform: 'onebot', selfId: 'bot', kind, id: '42', name })
+            const entry = await repository.createMemory({ presetId, conversationId }, { type: 'fact', content: name })
+            await ctx.database.set('living_memory_entry', { id: entry.id }, { sourceLabel: '文件中的名称' })
+
+            const page = await ui.read('livingmemory.entries', { presetId }) as LivingMemoryEntriesSnapshot
+            assert.equal(page.entries.find(item => item.id === entry.id)?.sourceLabel, label)
+            const hits = await repository.getSearchEntriesByPresetAndIds(presetId, [entry.id])
+            assert.ok(renderMemoriesForModel(hits, { fields: contextMemoryFields }).split('\n').includes(`source=${label}`))
+            const messages = await loadMemorySourceMessages(repository, presetId, entry.id)
+            assert.ok(renderMemorySourceMessagesForModel(messages!).split('\n').includes(`source=${label}`))
+            const exportFile = await repository.exportPresetData(presetId)
+            assert.ok(exportFile.version === 5)
+            assert.equal(exportFile.entries.find(item => item.id === entry.id)?.sourceLabel, label)
+            await ctx.database.set('chatluna_peers', { key: peer }, { name: '42' })
+            await ctx.database.set('living_memory_entry', { id: entry.id }, { sourceLabel: label })
+            assert.equal((await repository.getEntriesWithSources(presetId, [entry.id]))[0].sourceLabel, label)
+        }
+    })
+})
+
+it('extracts from the observed channel and keeps its source across shared routes, retries and transfers', async () => {
+    await withWebUI(async (ctx, repository, ui) => {
+        await ctx.plugin(Routing)
+        await ctx.database.prepared()
+        const scope = { presetId: 'scope', sessionId: 'session', conversationId: 'custom:shared' }
+        const identity = (isDirect: boolean, id: string): RouteIdentity => ({
+            platform: 'onebot', selfId: 'bot', isDirect, guildId: isDirect ? undefined : id, channelId: id,
+            userId: isDirect ? id : 'someone'
+        })
+        const first = identity(false, 'A')
+        const actual = identity(false, 'B')
+        const latest = identity(true, 'C')
+        const peerKey = (id: string) => `onebot:bot:guild:${id}`
+        await ctx.database.create('chatluna_conversations', { key: scope.conversationId, peer: peerKey('A') })
+        for (const [id, name] of [['A', '甲群'], ['B', '乙群']]) {
+            await ctx.database.create('chatluna_peers', { key: peerKey(id), platform: 'onebot', selfId: 'bot', kind: 'guild', id, name })
+        }
+
+        let channel = actual
+        const rows = [historyMessage(1, '乙群中的聊天', { routeId: routeIdOf(actual), cid: 'onebot:B' })]
+        const history = new LivingMemoryChatHistory({
+            recentOfConversation: (_key, limit) => rows.slice(-limit),
+            identityOfConversation: () => latest,
+            channelOf: () => ({ identity: channel, routeId: routeIdOf(channel) })
+        })
+        const batch = await history.after(scope, -1)
+        channel = first
+        const origin = await resolveTranscriptOrigin(ctx, batch)
+        assert.equal(origin.sourceLabel, '「乙群」（群聊 ID：B）')
+        assert.ok(origin.header.includes(origin.sourceLabel!))
+        assert.equal((await resolveTranscriptOrigin(ctx, await history.after(scope, -1))).sourceLabel, null)
+
+        const [entry] = await repository.appendMemories(scope, [{ role: 'user', content: '乙群中的聊天', transcriptLines: ['乙群中的聊天'] }], [{
+            type: 'fact', content: '乙群中的聊天', summary: '摘要', keywords: [], sentiment: '平静', importance: 0.5, speakerKeys: []
+        }], origin.sourceLabel)
+        const page = await ui.read('livingmemory.entries', { presetId: scope.presetId }) as LivingMemoryEntriesSnapshot
+        assert.equal(page.entries[0].sourceLabel, origin.sourceLabel)
+        assert.equal((await repository.getSearchEntriesByPresetAndIds(scope.presetId, [entry.id]))[0].sourceLabel, origin.sourceLabel)
+        const file = await repository.exportPresetData(scope.presetId)
+        assert.ok(file.version === 5)
+        assert.equal(file.entries[0].sourceLabel, origin.sourceLabel)
+        await repository.importPresetData('import', file)
+        assert.equal((await repository.listEntriesByPreset('import'))[0].sourceLabel, origin.sourceLabel)
+
+        // 同一私聊后来只报了用户号，不能盖掉之前消息中的昵称或目录里的昵称。
+        channel = latest
+        const dm = (i: number, name: string) => historyMessage(i, '私聊', { cid: 'onebot:C', routeId: routeIdOf(latest), userId: 'C', name })
+        rows.splice(0, rows.length, dm(2, '小林'), dm(3, 'C'))
+        assert.equal((await resolveTranscriptOrigin(ctx, await history.after(scope, -1))).sourceLabel, '「小林」（用户 ID：C）')
+        await ctx.database.create('chatluna_peers', { key: 'onebot:bot:user:C', platform: 'onebot', selfId: 'bot', kind: 'user', id: 'C', name: '联系人小林' })
+        rows.shift()
+        assert.equal((await resolveTranscriptOrigin(ctx, await history.after(scope, -1))).sourceLabel, '「联系人小林」（用户 ID：C）')
     })
 })

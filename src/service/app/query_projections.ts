@@ -5,7 +5,7 @@ import type {
 import { cloneSourceMessage } from '../memory/origins/source_origins.ts'
 
 export interface LivingMemoryQueryProjectionRepository {
-    getEntriesByPresetAndIds(
+    getEntriesWithSources(
         presetId: string,
         ids: string[]
     ): Promise<MemoryEntryRecord[]>
@@ -16,7 +16,7 @@ export async function loadMemorySourceMessages(
     presetId: string,
     memoryId: string
 ): Promise<LivingMemoryGetMessagesMemory | null> {
-    const entries = await repository.getEntriesByPresetAndIds(presetId, [
+    const entries = await repository.getEntriesWithSources(presetId, [
         memoryId
     ])
     const entry = entries[0]
