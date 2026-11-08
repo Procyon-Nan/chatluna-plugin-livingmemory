@@ -1,4 +1,3 @@
-import { readdir, unlink } from 'node:fs/promises'
 import { resolveChatlunaDataDir } from '@chatluna/utils'
 import { resolve } from 'node:path'
 import type { Context } from 'cordis'
@@ -53,12 +52,6 @@ interface VectorIndexServiceOptions {
 const createDefaultWorker: VectorIndexWorkerFactory = (onFailure, onWarning) =>
     new LivingMemoryVectorIndexWorkerClient(undefined, onFailure, onWarning)
 
-const legacyIndexFiles = new Set([
-    'vector-index.sqlite',
-    'vector-index.previous.sqlite'
-])
-const legacyRebuildFile = /^vector-index\.rebuild-.+\.sqlite$/u
-
 export class LivingMemoryVectorIndexService
     implements DreamVectorProvider, MemoryIndexMutationSink, MemoryVectorSearch
 {
@@ -69,7 +62,6 @@ export class LivingMemoryVectorIndexService
 
     private readonly status = new VectorIndexStatusStore()
 
-    private readonly indexDirectory: string
     private readonly databaseDirectory: string
     private readonly previousDatabaseDirectory: string
     private readonly maintenance: LivingMemoryVectorIndexMaintenance
@@ -104,13 +96,13 @@ export class LivingMemoryVectorIndexService
 
         // v1 取 koishi 的 ctx.baseDir；v2 用 CHATLUNA_DATA（缺省 data/chatluna）
         // 解析数据目录，索引仍放在其下的 living-memory 子目录。
-        this.indexDirectory = resolve(resolveChatlunaDataDir(process.cwd()), 'living-memory')
+        const indexDirectory = resolve(resolveChatlunaDataDir(process.cwd()), 'living-memory')
         this.databaseDirectory = resolve(
-            this.indexDirectory,
+            indexDirectory,
             'vector-index.pglite'
         )
         this.previousDatabaseDirectory = resolve(
-            this.indexDirectory,
+            indexDirectory,
             'vector-index.previous.pglite'
         )
         this.maintenance = new LivingMemoryVectorIndexMaintenance({
@@ -119,7 +111,7 @@ export class LivingMemoryVectorIndexService
             repository,
             operationGate: this.operationGate,
             schemaVersion,
-            indexDirectory: this.indexDirectory,
+            indexDirectory,
             previousDatabaseDirectory: this.previousDatabaseDirectory,
             finalizeRebuild: (input, transferCleanupOwnership) =>
                 this.finalizeRebuild(input, transferCleanupOwnership),
@@ -451,29 +443,6 @@ export class LivingMemoryVectorIndexService
             )
         }
         await this.maintenance.initialize(inspection)
-        try {
-            await this.removeLegacyIndexFiles()
-        } catch (error) {
-            this.logger.summary(
-                '旧索引文件清理失败',
-                '操作：清理旧索引文件',
-                'warn',
-                error
-            )
-        }
-    }
-
-    private async removeLegacyIndexFiles() {
-        const filenames = await readdir(this.indexDirectory)
-        for (const filename of filenames) {
-            if (
-                !legacyIndexFiles.has(filename) &&
-                !legacyRebuildFile.test(filename)
-            ) {
-                continue
-            }
-            await unlink(resolve(this.indexDirectory, filename))
-        }
     }
 
     private async embedSearchTexts(searchTexts: string[]) {

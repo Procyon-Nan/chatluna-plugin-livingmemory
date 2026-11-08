@@ -39,8 +39,6 @@ export interface LivingMemoryVectorIndexRepository
         VectorIndexReconcileRepository,
         VectorIndexJobRepository {
     countEntries(): Promise<number>
-    hasMigratedLegacyEmbeddings(): Promise<boolean>
-    completeLegacyEmbeddingMigration(): Promise<void>
 }
 
 interface VectorIndexMaintenanceOptions {
@@ -80,8 +78,6 @@ export class LivingMemoryVectorIndexMaintenance {
     }
 
     async initialize(inspection: VectorIndexInspection) {
-        const reuseLegacyEmbeddings =
-            !(await this.options.repository.hasMigratedLegacyEmbeddings())
         const { embeddings, dimension } = await this.createEmbeddingContext()
         const upgradeSchema =
             (inspection.manifest?.schemaVersion === 3 ||
@@ -93,23 +89,16 @@ export class LivingMemoryVectorIndexMaintenance {
             upgradeSchema
         )
         if (rebuildReason !== null) {
-            await this.runRebuildJob(
-                embeddings,
-                dimension,
-                rebuildReason,
-                reuseLegacyEmbeddings
-            )
+            await this.runRebuildJob(embeddings, dimension, rebuildReason)
         } else {
             await this.runReconcileJob(embeddings, dimension, upgradeSchema)
         }
-        await this.options.repository.completeLegacyEmbeddingMigration()
         await this.maintainDreamAnnIndex()
     }
 
     async rebuild(reason: string) {
         const { embeddings, dimension } = await this.createEmbeddingContext()
-        await this.runRebuildJob(embeddings, dimension, reason, false)
-        await this.options.repository.completeLegacyEmbeddingMigration()
+        await this.runRebuildJob(embeddings, dimension, reason)
         await this.maintainDreamAnnIndex()
     }
 
@@ -153,8 +142,7 @@ export class LivingMemoryVectorIndexMaintenance {
                         repository: this.options.repository,
                         worker: this.options.worker(),
                         embeddings,
-                        embeddingModelId: this.options.config.embeddingModel,
-                        dimension,
+                            dimension,
                         shouldStop: this.options.shouldStop,
                         onProgress: (progress) =>
                             this.reportReconcileProgress(job, progress)
@@ -207,7 +195,6 @@ export class LivingMemoryVectorIndexMaintenance {
         const dimension = await probeVectorIndexDimension(embeddings)
         const context: VectorIndexEmbeddingContext = {
             embeddings,
-            embeddingModelId: this.options.config.embeddingModel,
             dimension
         }
         this.options.onEmbeddingContext(context)
@@ -267,8 +254,7 @@ export class LivingMemoryVectorIndexMaintenance {
     private async runRebuildJob(
         embeddings: EmbeddingsLike,
         dimension: number,
-        reason: string,
-        reuseLegacyEmbeddings: boolean
+        reason: string
     ) {
         const {
             config,
@@ -301,9 +287,7 @@ export class LivingMemoryVectorIndexMaintenance {
                     repository,
                     worker: this.options.worker(),
                     embeddings,
-                    embeddingModelId: config.embeddingModel,
                     dimension,
-                    reuseLegacyEmbeddings,
                     manifest,
                     rebuildDatabaseDirectory,
                     shouldStop: this.options.shouldStop,
@@ -377,7 +361,7 @@ export class LivingMemoryVectorIndexMaintenance {
         dimension: number,
         job: MemoryJobRecord
     ) {
-        const { config, repository } = this.options
+        const { repository } = this.options
         const inspection = await this.options.worker().inspect()
         const sourcePresetIds = await repository.listEntryPresetIds()
         const presetIds = new Set(sourcePresetIds)
@@ -396,7 +380,6 @@ export class LivingMemoryVectorIndexMaintenance {
                 repository,
                 worker: this.options.worker(),
                 embeddings,
-                embeddingModelId: config.embeddingModel,
                 dimension,
                 shouldStop: this.options.shouldStop,
                 onProgress: (progress) =>

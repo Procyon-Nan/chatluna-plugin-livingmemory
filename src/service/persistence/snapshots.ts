@@ -6,57 +6,13 @@ import type {
     MemorySnapshotRecord
 } from '../../contracts/memory.ts'
 import type { SnapshotRepository } from '../../contracts/workflows.ts'
-import type { LivingMemoryTransact } from './types.ts'
-
-const legacyReferenceSnapshotMigrationId =
-    'legacy-reference-snapshot-cleanup-v1'
 
 export class LivingMemorySnapshotRepository implements SnapshotRepository {
-    constructor(
-        private readonly ctx: Context,
-        private readonly transact: LivingMemoryTransact
-    ) {}
+    constructor(private readonly ctx: Context) {}
 
     /** 驱动就绪后才有 `database` 服务；仓储实例只在驱动加载后创建。 */
     private get database() {
         return this.ctx.get('database')!
-    }
-
-    /**
-     * 已移除的 embedding-rerank 策略只存记忆 id 引用、不带 finalText；
-     * 策略列已不在模型中，只能按快照项形状识别并删除，交给后续召回重建。
-     */
-    async removeLegacyReferenceSnapshots(): Promise<number> {
-        return await this.transact(async (database) => {
-            const applied = await database.get('living_memory_migration', {
-                id: legacyReferenceSnapshotMigrationId
-            })
-            if (applied.length > 0) {
-                return 0
-            }
-
-            const snapshots = await database.get('living_memory_snapshot', {}, [
-                'id',
-                'items'
-            ])
-            const legacyIds = snapshots
-                .filter((snapshot) =>
-                    snapshot.items.some((item) => !('finalText' in item))
-                )
-                .map((snapshot) => snapshot.id)
-
-            if (legacyIds.length > 0) {
-                await database.remove('living_memory_snapshot', {
-                    id: { $in: legacyIds }
-                })
-            }
-
-            await database.create('living_memory_migration', {
-                id: legacyReferenceSnapshotMigrationId,
-                appliedAt: new Date()
-            })
-            return legacyIds.length
-        })
     }
 
     async getLatestSnapshotByScope(

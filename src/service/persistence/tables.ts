@@ -52,18 +52,6 @@ export function defineLivingMemoryTables(ctx: Context) {
         initial: null
       },
       sourceOrigins: 'array',
-      // 仅用于首次向量索引迁移，迁移完成后不再参与运行时读写。
-      embedding: {
-        type: 'json',
-        nullable: true,
-        initial: null
-      },
-      embeddingModelId: {
-        type: 'string',
-        length: 255,
-        nullable: true,
-        initial: null
-      },
       createdAt: 'timestamp',
       updatedAt: 'timestamp'
     },
@@ -73,17 +61,6 @@ export function defineLivingMemoryTables(ctx: Context) {
       indexes: [['presetId', 'status', 'updatedAt']]
     }
   )
-
-  // 字段退役时先删除依赖它的旧索引，再由数据库驱动移除列。
-  ctx.model.migrate('living_memory_entry', { isConsolidated: 'boolean' }, async (database) => {
-    const table = 'living_memory_entry'
-    const indexes = await database.select(table).driver.getIndexes(table)
-    for (const index of indexes) {
-      if (index.name && 'isConsolidated' in index.keys) {
-        await database.select(table).driver.dropIndex(table, index.name)
-      }
-    }
-  })
 
   ctx.model.extend(
     'living_memory_snapshot',
@@ -119,18 +96,6 @@ export function defineLivingMemoryTables(ctx: Context) {
         ['presetId', 'speakerKey'],
         ['presetId', 'memoryId']
       ]
-    }
-  )
-
-  ctx.model.extend(
-    'living_memory_migration',
-    {
-      id: 'string(64)',
-      appliedAt: 'timestamp'
-    },
-    {
-      autoInc: false,
-      primary: 'id'
     }
   )
 
@@ -245,14 +210,9 @@ export function defineLivingMemoryTables(ctx: Context) {
 
 declare module '@cordisjs/plugin-database' {
   interface Tables {
-    living_memory_entry: import('../../contracts/memory.ts').MemoryEntryRecord & {
-      embedding: number[] | null
-      embeddingModelId: string | null
-      isConsolidated?: boolean
-    }
+    living_memory_entry: import('../../contracts/memory.ts').MemoryEntryRecord
     living_memory_snapshot: import('../../contracts/memory.ts').MemorySnapshotRecord
     living_memory_entry_speaker: import('./types.ts').LivingMemoryEntrySpeakerRecord
-    living_memory_migration: import('../../contracts/memory.ts').LivingMemoryMigrationRecord
     living_memory_job: import('../../contracts/memory.ts').MemoryJobRecord
     living_memory_user_profile: import('../../contracts/memory.ts').UserProfileRecord
     living_memory_preset_speaker: import('./types.ts').PresetSpeakerTableRecord

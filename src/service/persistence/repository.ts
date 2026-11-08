@@ -17,10 +17,7 @@ import type {
     UserProfileInput,
     UserProfileRecord
 } from '../../contracts/memory.ts'
-import type {
-    LegacyMemoryEmbeddingRecord,
-    MemoryIndexSourceRecord
-} from '../../contracts/vector_index.ts'
+import type { MemoryIndexSourceRecord } from '../../contracts/vector_index.ts'
 import type {
     AttributedMemoryItem,
     DreamMemoryEntryRecord,
@@ -107,9 +104,7 @@ export class LivingMemoryRepository
             this.runTransaction(callback)
         )
         this.jobs = new LivingMemoryJobRepository(ctx)
-        this.snapshots = new LivingMemorySnapshotRepository(ctx, (callback) =>
-            this.runTransaction(callback)
-        )
+        this.snapshots = new LivingMemorySnapshotRepository(ctx)
         this.userProfiles = new LivingMemoryUserProfileRepository(
             ctx,
             (callback) => this.runTransaction(callback)
@@ -153,30 +148,6 @@ export class LivingMemoryRepository
         return this.transactions.run(TRANSACTION_QUEUE_KEY, () =>
             this.database.transact(callback)
         )
-    }
-
-    migrateMemorySourceOriginsArray(): Promise<number> {
-        return this.entries.migrateMemorySourceOriginsArray()
-    }
-
-    migrateWebuiSourceConversationKeys(): Promise<number> {
-        return this.entries.migrateWebuiSourceConversationKeys()
-    }
-
-    migrateActiveMemorySpeakers(): Promise<number> {
-        return this.entries.migrateActiveMemorySpeakers()
-    }
-
-    removeLegacyReferenceSnapshots(): Promise<number> {
-        return this.snapshots.removeLegacyReferenceSnapshots()
-    }
-
-    hasMigratedLegacyEmbeddings(): Promise<boolean> {
-        return this.entries.hasMigratedLegacyEmbeddings()
-    }
-
-    completeLegacyEmbeddingMigration(): Promise<void> {
-        return this.entries.completeLegacyEmbeddingMigration()
     }
 
     async withSourceLabels<T extends Pick<MemoryEntryRecord, 'sourceConversationId' | 'sourceLabel'>>(entries: T[]): Promise<T[]> {
@@ -228,13 +199,6 @@ export class LivingMemoryRepository
             afterId,
             limit
         )
-    }
-
-    listLegacyEmbeddingPage(
-        afterId: string | null,
-        limit: number
-    ): Promise<LegacyMemoryEmbeddingRecord[]> {
-        return this.entries.listLegacyEmbeddingPage(afterId, limit)
     }
 
     countEntriesByPreset(presetId: string): Promise<number> {

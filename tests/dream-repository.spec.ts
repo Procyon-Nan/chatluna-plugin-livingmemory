@@ -201,24 +201,6 @@ it('maintains active memory speaker links across memory lifecycle changes', asyn
     })
 })
 
-it('backfills active memory speaker links once', async () => {
-    await withRepository(async (ctx, repository) => {
-        const active = await createMemory(repository, 'active', 'active')
-        await createMemory(repository, 'archived', 'archived')
-        await ctx.database.remove('living_memory_entry_speaker', {})
-
-        assert.equal(await repository.migrateActiveMemorySpeakers(), 1)
-        assert.deepEqual(
-            await repository.listActiveMemorySpeakerLinks(scope.presetId, [
-                'active-speaker',
-                'archived-speaker'
-            ]),
-            [{ speakerKey: 'active-speaker', memoryId: active.id }]
-        )
-        assert.equal(await repository.migrateActiveMemorySpeakers(), 0)
-    })
-})
-
 it('defines active memory indexes', async () => {
     // v2 的表定义挂在 `ctx.model` 上，必须先加载数据库驱动。
     await withRepository(async (ctx, repository) => {
@@ -247,7 +229,7 @@ it('defines active memory indexes', async () => {
     })
 })
 
-it('reads Dream entries without legacy vectors or source payloads', async () => {
+it('reads Dream entries without source payloads', async () => {
     await withRepository(async (_ctx, repository) => {
         const entry = await createMemory(repository, 'memory-a', 'active')
         await createMemory(repository, 'memory-b', 'archived')
@@ -258,8 +240,6 @@ it('reads Dream entries without legacy vectors or source payloads', async () => 
 
         assert.equal(records.length, 1)
         assert.equal(records[0].id, entry.id)
-        assert.equal(Object.hasOwn(records[0], 'embedding'), false)
-        assert.equal(Object.hasOwn(records[0], 'embeddingModelId'), false)
         assert.equal(Object.hasOwn(records[0], 'sourceOrigins'), false)
         assert.equal(Object.hasOwn(records[0], 'sourceConversationId'), false)
         assert.equal(Object.hasOwn(records[0], 'status'), false)

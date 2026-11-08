@@ -14,8 +14,6 @@ import {
 } from '../memory/entry_fields.ts'
 import { normalizeSpeakerKeys } from '../memory/speaker_identity.ts'
 
-// 空串与 null 都归一为「无会话归属、全局可见」；历史 WebUI 伪会话键（webui: 前缀）
-// 已由启动迁移 webui-source-conversation-cleanup-v1 写回 null，此处不再折叠。
 export const normalizeSourceConversationId = (value: string | null) => {
     const normalized = value?.trim()
     if (normalized == null || normalized.length === 0) {

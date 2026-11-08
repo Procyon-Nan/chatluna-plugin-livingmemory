@@ -9,10 +9,7 @@ import type {
     MemorySourceMessage,
     MemoryUpdatePatch
 } from '../../contracts/memory.ts'
-import type {
-    LegacyMemoryEmbeddingRecord,
-    MemoryIndexSourceRecord
-} from '../../contracts/vector_index.ts'
+import type { MemoryIndexSourceRecord } from '../../contracts/vector_index.ts'
 import type {
     AttributedMemoryItem,
     DreamMemoryEntryRecord,
@@ -39,19 +36,6 @@ import {
     resolveScopeSpeakerKeys
 } from '../memory/speaker_identity.ts'
 
-const sourceOriginsArrayMigrationId = 'source-origins-array-v1'
-const legacyEmbeddingMigrationId = 'legacy-embedding-vector-index-v1'
-const activeMemorySpeakersMigrationId = 'active-memory-speakers-v1'
-const webuiSourceConversationMigrationId =
-    'webui-source-conversation-cleanup-v1'
-// 历史版本 WebUI 手工创建写入的伪会话键前缀，本次迁移将其写回为 null（无会话归属）。
-const legacyWebuiConversationPrefix = 'webui:'
-/**
- * 回填按页读取记忆、按批写入关联行。一条记忆展开出多条关联行，两者不是同一
- * 量纲，因此各自设界。
- */
-const ACTIVE_MEMORY_SPEAKER_PAGE_SIZE = 500
-const ACTIVE_MEMORY_SPEAKER_BATCH_SIZE = 500
 const memoryEntryFields: (keyof MemoryEntryRecord)[] = [
     'id',
     'presetId',
@@ -118,176 +102,6 @@ export class LivingMemoryEntryRepository
     /** 驱动就绪后才有 `database` 服务；仓储实例只在驱动加载后创建。 */
     private get database() {
         return this.ctx.get('database')!
-    }
-
-    /**
-     * 回填活跃记忆的用户关联行。读取按 id 游标分页，峰值内存只与单页记忆条数
-     * 相关；分页与写入同处一个事务，保持要么整体生效要么不生效的语义与迁移
-     * 标记的幂等性。
-     */
-    async migrateActiveMemorySpeakers(): Promise<number> {
-        return await this.transact(async (database) => {
-            const applied = await database.get('living_memory_migration', {
-                id: activeMemorySpeakersMigrationId
-            })
-            if (applied.length > 0) {
-                return 0
-            }
-
-            let cursor: string | null = null
-            let rowCount = 0
-            while (true) {
-                const entries = await this.selectActiveMemorySpeakerPage(
-                    database,
-                    cursor,
-                    ACTIVE_MEMORY_SPEAKER_PAGE_SIZE
-                )
-                if (entries.length === 0) {
-                    break
-                }
-
-                const rows = entries.flatMap(createActiveMemorySpeakerRows)
-                for (
-                    let offset = 0;
-                    offset < rows.length;
-                    offset += ACTIVE_MEMORY_SPEAKER_BATCH_SIZE
-                ) {
-                    await database.upsert(
-                        'living_memory_entry_speaker',
-                        rows.slice(
-                            offset,
-                            offset + ACTIVE_MEMORY_SPEAKER_BATCH_SIZE
-                        )
-                    )
-                }
-                rowCount += rows.length
-                cursor = entries[entries.length - 1].id
-            }
-
-            await database.create('living_memory_migration', {
-                id: activeMemorySpeakersMigrationId,
-                appliedAt: new Date()
-            })
-            return rowCount
-        })
-    }
-
-    private async selectActiveMemorySpeakerPage(
-        database: LivingMemoryTransaction,
-        afterId: string | null,
-        limit: number
-    ) {
-        const selection = database.select('living_memory_entry', {
-            status: 'active'
-        })
-        if (afterId !== null) {
-            selection.where({ id: { $gt: afterId } })
-        }
-        return await selection
-            .orderBy('id', 'asc')
-            .limit(limit)
-            .execute(['id', 'presetId', 'speakerKeys', 'status'])
-    }
-
-    async migrateMemorySourceOriginsArray(): Promise<number> {
-        return await this.transact(async (database) => {
-            const applied = await database.get('living_memory_migration', {
-                id: sourceOriginsArrayMigrationId
-            })
-            if (applied.length > 0) {
-                return 0
-            }
-
-            const entries = await database.get('living_memory_entry', {}, [
-                'id',
-                'sourceOrigins'
-            ])
-            const invalidIds = entries
-                .filter((entry) => !Array.isArray(entry.sourceOrigins))
-                .map((entry) => entry.id)
-
-            if (invalidIds.length > 0) {
-                await database.set(
-                    'living_memory_entry',
-                    { id: { $in: invalidIds } },
-                    { sourceOrigins: [] }
-                )
-            }
-
-            await database.create('living_memory_migration', {
-                id: sourceOriginsArrayMigrationId,
-                appliedAt: new Date()
-            })
-            return invalidIds.length
-        })
-    }
-
-    async migrateWebuiSourceConversationKeys(): Promise<number> {
-        return await this.transact(async (database) => {
-            const applied = await database.get('living_memory_migration', {
-                id: webuiSourceConversationMigrationId
-            })
-            if (applied.length > 0) {
-                return 0
-            }
-
-            const entries = await database.get('living_memory_entry', {}, [
-                'id',
-                'sourceConversationId'
-            ])
-            const legacyIds = entries
-                .filter((entry) =>
-                    (entry.sourceConversationId ?? '').startsWith(
-                        legacyWebuiConversationPrefix
-                    )
-                )
-                .map((entry) => entry.id)
-
-            if (legacyIds.length > 0) {
-                await database.set(
-                    'living_memory_entry',
-                    { id: { $in: legacyIds } },
-                    { sourceConversationId: null }
-                )
-            }
-
-            await database.create('living_memory_migration', {
-                id: webuiSourceConversationMigrationId,
-                appliedAt: new Date()
-            })
-            return legacyIds.length
-        })
-    }
-
-    async hasMigratedLegacyEmbeddings() {
-        const records = await this.database.get(
-            'living_memory_migration',
-            { id: legacyEmbeddingMigrationId },
-            ['id']
-        )
-        return records.length > 0
-    }
-
-    async completeLegacyEmbeddingMigration() {
-        await this.transact(async (database) => {
-            const records = await database.get(
-                'living_memory_migration',
-                { id: legacyEmbeddingMigrationId },
-                ['id']
-            )
-            if (records.length > 0) {
-                return
-            }
-            await database.set(
-                'living_memory_entry',
-                {},
-                { embedding: null, embeddingModelId: null }
-            )
-            await database.create('living_memory_migration', {
-                id: legacyEmbeddingMigrationId,
-                appliedAt: new Date()
-            })
-        })
     }
 
     async listEntriesByPreset(presetId: string): Promise<MemoryEntryRecord[]> {
@@ -387,20 +201,6 @@ export class LivingMemoryEntryRepository
                 record.sourceConversationId
             )
         }))
-    }
-
-    async listLegacyEmbeddingPage(
-        afterId: string | null,
-        limit: number
-    ): Promise<LegacyMemoryEmbeddingRecord[]> {
-        const selection = this.database.select('living_memory_entry')
-        if (afterId !== null) {
-            selection.where({ id: { $gt: afterId } })
-        }
-        return await selection
-            .orderBy('id', 'asc')
-            .limit(limit)
-            .execute(['id', 'embedding', 'embeddingModelId'])
     }
 
     countEntriesByPreset(presetId: string) {

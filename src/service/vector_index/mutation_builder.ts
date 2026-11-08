@@ -2,7 +2,6 @@ import type { MemoryIndexMutationBatch } from '../../contracts/vector_index.ts'
 import { createVectorIndexDocument } from './documents.ts'
 import {
     embedMemoryIndexSources,
-    NO_LEGACY_EMBEDDINGS,
     type VectorIndexEmbeddingContext
 } from './embedding.ts'
 import type { VectorIndexMutation, VectorIndexUpsert } from './worker_protocol.ts'
@@ -16,10 +15,8 @@ export const buildVectorIndexWorkerMutation = async (
         .map((upsert) => upsert.document)
     const replacements = await embedMemoryIndexSources(
         context.embeddings,
-        context.embeddingModelId,
         context.dimension,
-        replacementSources,
-        NO_LEGACY_EMBEDDINGS
+        replacementSources
     )
 
     let replacementIndex = 0

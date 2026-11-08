@@ -1,6 +1,5 @@
 import { performance } from 'node:perf_hooks'
 import type {
-    LegacyMemoryEmbeddingRecord,
     MemoryIndexSourceRecord,
     MemoryVectorIndexManifest
 } from '../../contracts/vector_index.ts'
@@ -21,10 +20,6 @@ export interface VectorIndexRebuildRepository {
         afterId: string | null,
         limit: number
     ): Promise<MemoryIndexSourceRecord[]>
-    listLegacyEmbeddingPage(
-        afterId: string | null,
-        limit: number
-    ): Promise<LegacyMemoryEmbeddingRecord[]>
     listEntryPresetIds(): Promise<string[]>
     countEntriesByPreset(presetId: string): Promise<number>
 }
@@ -59,9 +54,7 @@ export const rebuildVectorIndex = async (options: {
     repository: VectorIndexRebuildRepository
     worker: VectorIndexRebuildWorker
     embeddings: EmbeddingsLike
-    embeddingModelId: string
     dimension: number
-    reuseLegacyEmbeddings: boolean
     manifest: MemoryVectorIndexManifest
     rebuildDatabaseDirectory: string
     finalize: (
@@ -74,9 +67,7 @@ export const rebuildVectorIndex = async (options: {
         repository,
         worker,
         embeddings,
-        embeddingModelId,
         dimension,
-        reuseLegacyEmbeddings,
         manifest,
         rebuildDatabaseDirectory,
         finalize,
@@ -122,22 +113,10 @@ export const rebuildVectorIndex = async (options: {
                 break
             }
 
-            let legacy: LegacyMemoryEmbeddingRecord[] = []
-            if (reuseLegacyEmbeddings) {
-                legacy = await repository.listLegacyEmbeddingPage(
-                    cursor,
-                    REBUILD_PAGE_SIZE
-                )
-            }
-            const legacyById = new Map(
-                legacy.map((record) => [record.id, record])
-            )
             const replacements = await embedMemoryIndexSources(
                 embeddings,
-                embeddingModelId,
                 dimension,
-                sources,
-                legacyById
+                sources
             )
             const upserts: VectorIndexReplaceUpsert[] = replacements.map(
                 (replacement) => ({

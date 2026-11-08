@@ -1,7 +1,4 @@
-import type {
-    LegacyMemoryEmbeddingRecord,
-    MemoryIndexSourceRecord
-} from '../../contracts/vector_index.ts'
+import type { MemoryIndexSourceRecord } from '../../contracts/vector_index.ts'
 
 export interface EmbeddingsLike {
     embedDocuments(texts: string[]): Promise<number[][]>
@@ -10,24 +7,16 @@ export interface EmbeddingsLike {
 
 const VECTOR_INDEX_PROBE_TEXT = 'living memory vector index dimension probe'
 
-/** 无旧版向量可复用时的空映射，供增量同步与重建路径共用。 */
-export const NO_LEGACY_EMBEDDINGS = new Map<
-    string,
-    LegacyMemoryEmbeddingRecord
->()
-
 export interface VectorIndexEmbeddingContext {
     embeddings: EmbeddingsLike
-    embeddingModelId: string
     dimension: number
 }
 
 const convertValidVector = (
-    vector: number[] | null,
+    vector: number[],
     dimension: number
 ): Float32Array<ArrayBuffer> | null => {
     if (
-        vector === null ||
         vector.length !== dimension ||
         vector.some((value) => !Number.isFinite(value))
     ) {
@@ -72,52 +61,24 @@ export const probeVectorIndexDimension = async (embeddings: EmbeddingsLike) => {
 
 export const embedMemoryIndexSources = async (
     embeddings: EmbeddingsLike,
-    modelId: string,
     dimension: number,
-    sources: MemoryIndexSourceRecord[],
-    legacyById: ReadonlyMap<string, LegacyMemoryEmbeddingRecord>
+    sources: MemoryIndexSourceRecord[]
 ) => {
-    const vectorsById = new Map<string, Float32Array<ArrayBuffer>>()
-    const pending: MemoryIndexSourceRecord[] = []
-    for (const source of sources) {
-        const legacy = legacyById.get(source.id)
-        if (legacy === undefined || legacy.embeddingModelId !== modelId) {
-            pending.push(source)
-            continue
-        }
-
-        const vector = convertValidVector(legacy.embedding, dimension)
-        if (vector === null) {
-            pending.push(source)
-            continue
-        }
-        vectorsById.set(source.id, vector)
-    }
-
-    if (pending.length > 0) {
-        const generated = await embeddings.embedDocuments(
-            pending.map((source) => source.content)
+    if (!sources.length) return []
+    const vectors = await embeddings.embedDocuments(
+        sources.map((source) => source.content)
+    )
+    if (vectors.length !== sources.length) {
+        throw new Error(
+            `vector index embedding count mismatch: expected=${sources.length}, actual=${vectors.length}`
         )
-        if (generated.length !== pending.length) {
-            throw new Error(
-                `vector index embedding count mismatch: ` +
-                    `expected=${pending.length}, actual=${generated.length}`
-            )
-        }
-        for (let index = 0; index < pending.length; index++) {
-            const source = pending[index]
-            vectorsById.set(
-                source.id,
-                createVectorIndexVector(
-                    generated[index],
-                    dimension,
-                    `memory=${source.id}`
-                )
-            )
-        }
     }
-    return sources.map((source) => ({
+    return sources.map((source, index) => ({
         source,
-        vector: vectorsById.get(source.id)!
+        vector: createVectorIndexVector(
+            vectors[index],
+            dimension,
+            `memory=${source.id}`
+        )
     }))
 }

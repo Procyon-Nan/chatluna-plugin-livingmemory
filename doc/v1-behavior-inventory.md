@@ -22,13 +22,13 @@
 | B05 | 自动提取 | 阈值、完整交流、旁听末尾用户段、窗口与分块、游标、批次上界、有效空结果、条件不足、失败重试、跳过、来源记录和提取后回调 | `src/service/workflows/extraction/`、`tests/extraction-coordinator.spec.ts`、`tests/extraction-prompt.spec.ts` | M05、M06 | [ ] |
 | B06 | Dream 与后处理 | 手动/自动触发、增量与全量范围、串行任务、聚类、容量约束分组、工具会话、上下文压缩、取消、统计、失败和提取后联动 | `src/service/workflows/dream/`、`tests/dream-*.spec.ts`、`tests/post-extraction-dream.spec.ts`、`docs/dream.md` | M01、M04、M07 | [ ] |
 | B07 | 用户画像与人设 | 说话人注册、身份核对、画像生成/更新/删除、画像注入、人设卡生成/读取/编辑/重置及生命周期 | `src/service/user_profile.ts`、`src/service/memory/preset_persona.ts`、`src/service/persistence/user_profiles.ts`、`src/service/persistence/preset_personas.ts`、`tests/user-profile*.spec.ts`、`tests/preset-persona.spec.ts` | M02、M03、M04、M07 | [ ] |
-| B08 | 记忆数据与来源 | 记忆字段、状态、来源文本和来源关系、说话人关联、创建/更新/合并/拆分/归档/删除、快照、事务和旧格式导入 | `src/contracts/memory.ts`、`src/service/persistence/`、`src/service/memory/origins/`、`tests/indexed-memory-mutations.spec.ts`、`tests/preset-import-export.spec.ts`、`tests/source-origins-migration.spec.ts` | M03、M07、M08 | [ ] |
+| B08 | 记忆数据与来源 | 记忆字段、状态、来源文本和来源关系、说话人关联、创建/更新/合并/拆分/归档/删除、快照、事务和旧格式导入 | `src/contracts/memory.ts`、`src/service/persistence/`、`src/service/memory/origins/`、`tests/indexed-memory-mutations.spec.ts`、`tests/preset-import-export.spec.ts` | M03、M07、M08 | [ ] |
 | B09 | 向量索引与同步 | 索引文档、嵌入、关键词与向量混合查询、增量同步、对账、重建、目录所有权、Worker、就绪状态和失败恢复 | `src/service/vector_index/`、`tests/vector-index-*.spec.ts`、`docs/vector-index.md` | M03、M07、M09 | [ ] |
 | B10 | 模型调用与结果校验 | 提示词、结构化输出 schema、工具调用、一次纠错、模型不可用/请求失败/解析失败、用量和日志记录 | `src/service/prompts/`、`src/service/workflows/structured_output.ts`、`src/service/logging/model_calls.ts`、`tests/structured-output.spec.ts`、`tests/prompt-contracts.spec.ts` | M04、M06、M07 | [ ] |
 | B11 | 记忆工具与命令 | 主对话工具范围、搜索、来源消息、创建、更新、合并、拆分、删除、快照编辑、确认无变更，以及管理命令语法和结果 | `src/service/memory/tools/`、`src/plugins/living_memory_tools.ts`、`src/plugins/commands.ts`、`tests/memory-tools.spec.ts`、`tests/memory-create-tool.spec.ts` | M01、M07、M08 | [ ] |
 | B12 | WebUI 与 RPC | 记忆、快照、画像、人设、任务、检索测试、索引状态、分页、编辑、清理确认、错误展示和国际化 | `src/contracts/rpc.ts`、`src/plugins/webui.ts`、`client/`、`tests/client-dashboard.spec.ts`、`docs/WEBUI_GUIDE.md` | M08、M09 | [ ] |
 | B13 | 任务、日志与生命周期 | 任务受理/运行/完成/失败/取消、统一任务引用、诊断事件、服务启动/停止、排空、资源释放、在途调用和失败可查询性 | `src/service/workflows/job_tracker.ts`、`src/service/logging/`、`src/service/app/living_memory_service.ts`、`tests/living-memory-service-lifecycle.spec.ts`、`docs/logging.md` | M01、M06、M07、M09 | [ ] |
-| B14 | 数据迁移与兼容 | 按预设导入和导出 v1 记忆、来源记录、画像和说话者，核对跨预设映射和重复导入行为 | `src/service/persistence/entries.ts`、`src/service/persistence/repository.ts`、`tests/legacy-embedding-migration.spec.ts`、`tests/source-origins-migration.spec.ts` | M03、M08、M09 | [ ] |
+| B14 | 数据迁移与兼容 | 按预设导入和导出 v1 记忆、来源记录、画像和说话者，核对跨预设映射和重复导入行为 | `src/service/persistence/entries.ts`、`src/service/persistence/repository.ts`、`tests/legacy-import.spec.ts`、`tests/preset-import-export.spec.ts` | M03、M08、M09 | [ ] |
 
 ## 核对规则
 

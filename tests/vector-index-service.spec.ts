@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import {
-    access,
     mkdir,
     mkdtemp,
     readFile,
@@ -20,7 +19,6 @@ import type {
     MemoryScope
 } from '../src/contracts/memory.ts'
 import type {
-    LegacyMemoryEmbeddingRecord,
     MemoryIndexSourceRecord
 } from '../src/contracts/vector_index.ts'
 import {
@@ -49,10 +47,7 @@ const createSource = (
 
 class TestVectorIndexRepository {
     readonly jobs: MemoryJobRecord[] = []
-    readonly legacy = new Map<string, LegacyMemoryEmbeddingRecord>()
     readonly sources: MemoryIndexSourceRecord[]
-    legacyEmbeddingsMigrated = false
-    legacyPageCalls = 0
 
     constructor(sources: MemoryIndexSourceRecord[]) {
         this.sources = sources
@@ -74,22 +69,6 @@ class TestVectorIndexRepository {
         )
     }
 
-    async listLegacyEmbeddingPage(afterId: string | null, limit: number) {
-        this.legacyPageCalls++
-        const rows = this.sources.map((source) => {
-            const legacy = this.legacy.get(source.id)
-            if (legacy !== undefined) {
-                return legacy
-            }
-            return {
-                id: source.id,
-                embedding: null,
-                embeddingModelId: null
-            }
-        })
-        return this.page(rows, afterId, limit)
-    }
-
     async listEntryPresetIds() {
         return [
             ...new Set(this.sources.map((source) => source.presetId))
@@ -103,15 +82,6 @@ class TestVectorIndexRepository {
 
     async countEntries() {
         return this.sources.length
-    }
-
-    async hasMigratedLegacyEmbeddings() {
-        return this.legacyEmbeddingsMigrated
-    }
-
-    async completeLegacyEmbeddingMigration() {
-        this.legacyEmbeddingsMigrated = true
-        this.legacy.clear()
     }
 
     async createJob(scope: MemoryScope, kind: MemoryJobKind, input: string) {
@@ -356,7 +326,6 @@ it('builds the index once and reuses its manifest after restart', async () => {
         assert.doesNotThrow(() => first.assertPresetReady('preset-a'))
         assert.equal(repository.jobs[0].status, 'completed')
         assert.equal(repository.jobs[0].detail, '处理记忆：2 条')
-        assert.equal(repository.legacyEmbeddingsMigrated, true)
         assert.equal(repository.jobs[1].status, 'completed')
         assert.equal(repository.jobs[1].detail, '近邻索引：已构建')
         assert.ok(
@@ -480,98 +449,6 @@ it('keeps exact recall ready when the independent HNSW maintenance fails', async
     })
 })
 
-it('removes legacy SQLite index files after initialization succeeds', async () => {
-    await withTemporaryDirectory(async (baseDir) => {
-        const indexDirectory = resolveIndexDirectory(baseDir)
-        await mkdir(indexDirectory, { recursive: true })
-        const legacyFiles = [
-            'vector-index.sqlite',
-            'vector-index.previous.sqlite',
-            'vector-index.rebuild-job-1.sqlite'
-        ].map((filename) => resolve(indexDirectory, filename))
-        for (const file of legacyFiles) {
-            await writeFile(file, 'legacy index')
-        }
-        const unrelatedFile = resolve(indexDirectory, 'unrelated.sqlite')
-        await writeFile(unrelatedFile, 'unrelated data')
-
-        const service = createService({
-            repository: new TestVectorIndexRepository([
-                createSource('memory-a')
-            ]),
-            modelId: 'model-a',
-            dimension: 3
-        })
-        await service.start()
-        await service.waitForInitialization()
-
-        assert.equal(service.getStatus().state, 'ready')
-        for (const file of legacyFiles) {
-            await assert.rejects(access(file), { code: 'ENOENT' })
-        }
-        await access(unrelatedFile)
-        await service.stop()
-    })
-})
-
-it('keeps legacy SQLite index files when initialization fails', async () => {
-    await withTemporaryDirectory(async (baseDir) => {
-        const indexDirectory = resolveIndexDirectory(baseDir)
-        const legacyFile = resolve(indexDirectory, 'vector-index.sqlite')
-        await mkdir(indexDirectory, { recursive: true })
-        await writeFile(legacyFile, 'legacy index')
-
-        const service = createService({
-            repository: new TestVectorIndexRepository([
-                createSource('memory-a')
-            ]),
-            modelId: 'model-a',
-            dimension: 3,
-            onDocuments: async (texts) => {
-                if (!texts[0].includes('dimension probe')) {
-                    throw new Error('injected embedding failure')
-                }
-            }
-        })
-        await service.start()
-        await service.waitForInitialization()
-
-        assert.equal(service.getStatus().state, 'unavailable')
-        await access(legacyFile)
-        await service.stop()
-    })
-})
-
-it('warns without failing initialization when legacy cleanup fails', async () => {
-    await withTemporaryDirectory(async (baseDir) => {
-        const legacyDirectory = resolve(
-            resolveIndexDirectory(baseDir),
-            'vector-index.sqlite'
-        )
-        await mkdir(legacyDirectory, { recursive: true })
-        const captured = createLogger()
-        const service = createService({
-            repository: new TestVectorIndexRepository([
-                createSource('memory-a')
-            ]),
-            modelId: 'model-a',
-            dimension: 3,
-            logger: captured.logger
-        })
-        await service.start()
-        await service.waitForInitialization()
-
-        assert.equal(service.getStatus().state, 'ready')
-        assert.equal(captured.warnings.length, 1)
-        assert.equal(
-            captured.warnings[0][0],
-            '事件：旧索引文件清理失败; 操作：清理旧索引文件\n%o'
-        )
-        await access(legacyDirectory)
-        await service.stop()
-    })
-})
-
 it('restarts the worker and reinitializes the existing index', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([
@@ -668,14 +545,12 @@ it('starts a full rebuild without blocking the caller', async () => {
         })
         await service.start()
         await service.waitForInitialization()
-        const legacyPageCalls = repository.legacyPageCalls
 
         service.startRebuild('manual rebuild')
         assert.equal(service.getStatus().state, 'building')
         await service.waitForMaintenance()
 
         assert.equal(service.getStatus().state, 'ready')
-        assert.equal(repository.legacyPageCalls, legacyPageCalls)
         assert.match(repository.jobs.at(-2)?.input ?? '', /manual rebuild/u)
         assert.equal(repository.jobs.at(-1)?.detail, '近邻索引：已构建')
         await service.stop()
@@ -982,7 +857,6 @@ it('keeps index jobs running until work completes and records failures', async (
         assert.equal(repository.jobs[0].status, 'failed')
         assert.match(repository.jobs[0].error ?? '', /embedding failure/u)
         assert.equal(service.getStatus().state, 'unavailable')
-        assert.equal(repository.legacyEmbeddingsMigrated, false)
         assert.equal(captured.warnings.length, 2)
         const failureLog = String(captured.warnings[0][0])
         assert.match(failureLog, /事件：索引重建失败/u)

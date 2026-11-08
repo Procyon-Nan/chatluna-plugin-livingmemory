@@ -279,11 +279,10 @@ export default class LivingmemoryService extends Service {
      * 注册上述能力并启动向量索引与 Dream 工作线程。索引的就绪状态决定记忆写入
      * 能否通过 `assertPresetReady`，因此启动失败按插件加载失败处理。
      *
-     * 顺序沿用 v1：先做启动维护（改写记忆行与任务行），再启动索引读回修复后的
-     * 数据；索引就绪后排队一次归档清理。
+     * 先标记上次中断的任务，待工作线程启动后再安排归档清理。
      */
     async start(): Promise<Disposable> {
-        await this.maintenance.runStartup()
+        await this.maintenance.recoverInterruptedJobs()
         const disposer = this.register()
         const stopMaintenance = this.maintenance.schedule()
         try {

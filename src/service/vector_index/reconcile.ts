@@ -7,11 +7,7 @@ import type {
     VectorIndexUpsert
 } from './worker_protocol.ts'
 import { createVectorIndexDocument } from './documents.ts'
-import {
-    type EmbeddingsLike,
-    embedMemoryIndexSources,
-    NO_LEGACY_EMBEDDINGS
-} from './embedding.ts'
+import { type EmbeddingsLike, embedMemoryIndexSources } from './embedding.ts'
 import { LivingMemoryVectorIndexError } from './errors.ts'
 
 const RECONCILE_PAGE_SIZE = 50
@@ -75,7 +71,6 @@ export const reconcileVectorIndexPreset = async (options: {
     repository: VectorIndexReconcileRepository
     worker: VectorIndexReconcileWorker
     embeddings: EmbeddingsLike
-    embeddingModelId: string
     dimension: number
     onProgress: (progress: VectorIndexReconcileProgress) => Promise<void>
     shouldStop: () => boolean
@@ -85,7 +80,6 @@ export const reconcileVectorIndexPreset = async (options: {
         repository,
         worker,
         embeddings,
-        embeddingModelId,
         dimension,
         onProgress,
         shouldStop
@@ -138,10 +132,8 @@ export const reconcileVectorIndexPreset = async (options: {
 
             const replacements = await embedMemoryIndexSources(
                 embeddings,
-                embeddingModelId,
                 dimension,
-                replacementSources,
-                NO_LEGACY_EMBEDDINGS
+                replacementSources
             )
             for (const replacement of replacements) {
                 upserts.push({

@@ -39,46 +39,6 @@ const maintenanceOf = (
     }
 }
 
-const seedLegacyOrigins = async (
-    ctx: Parameters<Parameters<typeof withLivingMemoryRepository>[0]>[0]
-) => {
-    const now = new Date('2026-11-05T00:00:00.000Z')
-    await ctx.database.create('living_memory_entry', {
-        id: 'legacy-origins',
-        presetId: 'preset-1',
-        speakerKeys: [],
-        type: 'fact',
-        status: 'active',
-        content: '旧格式来源',
-        keywords: [],
-        summary: null,
-        sentiment: null,
-        importance: null,
-        sourceConversationId: null,
-        sourceLabel: null,
-        sourceOrigins: { messages: [] } as never,
-        embedding: null,
-        embeddingModelId: null,
-        createdAt: now,
-        updatedAt: now
-    })
-}
-
-it('repairs legacy source origins before the index starts', async () => {
-    await withLivingMemoryRepository(async (ctx, repository) => {
-        await seedLegacyOrigins(ctx)
-        const { maintenance, info } = maintenanceOf(ctx, repository)
-
-        await maintenance.runStartup()
-
-        const [entry] = await ctx.database.get('living_memory_entry', {
-            id: 'legacy-origins'
-        })
-        assert.deepEqual(entry.sourceOrigins, [])
-        assert.ok(info.some((line) => line.includes('记忆来源迁移完成')))
-    })
-})
-
 it('recovers job rows left running by an interrupted process', async () => {
     await withLivingMemoryRepository(async (ctx, repository) => {
         await repository.createJob(
@@ -88,7 +48,7 @@ it('recovers job rows left running by an interrupted process', async () => {
         )
         const { maintenance, info } = maintenanceOf(ctx, repository)
 
-        await maintenance.runStartup()
+        await maintenance.recoverInterruptedJobs()
 
         const [job] = await ctx.database.get('living_memory_job', {})
         assert.equal(job.status, 'failed')
@@ -97,10 +57,10 @@ it('recovers job rows left running by an interrupted process', async () => {
     })
 })
 
-it('keeps the startup maintenance silent when there is nothing to repair', async () => {
+it('keeps job recovery silent when no jobs were interrupted', async () => {
     await withLivingMemoryRepository(async (ctx, repository) => {
         const { maintenance, info } = maintenanceOf(ctx, repository)
-        await maintenance.runStartup()
+        await maintenance.recoverInterruptedJobs()
         assert.deepEqual(info, [])
     })
 })
@@ -128,8 +88,6 @@ it('deletes an archived entry only after its importance-weighted decay', async (
                 sourceConversationId: null,
                 sourceLabel: null,
                 sourceOrigins: [],
-                embedding: null,
-                embeddingModelId: null,
                 createdAt: new Date(now.getTime() - age),
                 updatedAt: new Date(now.getTime() - age)
             })

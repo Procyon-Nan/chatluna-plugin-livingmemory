@@ -3,7 +3,6 @@ import { mkdtemp, rename, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import type {
-    LegacyMemoryEmbeddingRecord,
     MemoryIndexSourceRecord,
     MemoryVectorIndexManifest
 } from '../src/contracts/vector_index.ts'
@@ -31,9 +30,7 @@ const createSource = (
 })
 
 class TestRebuildRepository {
-    readonly legacy = new Map<string, LegacyMemoryEmbeddingRecord>()
     readonly sources: MemoryIndexSourceRecord[]
-    legacyPageCalls = 0
 
     constructor(sources: MemoryIndexSourceRecord[]) {
         this.sources = sources
@@ -53,22 +50,6 @@ class TestRebuildRepository {
             afterId,
             limit
         )
-    }
-
-    async listLegacyEmbeddingPage(afterId: string | null, limit: number) {
-        this.legacyPageCalls++
-        const records = this.sources.map((source) => {
-            const legacy = this.legacy.get(source.id)
-            if (legacy !== undefined) {
-                return legacy
-            }
-            return {
-                id: source.id,
-                embedding: null,
-                embeddingModelId: null
-            }
-        })
-        return this.page(records, afterId, limit)
     }
 
     async listEntryPresetIds() {
@@ -164,24 +145,20 @@ const buildFormalIndex = async (options: {
     repository: TestRebuildRepository
     embeddings: ReturnType<typeof createEmbeddings>
     generation: string
-    reuseLegacyEmbeddings?: boolean
 }) => {
     const {
         client,
         directory,
         repository,
         embeddings,
-        generation,
-        reuseLegacyEmbeddings = false
+        generation
     } = options
     const manifest = createManifest(generation)
     return await rebuildVectorIndex({
         repository,
         worker: client,
         embeddings,
-        embeddingModelId: manifest.embeddingModelId,
         dimension: manifest.dimension,
-        reuseLegacyEmbeddings,
         manifest,
         rebuildDatabaseDirectory: resolve(
             directory,
@@ -211,63 +188,21 @@ const buildFormalIndex = async (options: {
     })
 }
 
-it('reuses only valid legacy vectors during a full rebuild', async () => {
+it('indexes each rebuilt entry with its generated vector', async () => {
     await withWorker(async (client, directory) => {
         const repository = new TestRebuildRepository([
-            createSource('memory-a'),
-            createSource('memory-b'),
-            createSource('memory-c'),
-            createSource('memory-d'),
-            createSource('memory-e')
+            createSource('memory-a', { content: 'alpha' }),
+            createSource('memory-b', { content: 'beta' })
         ])
-        repository.legacy.set('memory-a', {
-            id: 'memory-a',
-            embedding: [1, 0, 0],
-            embeddingModelId: 'model-a'
-        })
-        repository.legacy.set('memory-b', {
-            id: 'memory-b',
-            embedding: [0, 1, 0],
-            embeddingModelId: 'other-model'
-        })
-        repository.legacy.set('memory-c', {
-            id: 'memory-c',
-            embedding: [1, 0],
-            embeddingModelId: 'model-a'
-        })
-        repository.legacy.set('memory-d', {
-            id: 'memory-d',
-            embedding: [0, 0, 0],
-            embeddingModelId: 'model-a'
-        })
-        repository.legacy.set('memory-e', {
-            id: 'memory-e',
-            embedding: [Number.POSITIVE_INFINITY, 0, 0],
-            embeddingModelId: 'model-a'
-        })
         const calls: string[][] = []
-
-        await buildFormalIndex({
-            client,
-            directory,
-            repository,
-            embeddings: createEmbeddings(3, calls),
-            generation: 'legacy',
-            reuseLegacyEmbeddings: true
-        })
-
-        assert.deepEqual(calls, [
-            [
-                'content memory-b',
-                'content memory-c',
-                'content memory-d',
-                'content memory-e'
-            ]
-        ])
-        const vectors = await client.readVectorSnapshot('preset-a', [
-            'memory-a'
-        ])
-        assert.deepEqual([...vectors.items[0].vector], [1, 0, 0])
+        await buildFormalIndex({ client, directory, repository, embeddings: createEmbeddings(3, calls), generation: 'rebuilt' })
+        assert.deepEqual(calls, [['alpha', 'beta']])
+        const snapshot = await client.readVectorSnapshot('preset-a', ['memory-a', 'memory-b'])
+        for (const item of snapshot.items) {
+            const source = repository.sources.find(entry => entry.id === item.memoryId)!
+            assert.deepEqual([...item.vector], [...new Float32Array(createVector(source.content, 3))])
+        }
+        assert.equal(snapshot.items.length, 2)
     })
 })
 
@@ -292,9 +227,7 @@ it('does not abort through the old worker after finalize takes cleanup ownership
                 }
             },
             embeddings: createEmbeddings(3, []),
-            embeddingModelId: 'model-a',
             dimension: 3,
-            reuseLegacyEmbeddings: false,
             manifest: createManifest('finalize-failure'),
             rebuildDatabaseDirectory: 'unused',
             shouldStop: () => false,
@@ -336,9 +269,7 @@ it('aborts through the worker when finalize fails before taking cleanup ownershi
                 }
             },
             embeddings: createEmbeddings(3, []),
-            embeddingModelId: 'model-a',
             dimension: 3,
-            reuseLegacyEmbeddings: false,
             manifest: createManifest('pre-transfer-failure'),
             rebuildDatabaseDirectory: 'unused',
             shouldStop: () => false,
@@ -350,29 +281,6 @@ it('aborts through the worker when finalize fails before taking cleanup ownershi
         /injected pre-transfer failure/u
     )
     assert.equal(abortCalls, 1)
-})
-
-it('does not read legacy vectors after the migration is complete', async () => {
-    await withWorker(async (client, directory) => {
-        const repository = new TestRebuildRepository([createSource('memory-a')])
-        repository.legacy.set('memory-a', {
-            id: 'memory-a',
-            embedding: [0, 1, 0],
-            embeddingModelId: 'model-a'
-        })
-        const calls: string[][] = []
-
-        await buildFormalIndex({
-            client,
-            directory,
-            repository,
-            embeddings: createEmbeddings(3, calls),
-            generation: 'without-legacy'
-        })
-
-        assert.equal(repository.legacyPageCalls, 0)
-        assert.deepEqual(calls, [['content memory-a']])
-    })
 })
 
 it('reconciles additions, metadata updates, content changes, and orphans', async () => {
@@ -411,7 +319,6 @@ it('reconciles additions, metadata updates, content changes, and orphans', async
             repository,
             worker: client,
             embeddings: createEmbeddings(3, calls),
-            embeddingModelId: 'model-a',
             dimension: 3,
             shouldStop: () => false,
             onProgress: async () => {}
@@ -466,7 +373,6 @@ it('marks a preset dirty when reconcile embedding fails', async () => {
                     [],
                     () => new Error('injected reconcile failure')
                 ),
-                embeddingModelId: 'model-a',
                 dimension: 3,
                 shouldStop: () => false,
                 onProgress: async () => {}

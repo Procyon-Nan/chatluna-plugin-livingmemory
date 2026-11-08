@@ -121,11 +121,6 @@ export interface MemoryEntryRecord {
   updatedAt: Date
 }
 
-export interface LivingMemoryMigrationRecord {
-  id: string
-  appliedAt: Date
-}
-
 export interface MemorySnapshotRecord {
   id: string
   presetId: string

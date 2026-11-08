@@ -54,12 +54,6 @@ export type MemoryIndexSourceRecord = Pick<
     | 'updatedAt'
 >
 
-export interface LegacyMemoryEmbeddingRecord {
-    id: string
-    embedding: number[] | null
-    embeddingModelId: string | null
-}
-
 export interface MemoryIndexDocument {
     id: string
     presetId: string
