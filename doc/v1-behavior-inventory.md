@@ -28,7 +28,7 @@
 | B11 | 记忆工具与命令 | 主对话工具范围、搜索、来源消息、创建、更新、合并、拆分、删除、快照编辑、确认无变更，以及管理命令语法和结果 | `src/service/memory/tools/`、`src/plugins/living_memory_tools.ts`、`src/plugins/commands.ts`、`tests/memory-tools.spec.ts`、`tests/memory-create-tool.spec.ts` | M01、M07、M08 | [ ] |
 | B12 | WebUI 与 RPC | 记忆、快照、画像、人设、任务、检索测试、索引状态、分页、编辑、清理确认、错误展示和国际化 | `src/contracts/rpc.ts`、`src/plugins/webui.ts`、`client/`、`tests/client-dashboard.spec.ts`、`docs/WEBUI_GUIDE.md` | M08、M09 | [ ] |
 | B13 | 任务、日志与生命周期 | 任务受理/运行/完成/失败/取消、统一任务引用、诊断事件、服务启动/停止、排空、资源释放、在途调用和失败可查询性 | `src/service/workflows/job_tracker.ts`、`src/service/logging/`、`src/service/app/living_memory_service.ts`、`tests/living-memory-service-lifecycle.spec.ts`、`docs/logging.md` | M01、M06、M07、M09 | [ ] |
-| B14 | 数据迁移与兼容 | v1 记忆、画像、来源、快照、人设、索引和配置的导入、映射、备份、重复执行和恢复 | `src/service/persistence/entries.ts`、`src/service/persistence/repository.ts`、`tests/legacy-embedding-migration.spec.ts`、`tests/source-origins-migration.spec.ts` | M03、M08、M09 | [ ] |
+| B14 | 数据迁移与兼容 | 按预设导入和导出 v1 记忆、来源记录、画像和说话者，核对跨预设映射和重复导入行为 | `src/service/persistence/entries.ts`、`src/service/persistence/repository.ts`、`tests/legacy-embedding-migration.spec.ts`、`tests/source-origins-migration.spec.ts` | M03、M08、M09 | [ ] |
 
 ## 核对规则
 

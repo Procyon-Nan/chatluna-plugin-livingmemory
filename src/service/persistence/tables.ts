@@ -227,7 +227,7 @@ export function defineLivingMemoryTables(ctx: Context) {
     }
   )
 
-  // 预设级派生缓存：一行一预设，按 presetId 直取。非备份内容，不进导出。
+  // 每个预设缓存一张人设卡片，按 presetId 读取。
   ctx.model.extend(
     'living_memory_preset_persona',
     {

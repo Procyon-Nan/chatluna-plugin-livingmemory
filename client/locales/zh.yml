@@ -1,6 +1,14 @@
 title: 长期记忆
 description: 查看与管理记忆条目、后台任务和预设人设卡片
 preset.placeholder: 选择预设
+transfer.export: 导出记忆
+transfer.import: 导入记忆
+transfer.confirmTitle: 导入到「{target}」？
+transfer.preview: 文件导出自「{source}」，包含 {entries} 条记忆、{profiles} 份画像和 {speakers} 位说话者。
+transfer.merge: 相同 ID 的记忆和同一说话者的画像会被覆盖，其他记忆保留。
+transfer.confirm: 确认导入
+transfer.invalid: 无法识别该文件。请选择 LivingMemory 导出的 JSON 文件（格式版本 1–5）。
+transfer.imported: 已导入到「{target}」：{entries} 条记忆、{profiles} 份画像、{speakers} 位说话者。
 empty.noPreset: 还没有任何预设数据。先在对话里产生记忆，或从导出文件导入。
 
 tab.entries: 记忆

@@ -14,10 +14,7 @@ export interface PresetPersonaWriteInput {
     usedRawFallback: boolean
 }
 
-/**
- * 预设人设卡片的表级仓库。卡片是预设级派生缓存（非备份内容），无跨表不变
- * 量，单行 upsert 即可，不需要事务；同一预设的写入由卡片服务串行。
- */
+/** 卡片服务按预设串行写入人设卡片，每次更新一行。 */
 export class LivingMemoryPresetPersonaRepository {
     constructor(private readonly ctx: Context) {}
 

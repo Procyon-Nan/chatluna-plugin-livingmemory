@@ -86,6 +86,7 @@ livingmemory/
 ├── client/
 │   ├── index.ts                # WebUI 客户端入口：注册 `/livingmemory` 路由与语言资源
 │   ├── page.tsx                # 管理页：记忆、画像、人设、快照、任务、召回测试六个面板
+│   ├── memory-import-export.tsx # 记忆文件的选择、导入确认与 JSON 下载
 │   └── locales/
 │       ├── zh.yml              # 中文界面文案
 │       └── en.yml              # 英文界面文案

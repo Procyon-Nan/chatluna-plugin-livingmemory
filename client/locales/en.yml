@@ -1,6 +1,14 @@
 title: Living Memory
 description: Browse and manage memory entries, background jobs and preset persona cards
 preset.placeholder: Select a preset
+transfer.export: Export memories
+transfer.import: Import memories
+transfer.confirmTitle: 'Import into “{target}”?'
+transfer.preview: 'Export from “{source}”: {entries} memories, {profiles} profiles and {speakers} speakers.'
+transfer.merge: Memories with matching IDs and profiles for the same speaker will be replaced. Other memories are kept.
+transfer.confirm: Confirm import
+transfer.invalid: Choose a JSON file exported by LivingMemory (format versions 1–5).
+transfer.imported: 'Imported into “{target}”: {entries} memories, {profiles} profiles and {speakers} speakers.'
 empty.noPreset: No preset data yet. Produce memories in a conversation, or import an export file.
 
 tab.entries: Memories

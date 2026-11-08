@@ -27,6 +27,7 @@ import {
     useTranslate
 } from '@chatluna/ui-client/client'
 import type { Translate } from '@chatluna/ui-client/client'
+import { MemoryImportExport } from './memory-import-export.tsx'
 import type {
     LivingMemoryEntryView,
     LivingMemoryJobView,
@@ -79,11 +80,10 @@ export function LivingMemoryPage() {
                 title={t('title')}
                 description={t('description')}
                 actions={
-                    <PresetPicker
-                        presets={presets}
-                        value={active}
-                        onChange={setPresetId}
-                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                        <PresetPicker presets={presets} value={active} onChange={setPresetId} />
+                        <MemoryImportExport presetId={active} />
+                    </div>
                 }
             />
             <Warnings warnings={status.data?.warnings ?? []} />
