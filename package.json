@@ -57,10 +57,10 @@
         "@chatluna/message": "*",
         "@chatluna/preset": "*",
         "@chatluna/routing": "*",
-        "@chatluna/ui-schema-registry": "*",
         "@chatluna/satori": "*",
         "@chatluna/schema": "*",
         "@chatluna/tool": "*",
+        "@chatluna/ui-schema-registry": "*",
         "@chatluna/utils": "*",
         "@cordisjs/plugin-database": "^4.1.1",
         "cordis": "^4.0.0-rc.12"
