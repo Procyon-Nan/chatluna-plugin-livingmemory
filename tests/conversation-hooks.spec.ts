@@ -42,6 +42,8 @@ function createHarness(config: {
     let prepare!: Prepare
     let snapshotText = ''
     let presetId: string | undefined = 'preset-1'
+    let headPresetId: string | undefined = presetId
+    let liveAgent: Agent | undefined
     let sessionId = 'session-1'
     let drainGate: Promise<unknown> = Promise.resolve()
     let currentGate: Promise<unknown> = Promise.resolve()
@@ -63,7 +65,8 @@ function createHarness(config: {
             return () => listeners.set(name, entries.filter((entry) => entry !== listener))
         },
         conversations: {
-            current: async () => { scopeLookups++; await currentGate; return { sessionId, presetId } }
+            current: async () => { scopeLookups++; await currentGate; return { sessionId, presetId: headPresetId } },
+            live: () => liveAgent && { agent: liveAgent }
         },
         chat: {
             drain: async () => { await drainGate; order.push('drain'); return 1 },
@@ -149,14 +152,18 @@ function createHarness(config: {
         },
         turn: async (target: Agent) => { emit('chatluna/agent-turn', { agent: target, reason: 'completed' }); await settle() },
         switch: (nextPreset: string | undefined, nextSession = sessionId) => {
-            const previous = { sessionId, presetId }
+            const previous = { sessionId, presetId: headPresetId }
             presetId = nextPreset
+            headPresetId = nextPreset
             sessionId = nextSession
             emit('chatluna/conversation-change', {
-                conversationKey: 'conv-1', previous, current: { sessionId, presetId }, reason: 'preset'
+                conversationKey: 'conv-1', previous, current: { sessionId, presetId },
+                reason: sessionId === previous.sessionId ? 'preset' : 'reset'
             })
         },
         setSnapshot: (text: string) => { snapshotText = text },
+        setHeadPreset: (value: string | undefined) => { headPresetId = value },
+        setLiveAgent: (value: Agent | undefined) => { liveAgent = value },
         setDrain: (gate: Promise<unknown>) => { drainGate = gate },
         setCurrent: (gate: Promise<unknown>) => { currentGate = gate }
     }
@@ -258,9 +265,12 @@ describe('LivingMemoryConversationHooks', () => {
     it('resets a history switch even when the preset stays the same', async () => {
         const harness = createHarness()
         await harness.observed(10, 'old history')
-        await harness.begin(harness.agent(), 10)
+        const oldAgent = harness.agent(1, 'test-engine')
+        await harness.engineTurn(oldAgent, 1, 10)
         harness.switch('preset-1', 'session-2')
         await harness.observed(80, 'new history')
+        await harness.engineTurn(oldAgent, 2, 10)
+        assert.equal(harness.hooks.settingsForTurn(oldAgent), undefined, 'a late old agent cannot reclaim the conversation')
         const agent = harness.agent()
         await harness.begin(agent, 80)
         assert.deepEqual(harness.recalls.at(-1)!.history.map(m => m.contentLines), [['new history']])
@@ -279,6 +289,27 @@ describe('LivingMemoryConversationHooks', () => {
         await harness.observed(50, 'second overheard')
         assert.deepEqual(harness.extractions.map((call) => call.boundary), [0, 0])
         assert.equal(harness.recalls.length, 0)
+    })
+
+    it('starts overheard counting only once the session has a known preset, even with an empty head preset', async () => {
+        const h = createHarness({ overheard: true })
+        h.setHeadPreset(undefined)
+        await h.observed(1, 'cold chat')
+        assert.equal(h.extractions.length, 0)
+
+        const agent = h.agent(1, 'test-engine')
+        h.setLiveAgent(agent)
+        await h.observed(2, 'first attributed chat')
+        h.setLiveAgent(undefined)
+        await h.observed(3, 'another chat in the same session')
+        assert.deepEqual(h.extractions.map(({ scope, boundary, eligible }) => [scope.presetId, boundary, eligible]), [
+            ['preset-1', 0, 1], ['preset-1', 0, 2]
+        ])
+
+        h.switch(undefined, 'session-2')
+        h.setLiveAgent(agent)
+        await h.observed(4, 'chat after reset')
+        assert.equal(h.extractions.length, 2, 'the previous session’s live agent cannot identify the new session')
     })
 
     it('waits for full rendering and history commit before normal extraction', async () => {
@@ -387,6 +418,7 @@ it('freezes Alice’s triggering window on enqueue across folded inputs, buffer 
     const h = createHarness({ rules: {
         enableUserProfileInjection: true, enableConversationIsolation: true, recallHistoryMessages: 2
     } })
+    h.setHeadPreset(undefined)
     await h.observed(0, 'earlier', { userId: 'dave' })
     await h.observed(1, 'question', { userId: 'alice' })
     const a = h.agent(1, 'test-engine')
@@ -397,6 +429,7 @@ it('freezes Alice’s triggering window on enqueue across folded inputs, buffer 
     await queued
     await settle()
     assert.equal(h.recalls.length, 1, 'the accepted wake is scheduled before engine-turn')
+    assert.equal(h.recalls[0].scope.presetId, 'preset-1')
     await h.observed(2, 'same batch', { userId: 'bob' })
     const batch = absorb(firstInput, foldedChat(2, 'bob', direct), 2)
     // 框架合批时先丢弃旧信封，再把含两条消息的新信封入队。

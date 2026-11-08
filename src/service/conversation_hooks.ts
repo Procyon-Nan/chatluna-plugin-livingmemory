@@ -168,8 +168,12 @@ export class LivingMemoryConversationHooks {
         const rows = needsHistory && position !== undefined
             ? this.options.history.recent({ conversationId: key }, settings.recallHistoryMessages, position, contextStart)
             : []
-        const presetId = this.ctx.get('engines')?.presetOf(agent) ?? agent.options.presetId
+        const presetId = this.agentPreset(agent)
         return { rows, settings, position, presetId, contextStart }
+    }
+
+    private agentPreset(agent: Agent) {
+        return this.ctx.get('engines')?.presetOf(agent) ?? agent.options.presetId
     }
 
     private async prepareTurn(agent: Agent, key: string, getWindow: () => CapturedWindow): Promise<TurnPreparation> {
@@ -181,10 +185,10 @@ export class LivingMemoryConversationHooks {
             if (!head || String(head.sessionId) !== String(agent.session.id)) return
             if (!this.active || this.revisions.get(key) !== revision || (revision?.contextStart ?? -1) !== window.contextStart) return
 
-            const presetId = this.ctx.get('engines')?.presetOf(agent) ?? agent.options.presetId ?? head.presetId
+            const presetId = this.agentPreset(agent) ?? head.presetId
             if (window.presetId !== undefined && presetId !== window.presetId) return
             if (!presetId) return { kind: 'awaiting-preset', window }
-            if (presetId !== head.presetId && this.conversations.get(key)?.scope.presetId !== presetId) return
+            if (head.presetId && head.presetId !== presetId && this.conversations.get(key)?.scope.presetId !== presetId) return
 
             const { settings, position } = window
             const boundary = position === undefined ? this.options.history.lastPosition(key) : position - 1
@@ -293,11 +297,17 @@ export class LivingMemoryConversationHooks {
         if (position === undefined) return
         const revision = this.revisions.get(key)
         const current = await this.ctx.conversations.current(key)
-        if (!this.active || this.revisions.get(key) !== revision || !current?.presetId ||
+        if (!this.active || this.revisions.get(key) !== revision || !current ||
             (event.sessionId !== undefined && current.sessionId !== event.sessionId)) return
-        const existing = this.conversations.get(key)
-        const state = existing?.scope.sessionId === String(current.sessionId) ? existing
-            : this.stateOf(this.options.history.scopeOf(key, String(current.sessionId), current.presetId), position - 1)
+        const sessionId = String(current.sessionId)
+        let state = this.conversations.get(key)
+        if (!state || state.scope.sessionId !== sessionId) {
+            const agent = this.ctx.conversations.live(key)?.agent
+            const livePreset = agent?.session.id === current.sessionId ? this.agentPreset(agent) : undefined
+            const presetId = livePreset ?? current.presetId
+            if (!presetId) return
+            state = this.stateOf(this.options.history.scopeOf(key, sessionId, presetId), position - 1)
+        }
         if (position > state.boundary && settings.extractionIncludeOverheard) await this.queueExtraction(state, settings, position)
     }
 
