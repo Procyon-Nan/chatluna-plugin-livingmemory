@@ -63,7 +63,7 @@ export class LivingMemoryMaintenance {
         try {
             const recovered = await this.deps.repository.markStaleRunningJobsAsFailed(
                 {},
-                'recovered: service restarted while job was running'
+                '服务重启时任务尚未完成。'
             )
             if (recovered.length > 0) {
                 this.deps.logger.summary(

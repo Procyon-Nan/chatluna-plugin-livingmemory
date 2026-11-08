@@ -118,7 +118,7 @@ export class LivingMemoryJobRepository implements JobRepository {
 
     async markStaleRunningJobsAsFailed(
         options: { presetId?: string; kind?: MemoryJobKind } = {},
-        reason = 'recovered: stale running job'
+        reason = '上次任务未完成。'
     ): Promise<MemoryJobRecord[]> {
         // 同时回收 pending 与 running：作业表为审计日志，不参与调度。
         // 若进程在 createJob（写入 pending）之后、markRunning 之前被终止，

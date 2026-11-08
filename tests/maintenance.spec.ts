@@ -52,7 +52,7 @@ it('recovers job rows left running by an interrupted process', async () => {
 
         const [job] = await ctx.database.get('living_memory_job', {})
         assert.equal(job.status, 'failed')
-        assert.match(job.error ?? '', /service restarted while job was running/)
+        assert.equal(job.error, '服务重启时任务尚未完成。')
         assert.ok(info.some((line) => line.includes('中断任务状态恢复完成')))
     })
 })

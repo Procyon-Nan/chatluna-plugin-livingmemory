@@ -77,7 +77,7 @@ export class LivingMemoryVectorIndexJobRunner {
                 await this.tracker.markFailed(
                     job.id,
                     error,
-                    `vector index job failed: ${input}`
+                    `${label}失败`
                 )
             }
             throw error

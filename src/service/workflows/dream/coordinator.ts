@@ -124,7 +124,7 @@ export class LivingMemoryDreamCoordinator {
         signal.throwIfAborted()
         const recovered = await this.repository.markStaleRunningJobsAsFailed(
             { presetId, kind: 'dream' },
-            'dream recovered: stale running job'
+            '上次 Dream 任务未完成。'
         )
         if (recovered.length > 0) {
             this.logger.diagnosticSummary(() => ({

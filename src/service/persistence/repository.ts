@@ -352,7 +352,7 @@ export class LivingMemoryRepository
 
     markStaleRunningJobsAsFailed(
         options: { presetId?: string; kind?: MemoryJobKind } = {},
-        reason = 'recovered: stale running job'
+        reason?: string
     ): Promise<MemoryJobRecord[]> {
         return this.jobs.markStaleRunningJobsAsFailed(options, reason)
     }

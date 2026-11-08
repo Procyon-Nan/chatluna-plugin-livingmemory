@@ -212,6 +212,8 @@ it('keeps successful operations and proceeds past an ineffective batch as partia
     assert.equal(result.unprocessedMemoryIds.length, 30)
     assert.equal(result.skippedBatches.length, 2)
     assert.match(result.detail, /连续 3 轮/)
+    assert.match(result.detail, /已处理 1\/31 条记忆，共 2 个批次/)
+    assert.ok(result.detail.includes(`未处理的记忆 ID：${result.unprocessedMemoryIds.join('、')}`))
 })
 
 it('retains completed operations and missing IDs when the session fatally fails', async () => {

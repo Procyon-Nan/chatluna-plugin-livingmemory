@@ -292,20 +292,14 @@ export class LivingMemoryVectorIndexMaintenance {
                     rebuildDatabaseDirectory,
                     shouldStop: this.options.shouldStop,
                     onProgress: async (progress) => {
-                        const detail = [
-                            'vector index rebuild progress:',
-                            `jobId=${job.id}`,
-                            `presetId=${job.presetId}`,
-                            `completed=${progress.completed}`,
-                            `total=${progress.total}`
-                        ].join(' ')
+                        const detail = `已处理 ${progress.completed}/${progress.total} 条记忆（预设：${job.presetId}）`
                         await repository.updateJob(job.id, {
-                            detail,
+                            detail: `索引重建：${detail}`,
                             updatedAt: new Date()
                         })
                         this.options.logger.diagnosticSummary(() => ({
                             event: '索引重建进度',
-                            detail: `预设：${job.presetId}; 处理记忆：${progress.completed}/${progress.total} 条; 本批耗时：${(progress.batchDuration / 1000).toFixed(3)} 秒; 总耗时：${(progress.totalDuration / 1000).toFixed(3)} 秒`
+                            detail: `${detail}; 本批耗时：${(progress.batchDuration / 1000).toFixed(3)} 秒; 总耗时：${(progress.totalDuration / 1000).toFixed(3)} 秒`
                         }))
                     },
                     finalize: (transferCleanupOwnership) =>
@@ -392,15 +386,8 @@ export class LivingMemoryVectorIndexMaintenance {
         job: MemoryJobRecord,
         progress: VectorIndexReconcileProgress
     ) {
-        const detail = [
-            'vector index reconcile progress:',
-            `jobId=${job.id}`,
-            `presetId=${progress.presetId}`,
-            `completed=${progress.completed}`,
-            `total=${progress.total}`
-        ].join(' ')
         await this.options.repository.updateJob(job.id, {
-            detail,
+            detail: `索引对账：已处理 ${progress.completed}/${progress.total} 条记忆（预设：${progress.presetId}）`,
             updatedAt: new Date()
         })
     }

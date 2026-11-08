@@ -856,6 +856,7 @@ it('keeps index jobs running until work completes and records failures', async (
         await service.waitForInitialization()
         assert.equal(repository.jobs[0].status, 'failed')
         assert.match(repository.jobs[0].error ?? '', /embedding failure/u)
+        assert.equal(repository.jobs[0].detail, '索引重建失败')
         assert.equal(service.getStatus().state, 'unavailable')
         assert.equal(captured.warnings.length, 2)
         const failureLog = String(captured.warnings[0][0])

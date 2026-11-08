@@ -199,19 +199,21 @@ export class LivingMemoryDreamService {
             status = 'partial'
         }
         const detail = [
-            `dream: ${status}, processed ${coverage.processedCount}/${coverage.targetCount}, batches ${state.batches.length}`,
-            `checked ${state.stats.kept}, merged ${state.stats.merged}, split ${state.stats.split}, updated ${state.stats.updated}, archived ${state.stats.archived}`,
+            input.mode === 'full'
+                ? `已处理 ${coverage.processedCount}/${coverage.targetCount} 条记忆，共 ${state.batches.length} 个批次。`
+                : `各组累计处理 ${coverage.processedCount}/${coverage.targetCount} 项，共 ${state.batches.length} 组。`,
+            `检查 ${state.stats.kept} 条，合并 ${state.stats.merged} 次，拆分 ${state.stats.split} 次，更新 ${state.stats.updated} 条，归档 ${state.stats.archived} 条。`,
             ...state.skippedBatches.map(
                 (batch) =>
-                    `skipped ${batch.batchId}: ${batch.reason}; memoryIds=${batch.memoryIds.join(', ')}`
+                    `批次 ${batch.batchId} 跳过剩余记忆：${batch.reason}。跳过的记忆 ID：${batch.memoryIds.join('、') || '无'}`
             ),
             ...state.completedBatches.map(
                 (batch) =>
-                    `batch ${batch.batchId}: processed ${batch.processedCount}/${batch.targetCount}; unprocessed=${batch.unprocessedMemoryIds.join(', ') || 'none'}`
+                    `批次 ${batch.batchId} 已处理 ${batch.processedCount}/${batch.targetCount} 条。未处理的记忆 ID：${batch.unprocessedMemoryIds.join('、') || '无'}`
             ),
-            `untouched seeds: ${state.untouchedSeedIds.join(', ') || 'none'}`,
-            `unprocessed: ${coverage.unprocessedMemoryIds.join(', ') || 'none'}`,
-            error === undefined ? '' : `error: ${error}`
+            input.mode === 'post-extraction' ? `未整理的新记忆 ID：${state.untouchedSeedIds.join('、') || '无'}` : '',
+            `未处理的记忆 ID：${coverage.unprocessedMemoryIds.join('、') || '无'}`,
+            error === undefined ? '' : `失败原因：${error}`
         ]
             .filter(Boolean)
             .join('\n')
