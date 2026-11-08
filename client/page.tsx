@@ -12,7 +12,6 @@ import {
     Field,
     FieldLabel,
     Input,
-    PageHeader,
     Select,
     SelectContent,
     SelectItem,
@@ -87,21 +86,25 @@ export function LivingMemoryPage() {
     }
 
     return (
-        <div className="flex h-full flex-col gap-4 p-6">
-            <PageHeader
-                title={t('title')}
-                description={t('description')}
-                actions={
-                    <div className="flex flex-wrap items-center gap-2">
-                        <PresetPicker presets={presets} value={active} onChange={selectPreset} />
-                        <Button size="sm" onClick={() => setCreating(true)}>{t('entries.create')}</Button>
-                        <MemoryImportExport presetId={active} />
-                        <Button size="sm" variant="outline" disabled={!active} onClick={() => setClearTarget(active)}>
-                            {t('deletion.clearPreset')}
+        <div className="flex h-full min-w-0 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
+            <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+                <div className="flex flex-wrap gap-1">
+                    {(['entries', 'profiles', 'personas', 'snapshots', 'jobs', 'search'] as const).map(key => (
+                        <Button key={key} size="sm" variant={tab === key ? 'default' : 'ghost'}
+                            aria-pressed={tab === key} onClick={() => setTab(key)}>
+                            {t(`tab.${key}`)}
                         </Button>
-                    </div>
-                }
-            />
+                    ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <PresetPicker presets={presets} value={active} onChange={selectPreset} />
+                    <Button size="sm" onClick={() => setCreating(true)}>{t('entries.create')}</Button>
+                    <MemoryImportExport presetId={active} />
+                    <Button size="sm" variant="outline" disabled={!active} onClick={() => setClearTarget(active)}>
+                        {t('deletion.clearPreset')}
+                    </Button>
+                </div>
+            </header>
             {creating && (
                 <MemoryEntryEditor presetId={active ?? ''} presets={presets}
                     onClose={() => setCreating(false)}
@@ -121,27 +124,6 @@ export function LivingMemoryPage() {
                     }} />
             )}
             <Warnings warnings={status.data?.warnings ?? []} />
-            <div className="flex gap-2">
-                {(
-                    [
-                        'entries',
-                        'profiles',
-                        'personas',
-                        'snapshots',
-                        'jobs',
-                        'search'
-                    ] as const
-                ).map((key) => (
-                    <Button
-                        key={key}
-                        variant={tab === key ? 'default' : 'ghost'}
-                        size="sm"
-                        onClick={() => setTab(key)}
-                    >
-                        {t(`tab.${key}`)}
-                    </Button>
-                ))}
-            </div>
             {active === undefined ? (
                 <EmptyState title={t('empty.noPreset')} />
             ) : tab === 'entries' ? (
@@ -311,64 +293,17 @@ function EntriesList({ filter, names }: { filter: MemoryListFilter; names: Map<s
             {items.length === 0 ? (
                 <EmptyState title={t('entries.empty')} />
             ) : (
-                <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-                    {items.map((entry) => (
-                        <li
-                            key={entry.id}
-                            className="flex flex-col gap-1 rounded-md border border-border p-3"
-                        >
-                            <div className="flex flex-wrap items-center gap-2">
-                                <Checkbox aria-label={t('deletion.selectEntry', { label: entry.summary || entry.content })}
-                                    disabled={selecting} checked={selected.has(entry.id)}
-                                    onCheckedChange={checked => selectIds([entry.id], checked)} />
-                                {entry.summary && <span className="font-medium">{entry.summary}</span>}
-                                <Badge variant="outline">{t(`type.${entry.type}`)}</Badge>
-                                <Badge variant="secondary">{t(`status.${entry.status}`)}</Badge>
-                                {entry.sentiment && <Badge variant="outline">{t('field.sentiment')} · {entry.sentiment}</Badge>}
-                            </div>
-                            <p className="whitespace-pre-wrap break-words text-sm">{entry.content}</p>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                <span className="inline-flex items-center gap-1">
-                                    {t('field.importance')} {entry.importance ?? '—'}
-                                    {entry.importance !== null && (
-                                        <meter min={0} max={1} value={entry.importance} aria-label={t('field.importance')} />
-                                    )}
-                                </span>
-                                <span>{t('field.speakers')} · {entry.speakerKeys.map((key) => names.get(key) ?? key).join(', ') || t('entries.noSpeakers')}</span>
-                                {(entry.sourceLabel || entry.sourceConversationId) && (
-                                    <span>{t('field.source')} · {entry.sourceLabel || entry.sourceConversationId}</span>
-                                )}
-                            </div>
-                            {entry.keywords.length > 0 && (
-                                <div className="flex flex-wrap gap-1">
-                                    {entry.keywords.map((word) => <Badge key={word} variant="outline">{word}</Badge>)}
-                                </div>
-                            )}
-                            <div className="flex flex-wrap gap-x-4 text-xs text-muted-foreground">
-                                <span>{t('field.createdAt')} {formatTime(entry.createdAt)}</span>
-                                <span>{t('field.updatedAt')} {formatTime(entry.updatedAt)}</span>
-                            </div>
-                            <div className="flex gap-2">
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setEditing(entry)}
-                                >
-                                    {t('entries.edit')}
-                                </Button>
-                                {entry.status === 'active' && (
-                                    <Button size="sm" variant="ghost" onClick={() =>
-                                        void callAction('livingmemory.update', { id: entry.id, status: 'archived' })
-                                            .then(() => selectIds([entry.id], false)).catch(report)
-                                    }>{t('entries.archive')}</Button>
-                                )}
-                                <Button size="sm" variant="ghost" onClick={() => setDeletion({
-                                    kind: 'entries', presetId, ids: [entry.id], preview: entry.summary || entry.content
-                                })}>
-                                    {t('entries.purge')}
-                                </Button>
-                            </div>
-                        </li>
+                <ul className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(min(100%,28rem),1fr))] content-start gap-4 overflow-y-auto">
+                    {items.map(entry => (
+                        <MemoryCard key={entry.id} entry={entry} names={names}
+                            selected={selected.has(entry.id)} selecting={selecting}
+                            onSelect={checked => selectIds([entry.id], checked)}
+                            onEdit={() => setEditing(entry)}
+                            onArchive={() => void callAction('livingmemory.update', { id: entry.id, status: 'archived' })
+                                .then(() => selectIds([entry.id], false)).catch(report)}
+                            onDelete={() => setDeletion({
+                                kind: 'entries', presetId, ids: [entry.id], preview: entry.summary || entry.content
+                            })} />
                     ))}
                 </ul>
             )}
@@ -390,6 +325,69 @@ function EntriesList({ filter, names }: { filter: MemoryListFilter; names: Map<s
                     }} />
             )}
         </div>
+    )
+}
+
+interface MemoryCardProps {
+    entry: LivingMemoryEntryView
+    names: ReadonlyMap<string, string>
+    selected: boolean
+    selecting: boolean
+    onSelect(checked: boolean): void
+    onEdit(): void
+    onArchive(): void
+    onDelete(): void
+}
+
+function MemoryCard({ entry, names, selected, selecting, onSelect, onEdit, onArchive, onDelete }: MemoryCardProps) {
+    const t = useT()
+    const source = entry.sourceLabel || entry.sourceConversationId
+    const speakers = entry.speakerKeys.map(key => names.get(key) ?? key).join(', ')
+
+    return (
+        <li data-selected={selected}
+            className="flex min-w-0 flex-col rounded-xl border border-border bg-card text-card-foreground data-[selected=true]:border-primary">
+            <div className="flex flex-col gap-3 p-4 sm:p-5">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <Checkbox aria-label={t('deletion.selectEntry', { label: entry.summary || entry.content })}
+                        disabled={selecting} checked={selected} onCheckedChange={onSelect} />
+                    <Badge variant="secondary">{t(`type.${entry.type}`)}</Badge>
+                    <span>{t(`status.${entry.status}`)}</span>
+                    <span className="ml-auto">{t('field.createdAt')} {formatTime(entry.createdAt)}</span>
+                </div>
+                <div className="space-y-2 [overflow-wrap:anywhere]">
+                    {entry.summary && <h2 className="text-base font-semibold leading-snug">{entry.summary}</h2>}
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed">{entry.content}</p>
+                </div>
+                {entry.keywords.length > 0 && (
+                    <ul className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        {entry.keywords.map(word => <li key={word} className="min-w-0 [overflow-wrap:anywhere]">#{word}</li>)}
+                    </ul>
+                )}
+                <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1 border-t border-border pt-3 text-xs leading-relaxed [overflow-wrap:anywhere]">
+                    <dt className="text-muted-foreground">{t('field.importance')}</dt>
+                    <dd>{entry.importance ?? '—'}</dd>
+                    {entry.sentiment && <>
+                        <dt className="text-muted-foreground">{t('field.sentiment')}</dt>
+                        <dd>{entry.sentiment}</dd>
+                    </>}
+                    <dt className="text-muted-foreground">{t('field.speakers')}</dt>
+                    <dd>{speakers || t('entries.noSpeakers')}</dd>
+                    {source && <>
+                        <dt className="text-muted-foreground">{t('field.source')} ·</dt>
+                        <dd>{source}</dd>
+                    </>}
+                </dl>
+            </div>
+            <footer className="mt-auto flex flex-wrap items-center justify-between gap-2 rounded-b-xl border-t border-border bg-muted/30 px-4 py-2">
+                <span className="text-xs text-muted-foreground">{t('field.updatedAt')} {formatTime(entry.updatedAt)}</span>
+                <div className="flex flex-wrap gap-1">
+                    <Button size="sm" variant="outline" onClick={onEdit}>{t('entries.edit')}</Button>
+                    {entry.status === 'active' && <Button size="sm" variant="ghost" onClick={onArchive}>{t('entries.archive')}</Button>}
+                    <Button size="sm" variant="ghost" onClick={onDelete}>{t('entries.purge')}</Button>
+                </div>
+            </footer>
+        </li>
     )
 }
 
