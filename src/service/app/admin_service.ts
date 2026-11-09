@@ -34,7 +34,7 @@ import type { LivingMemoryConfig } from '../../contracts/workflows.ts'
 import { createMemoryServiceStatus } from './config_status.ts'
 import {
     filterJobList,
-    filterMemoryIds,
+    filterMemorySelection,
     filterMemoryList,
     filterSnapshotList,
     filterUserProfileList
@@ -98,8 +98,8 @@ export class LivingMemoryAdminService {
         return { ...page, items: await this.deps.repository.withSourceLabels(page.items) }
     }
 
-    async listMemoryIds(filter: MemoryListFilter): Promise<string[]> {
-        return filterMemoryIds(
+    async listMemorySelection(filter: MemoryListFilter) {
+        return filterMemorySelection(
             await this.deps.repository.listEntriesByPreset(filter.presetId),
             filter
         )

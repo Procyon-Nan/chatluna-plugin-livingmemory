@@ -17,7 +17,10 @@ import {
     SelectItem,
     SelectTrigger,
     SelectValue,
-    Textarea
+    Textarea,
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger
 } from '@chatluna/ui-kit'
 import {
     apiErrorMessage,
@@ -27,7 +30,7 @@ import {
     useTranslate
 } from '@chatluna/ui-client/client'
 import type { Translate } from '@chatluna/ui-client/client'
-import { MemoryImportExport } from './memory-import-export.tsx'
+import { PresetActions } from './preset-actions.tsx'
 import { MemoryEntryEditor } from './memory-entry-editor.tsx'
 import { MemoryDeletionDialog, type DeleteMemoriesTarget } from './memory-deletion-dialog.tsx'
 import type { MemoryListFilter } from '../src/contracts/rpc.ts'
@@ -55,7 +58,7 @@ const formatTime = (at: number | null | undefined) => {
     if (at == null) return '—'
     const date = new Date(at)
     const pad = (value: number) => String(value).padStart(2, '0')
-    return `${date.getMonth() + 1}/${date.getDate()} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+    return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 type StatusFilter = 'active' | 'archived' | 'all'
@@ -86,10 +89,16 @@ export function LivingMemoryPage() {
     }
 
     function renderPanel() {
-        if (active === undefined) return <EmptyState title={t('empty.noPreset')} />
+        if (active === undefined) return (
+            <div className="flex flex-col items-center gap-3">
+                <EmptyState title={t('empty.noPreset')} />
+                {tab === 'entries' && <Button onClick={() => setCreating(true)}>{t('entries.create')}</Button>}
+            </div>
+        )
         switch (tab) {
             case 'entries':
-                return <EntriesPanel key={`${selection.revision}:${active}`} presetId={active} initialStatus={selection.status} />
+                return <EntriesPanel key={`${selection.revision}:${active}`} presetId={active} initialStatus={selection.status}
+                    onCreate={() => setCreating(true)} />
             case 'profiles':
                 return <ProfilesPanel presetId={active} />
             case 'personas':
@@ -105,22 +114,19 @@ export function LivingMemoryPage() {
 
     return (
         <div className="flex h-full min-w-0 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
-            <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
-                <div className="flex flex-wrap gap-1">
+            <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border pb-2">
+                <nav className="flex max-w-full items-center gap-1 overflow-x-auto" aria-label={t('tab.navigation')}>
                     {(['entries', 'profiles', 'personas', 'snapshots', 'jobs', 'search'] as const).map(key => (
-                        <Button key={key} size="sm" variant={tab === key ? 'default' : 'ghost'}
-                            aria-pressed={tab === key} onClick={() => setTab(key)}>
+                        <button key={key} type="button" aria-current={tab === key ? 'page' : undefined}
+                            className="shrink-0 border-b-2 border-transparent px-2 py-2 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-ring focus-visible:-outline-offset-2 aria-[current=page]:border-primary aria-[current=page]:font-medium aria-[current=page]:text-foreground"
+                            onClick={() => setTab(key)}>
                             {t(`tab.${key}`)}
-                        </Button>
+                        </button>
                     ))}
-                </div>
+                </nav>
                 <div className="flex flex-wrap items-center gap-2">
                     <PresetPicker presets={presets} value={active} onChange={selectPreset} />
-                    <Button size="sm" onClick={() => setCreating(true)}>{t('entries.create')}</Button>
-                    <MemoryImportExport presetId={active} />
-                    <Button size="sm" variant="outline" disabled={!active} onClick={() => setClearTarget(active)}>
-                        {t('deletion.clearPreset')}
-                    </Button>
+                    <PresetActions presetId={active} onClear={setClearTarget} />
                 </div>
             </header>
             {creating && (
@@ -159,7 +165,7 @@ function PresetPicker({
     const t = useT()
     return (
         <Select value={value ?? null} onValueChange={(next) => { if (next !== null) onChange(next) }}>
-            <SelectTrigger className="w-56">
+            <SelectTrigger className="w-40" aria-label={t('field.preset')}>
                 <SelectValue placeholder={t('preset.placeholder')}>{value}</SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -188,7 +194,7 @@ function Warnings({
     )
 }
 
-function EntriesPanel({ presetId, initialStatus }: { presetId: string; initialStatus: StatusFilter }) {
+function EntriesPanel({ presetId, initialStatus, onCreate }: { presetId: string; initialStatus: StatusFilter; onCreate(): void }) {
     const t = useT()
     const [status, setStatus] = React.useState<StatusFilter>(initialStatus)
     const [type, setType] = React.useState<string>('all')
@@ -203,7 +209,7 @@ function EntriesPanel({ presetId, initialStatus }: { presetId: string; initialSt
         <div className="flex min-h-0 flex-1 flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2">
                 <Input
-                    className="w-56"
+                    className="h-[30px] w-full sm:w-64"
                     value={keyword}
                     placeholder={t('entries.search')}
                     onChange={(event) => setKeyword(event.target.value)}
@@ -212,7 +218,7 @@ function EntriesPanel({ presetId, initialStatus }: { presetId: string; initialSt
                     value={status}
                     onValueChange={(next) => setStatus(next as StatusFilter)}
                 >
-                    <SelectTrigger className="w-32">
+                    <SelectTrigger className="w-28">
                         <SelectValue>{t(`status.${status}`)}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
@@ -222,7 +228,7 @@ function EntriesPanel({ presetId, initialStatus }: { presetId: string; initialSt
                     </SelectContent>
                 </Select>
                 <Select value={type} onValueChange={(next) => setType(next as string)}>
-                    <SelectTrigger className="w-32">
+                    <SelectTrigger className="w-28">
                         <SelectValue>{t(`type.${type}`)}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
@@ -234,6 +240,10 @@ function EntriesPanel({ presetId, initialStatus }: { presetId: string; initialSt
                         ))}
                     </SelectContent>
                 </Select>
+                <div className="ml-auto flex items-center gap-2">
+                    <RunDreamButton presetId={presetId} />
+                    <Button onClick={onCreate}>{t('entries.create')}</Button>
+                </div>
             </div>
             <EntriesList key={JSON.stringify(filter)} filter={filter} names={names} />
         </div>
@@ -245,21 +255,37 @@ function EntriesList({ filter, names }: { filter: MemoryListFilter; names: Map<s
     const { presetId } = filter
     const [page, setPage] = React.useState(1)
     const [editing, setEditing] = React.useState<LivingMemoryEntryView>()
-    const [selected, setSelected] = React.useState(() => new Set<string>())
+    const [selected, setSelected] = React.useState(() => new Map<string, MemoryEntryRecord['status']>())
     const [selecting, setSelecting] = React.useState(false)
     const [deletion, setDeletion] = React.useState<DeleteMemoriesTarget>()
     const entries = useLive('livingmemory.entries', { ...filter, page, pageSize: PAGE_SIZE })
     const items = entries.data?.entries ?? []
-    const total = entries.data?.total
+    const total = entries.data?.total ?? 0
+    const selectedOnPage = items.filter(entry => selected.has(entry.id)).length
+    const pageSelected = items.length > 0 && selectedOnPage === items.length
+    const multiplePages = total > PAGE_SIZE
+    const selectPageId = React.useId()
+    const activeIds = [...selected].filter(([, status]) => status === 'active').map(([id]) => id)
     React.useEffect(() => {
-        if (total !== undefined) setPage(current => Math.min(current, Math.max(1, Math.ceil(total / PAGE_SIZE))))
-    }, [total])
-
-    function selectIds(ids: string[], checked: boolean) {
+        if (!entries.data) return
+        const { entries: rows, total } = entries.data
+        setPage(current => Math.min(current, Math.max(1, Math.ceil(total / PAGE_SIZE))))
+        const statuses = new Map(rows.map(row => [row.id, row.status]))
         setSelected(previous => {
-            const next = new Set(previous)
-            for (const id of ids) {
-                if (checked) next.add(id)
+            const next = new Map(previous)
+            for (const [id, status] of previous) {
+                // 当前页包含全部结果时，消失的 ID 才能确认为已移出筛选。
+                if ((rows.length === total || statuses.has(id)) && statuses.get(id) !== status) next.delete(id)
+            }
+            return next.size === previous.size ? previous : next
+        })
+    }, [entries.data])
+
+    function selectRows(rows: Pick<MemoryEntryRecord, 'id' | 'status'>[], checked: boolean) {
+        setSelected(previous => {
+            const next = new Map(previous)
+            for (const { id, status } of rows) {
+                if (checked) next.set(id, status)
                 else next.delete(id)
             }
             return next
@@ -269,7 +295,29 @@ function EntriesList({ filter, names }: { filter: MemoryListFilter; names: Map<s
     async function selectMatches() {
         setSelecting(true)
         try {
-            setSelected(new Set(await callAction('livingmemory.listMemoryIds', filter)))
+            const rows = await callAction('livingmemory.listMemorySelection', filter)
+            setSelected(new Map(rows.map(row => [row.id, row.status])))
+        } catch (error) {
+            report(error)
+        } finally {
+            setSelecting(false)
+        }
+    }
+
+    function deselectIds(ids: string[]) {
+        setSelected(previous => {
+            const next = new Map(previous)
+            for (const id of ids) next.delete(id)
+            return next
+        })
+    }
+
+    async function archive(ids: string[]) {
+        setSelecting(true)
+        try {
+            const { archived } = await callAction('livingmemory.archiveMemories', { presetId, ids })
+            deselectIds(ids)
+            toast.success(t('entries.archivedCount', { count: archived }))
         } catch (error) {
             report(error)
         } finally {
@@ -278,33 +326,47 @@ function EntriesList({ filter, names }: { filter: MemoryListFilter; names: Map<s
     }
 
     return (
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" variant="outline" disabled={selecting || items.length === 0}
-                    onClick={() => selectIds(items.map(entry => entry.id), true)}>{t('deletion.selectPage')}</Button>
-                <Button size="sm" variant="outline" disabled={selecting || !total}
-                    onClick={() => void selectMatches()}>{t('deletion.selectAll')}</Button>
-                {selected.size > 0 && <>
-                    <Button size="sm" variant="ghost" disabled={selecting}
-                        onClick={() => setSelected(new Set())}>{t('deletion.deselect')}</Button>
-                    <Button size="sm" variant="destructive" disabled={selecting}
-                        onClick={() => setDeletion({ kind: 'entries', presetId, ids: [...selected] })}>
-                        {t('deletion.deleteSelected', { count: selected.size })}
+        <div className="@container flex min-h-0 flex-1 flex-col gap-3">
+            <div className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-1 px-3 text-sm">
+                <div className="flex items-center gap-2">
+                    <Checkbox id={selectPageId} disabled={selecting || !items.length} checked={pageSelected}
+                        indeterminate={selectedOnPage > 0 && !pageSelected}
+                        className="data-indeterminate:border-primary data-indeterminate:before:h-0.5 data-indeterminate:before:w-2 data-indeterminate:before:bg-primary data-indeterminate:[&>span]:hidden"
+                        onCheckedChange={checked => selectRows(items, checked)} />
+                    <label htmlFor={selectPageId}>{t(multiplePages ? 'deletion.selectPage' : 'deletion.selectAll')}</label>
+                </div>
+                {pageSelected && multiplePages && selected.size < total && (
+                    <Button size="sm" variant="link" disabled={selecting} onClick={() => void selectMatches()}>
+                        {t('deletion.selectMatches', { count: total })}
                     </Button>
+                )}
+                {selected.size > 0 && <>
+                    <span className="text-muted-foreground">{t('deletion.selected', { count: selected.size })}</span>
+                    {multiplePages && <Button size="sm" variant="ghost" disabled={selecting}
+                        onClick={() => setSelected(new Map())}>{t('deletion.deselect')}</Button>}
+                    {activeIds.length > 0 ? (
+                        <Button size="sm" variant="outline" disabled={selecting} onClick={() => void archive(activeIds)}>
+                            {t('entries.archiveCount', { count: activeIds.length })}
+                        </Button>
+                    ) : (
+                        <Button size="sm" variant="outline" disabled={selecting}
+                            onClick={() => setDeletion({ kind: 'entries', presetId, ids: [...selected.keys()] })}>
+                            {t('entries.purge')}
+                        </Button>
+                    )}
                 </>}
-                <span className="ml-auto text-sm opacity-70">{t('entries.total', { count: total ?? 0 })}</span>
+                <span className="ml-auto text-sm opacity-70">{t('entries.total', { count: total })}</span>
             </div>
             {items.length === 0 ? (
                 <EmptyState title={t('entries.empty')} />
             ) : (
-                <ul className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(min(100%,28rem),1fr))] content-start gap-4 overflow-y-auto">
+                <ul className="grid min-h-0 flex-1 grid-cols-1 content-start gap-3 overflow-y-auto @min-[38rem]:grid-cols-2 @min-[57rem]:grid-cols-3 @min-[76rem]:grid-cols-4">
                     {items.map(entry => (
                         <MemoryCard key={entry.id} entry={entry} names={names}
                             selected={selected.has(entry.id)} selecting={selecting}
-                            onSelect={checked => selectIds([entry.id], checked)}
+                            onSelect={checked => selectRows([entry], checked)}
                             onEdit={() => setEditing(entry)}
-                            onArchive={() => void callAction('livingmemory.update', { id: entry.id, status: 'archived' })
-                                .then(() => selectIds([entry.id], false)).catch(report)}
+                            onArchive={() => void archive([entry.id])}
                             onDelete={() => setDeletion({
                                 kind: 'entries', presetId, ids: [entry.id], preview: entry.summary || entry.content
                             })} />
@@ -319,12 +381,15 @@ function EntriesList({ filter, names }: { filter: MemoryListFilter; names: Map<s
             />
             {editing !== undefined && (
                 <MemoryEntryEditor presetId={presetId} entry={editing}
-                    onSaved={() => setEditing(undefined)} onClose={() => setEditing(undefined)} />
+                    onSaved={({ status }) => {
+                        if (editing.status !== status) deselectIds([editing.id])
+                        setEditing(undefined)
+                    }} onClose={() => setEditing(undefined)} />
             )}
             {deletion && (
                 <MemoryDeletionDialog target={deletion} onClose={() => setDeletion(undefined)}
                     onDeleted={() => {
-                        selectIds(deletion.ids, false)
+                        deselectIds(deletion.ids)
                         setDeletion(undefined)
                     }} />
             )}
@@ -349,25 +414,23 @@ function MemoryCard({ entry, names, selected, selecting, onSelect, onEdit, onArc
 
     return (
         <li data-selected={selected}
-            className="flex min-w-0 flex-col rounded-xl border border-border bg-card text-card-foreground data-[selected=true]:border-primary">
-            <div className="flex flex-col gap-3 p-4 sm:p-5">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <Checkbox aria-label={t('deletion.selectEntry', { label: entry.summary || entry.content })}
-                        disabled={selecting} checked={selected} onCheckedChange={onSelect} />
-                    <Badge variant="secondary">{t(`type.${entry.type}`)}</Badge>
-                    <span>{t(`status.${entry.status}`)}</span>
-                    <span className="ml-auto">{t('field.createdAt')} {formatTime(entry.createdAt)}</span>
-                </div>
-                <div className="space-y-2 [overflow-wrap:anywhere]">
-                    {entry.summary && <h2 className="text-base font-semibold leading-snug">{entry.summary}</h2>}
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed">{entry.content}</p>
-                </div>
+            className="row-span-4 grid min-w-0 grid-rows-subgrid gap-y-0 rounded-xl border border-border bg-card text-card-foreground data-[selected=true]:border-primary">
+            <div className="flex flex-wrap items-center gap-2 px-3 pt-3 pb-2.5 text-xs text-muted-foreground">
+                <Checkbox aria-label={t('deletion.selectEntry', { label: entry.summary || entry.content })}
+                    disabled={selecting} checked={selected} onCheckedChange={onSelect} />
+                <Badge variant="secondary">{t(`type.${entry.type}`)}</Badge>
+                <span>{t(`status.${entry.status}`)}</span>
+                <span className="ml-auto">{t('field.createdAt')} {formatTime(entry.createdAt)}</span>
+            </div>
+            {entry.summary && <h2 className="px-3 pb-1.5 text-base font-semibold leading-snug [overflow-wrap:anywhere]">{entry.summary}</h2>}
+            <div className="row-start-3 flex flex-col gap-2.5 px-3 pb-3">
+                <MemoryBody content={entry.content} />
                 {entry.keywords.length > 0 && (
                     <ul className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         {entry.keywords.map(word => <li key={word} className="min-w-0 [overflow-wrap:anywhere]">#{word}</li>)}
                     </ul>
                 )}
-                <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1 border-t border-border pt-3 text-xs leading-relaxed [overflow-wrap:anywhere]">
+                <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-0.5 border-t border-border pt-2 text-xs leading-relaxed [overflow-wrap:anywhere]">
                     <dt className="text-muted-foreground">{t('field.importance')}</dt>
                     <dd>{entry.importance ?? '—'}</dd>
                     {entry.sentiment && <>
@@ -382,15 +445,69 @@ function MemoryCard({ entry, names, selected, selecting, onSelect, onEdit, onArc
                     </>}
                 </dl>
             </div>
-            <footer className="mt-auto flex flex-wrap items-center justify-between gap-2 rounded-b-xl border-t border-border bg-muted/30 px-4 py-2">
+            <footer className="row-start-4 flex flex-wrap items-center justify-between gap-2 rounded-b-xl border-t border-border bg-muted/30 px-3 py-1.5">
                 <span className="text-xs text-muted-foreground">{t('field.updatedAt')} {formatTime(entry.updatedAt)}</span>
                 <div className="flex flex-wrap gap-1">
                     <Button size="sm" variant="outline" onClick={onEdit}>{t('entries.edit')}</Button>
-                    {entry.status === 'active' && <Button size="sm" variant="ghost" onClick={onArchive}>{t('entries.archive')}</Button>}
-                    <Button size="sm" variant="ghost" onClick={onDelete}>{t('entries.purge')}</Button>
+                    {entry.status === 'active' ? (
+                        <Button size="sm" variant="outline" disabled={selecting} onClick={onArchive}>{t('entries.archive')}</Button>
+                    ) : (
+                        <Button size="sm" variant="outline" disabled={selecting} onClick={onDelete}>{t('entries.purge')}</Button>
+                    )}
                 </div>
             </footer>
         </li>
+    )
+}
+
+function MemoryBody({ content }: { content: string }) {
+    const text = React.useRef<HTMLParagraphElement>(null)
+    const popup = React.useRef<HTMLDivElement>(null)
+    const [truncated, setTruncated] = React.useState(false)
+
+    function scrollPopup(event: React.KeyboardEvent) {
+        const panel = popup.current
+        if (!panel || panel.scrollHeight <= panel.clientHeight || event.altKey || event.ctrlKey || event.metaKey) return
+        // 键盘焦点保留在触发器，翻页和方向键滚动当前全文。
+        switch (event.key) {
+            case 'ArrowDown': panel.scrollTop += 24; break
+            case 'ArrowUp': panel.scrollTop -= 24; break
+            case 'PageDown': panel.scrollTop += panel.clientHeight; break
+            case 'PageUp': panel.scrollTop -= panel.clientHeight; break
+            case 'Home': panel.scrollTop = 0; break
+            case 'End': panel.scrollTop = panel.scrollHeight; break
+            default: return
+        }
+        event.preventDefault()
+    }
+
+    React.useLayoutEffect(() => {
+        const paragraph = text.current!
+        // 观察完整段落，换行或字体变化时都按实际高度判断。
+        const measure = () => setTruncated(paragraph.offsetHeight > paragraph.parentElement!.clientHeight)
+        measure()
+        const observer = new ResizeObserver(measure)
+        observer.observe(paragraph)
+        return () => observer.disconnect()
+    }, [content])
+
+    return (
+        <div className="grow text-sm leading-6 text-card-foreground/85">
+            <Tooltip>
+                <TooltipTrigger render={<div />} disabled={!truncated} tabIndex={truncated ? 0 : -1} onKeyDown={scrollPopup}>
+                    <div className="max-h-[3lh] overflow-hidden">
+                        <p ref={text} className="whitespace-pre-wrap [overflow-wrap:anywhere]">{content}</p>
+                    </div>
+                    {truncated && <span aria-hidden="true" className="block text-muted-foreground">…</span>}
+                </TooltipTrigger>
+                {truncated && (
+                    <TooltipContent ref={popup} side="bottom" align="start"
+                        className="block max-h-[min(55vh,var(--available-height))] max-w-[min(32rem,var(--available-width))] overflow-y-auto whitespace-pre-wrap px-3 py-2 text-sm leading-6 [overflow-wrap:anywhere]">
+                        {content}
+                    </TooltipContent>
+                )}
+            </Tooltip>
+        </div>
     )
 }
 
@@ -728,6 +845,25 @@ function SearchPanel({ presetId }: { presetId: string }) {
     )
 }
 
+function RunDreamButton({ presetId }: { presetId: string }) {
+    const t = useT()
+    const [pending, setPending] = React.useState(false)
+    async function run() {
+        setPending(true)
+        try {
+            const result = await callAction('livingmemory.dream', { presetId })
+            if (result.started) toast.success(t('jobs.dreamStarted', { preset: presetId }))
+            else if (result.reason === 'preset-locked') toast.info(t('jobs.dreamRunning', { preset: presetId }))
+            else if (result.reason === 'insufficient-memories') toast.info(t('jobs.dreamInsufficient', { preset: presetId }))
+        } catch (error) {
+            report(error)
+        } finally {
+            setPending(false)
+        }
+    }
+    return <Button variant="outline" disabled={pending} onClick={run}>{t('jobs.dream')}</Button>
+}
+
 function JobsPanel({ presetId }: { presetId: string }) {
     const t = useT()
     const jobs = useLive('livingmemory.jobs', { presetId })
@@ -735,14 +871,6 @@ function JobsPanel({ presetId }: { presetId: string }) {
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-2">
             <div className="flex gap-2">
-                <Button
-                    size="sm"
-                    onClick={() =>
-                        void callAction('livingmemory.dream', { presetId }).catch(report)
-                    }
-                >
-                    {t('jobs.dream')}
-                </Button>
                 <Button
                     size="sm"
                     variant="outline"

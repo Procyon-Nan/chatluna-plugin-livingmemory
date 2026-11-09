@@ -12,6 +12,7 @@ import type {
 } from './webui.ts'
 import type {
     LivingMemorySearchMemoryType,
+    MemoryEntryRecord,
     MemoryMutationInput,
     MemorySearchStatus
 } from './memory.ts'
@@ -46,7 +47,8 @@ declare module '@chatluna/ui-client/client' {
             channelId?: string
         }): { id: string }
         'livingmemory.update'(input: Partial<EntryInput> & { id: string }): void
-        'livingmemory.listMemoryIds'(filter: MemoryListFilter): string[]
+        'livingmemory.listMemorySelection'(filter: MemoryListFilter): Pick<MemoryEntryRecord, 'id' | 'status'>[]
+        'livingmemory.archiveMemories'(input: { presetId: string; ids: string[] }): { archived: number }
         'livingmemory.deleteMemories'(input: { presetId: string; ids: string[] }): { deleted: number }
         'livingmemory.search'(input: {
             presetId: string

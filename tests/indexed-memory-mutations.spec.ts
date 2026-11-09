@@ -522,7 +522,7 @@ it('writes create, update, and delete facts through to the vector index', async 
             summary: 'updated summary'
         })
         await mutations.updateMemory(memory.id, {
-            content: 'updated content'
+            content: 'updated content', status: 'archived'
         })
         await mutations.deleteMemories(memory.presetId, [memory.id])
 
@@ -750,7 +750,8 @@ it('deletes memories in one batch and synchronizes the vector index', async () =
             created.push(
                 await repository.createMemory(scope, {
                     type: 'fact',
-                    content: `bulk-${index}`
+                    content: `bulk-${index}`,
+                    status: 'archived'
                 })
             )
         }
@@ -785,11 +786,12 @@ it('skips duplicate, missing, and cross-preset ids in bulk deletion', async () =
         )
         const own = await repository.createMemory(scope, {
             type: 'fact',
-            content: 'own preset'
+            content: 'own preset',
+            status: 'archived'
         })
         const foreign = await repository.createMemory(
             { presetId: 'preset-other', conversationId: 'conversation-1' },
-            { type: 'fact', content: 'foreign preset' }
+            { type: 'fact', content: 'foreign preset', status: 'archived' }
         )
 
         const result = await mutations.deleteMemories(presetId, [
@@ -837,6 +839,7 @@ it('splits bulk deletions into fixed-size batches', async () => {
         const extracted = Array.from({ length: total }, (_, index) => ({
             type: 'fact' as const,
             content: `batched-${index}`,
+            status: 'archived' as const,
             keywords: [],
             summary: '',
             sentiment: '',

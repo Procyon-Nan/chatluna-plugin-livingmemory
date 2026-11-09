@@ -409,17 +409,15 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             const deleted = await this.runBatchedMutation(
                 uniqueIds,
                 async (batchIds) => {
-                    // 先按存在性与 preset 归属过滤：并发已删除或跨 preset
-                    // 的 id 幂等跳过，不中断整批。
                     const records =
                         await this.repository.getEntriesByPresetAndIds(
                             presetId,
                             batchIds
                         )
-                    if (records.length === 0) {
+                    const validIds = records.filter(record => record.status === 'archived').map(record => record.id)
+                    if (validIds.length === 0) {
                         return 0
                     }
-                    const validIds = records.map((record) => record.id)
                     await this.repository.deleteEntries(presetId, validIds)
                     await this.syncCommittedMutationToIndex({
                         presetId,

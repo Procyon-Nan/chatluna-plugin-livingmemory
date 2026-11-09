@@ -125,15 +125,12 @@ export const filterMemoryList = (
     }
 }
 
-/**
- * 按筛选条件返回全部匹配记忆的 id（不分页、不排序），
- * 供前端“全选筛选结果”后批量删除使用。
- */
-export const filterMemoryIds = (
+/** 跨页选择只需条目 ID 与状态，状态决定可用的批量操作。 */
+export const filterMemorySelection = (
     items: MemoryEntryRecord[],
     filter: MemoryListFilter
-): string[] => {
-    return selectMemoryMatches(items, filter).map((item) => item.id)
+) => {
+    return selectMemoryMatches(items, filter).map(({ id, status }) => ({ id, status }))
 }
 
 export const filterSnapshotList = (

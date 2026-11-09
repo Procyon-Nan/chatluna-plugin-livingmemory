@@ -1,4 +1,6 @@
 preset.placeholder: 选择预设
+preset.actions: 预设操作
+tab.navigation: 记忆管理
 transfer.export: 导出记忆
 transfer.import: 导入记忆
 transfer.confirmTitle: 导入到「{target}」？
@@ -36,13 +38,16 @@ entries.saved: 已保存记忆
 entries.choosePreset: 选择或输入预设 ID
 entries.noSpeakers: 未关联用户
 entries.archive: 归档
+entries.archiveCount: 归档（{count}）
+entries.archivedCount: 已归档 {count} 条记忆
 entries.purge: 彻底删除
 
 deletion.selectEntry: 选择记忆：{label}
-deletion.selectPage: 选择本页
-deletion.selectAll: 选择全部筛选结果
+deletion.selectPage: 全选本页
+deletion.selectAll: 全选
+deletion.selectMatches: 选择全部 {count} 条结果
+deletion.selected: 已选 {count} 条
 deletion.deselect: 清除选择
-deletion.deleteSelected: 彻底删除所选（{count}）
 deletion.confirmDelete: 确认彻底删除
 deletion.entryWarning: 将永久删除预设「{preset}」中的 {count} 条记忆，删除后无法恢复。
 deletion.deleted: 已删除 {count} 条记忆
@@ -67,6 +72,9 @@ field.updatedAt: 更新
 field.content: 内容
 
 jobs.dream: 运行 Dream
+jobs.dreamStarted: 「{preset}」的 Dream 已启动
+jobs.dreamRunning: 「{preset}」已有 Dream 在运行
+jobs.dreamInsufficient: 「{preset}」可整理的记忆不足
 jobs.rebuildIndex: 重建向量索引
 jobs.empty: 还没有任务记录
 job.kind.extract: 提取

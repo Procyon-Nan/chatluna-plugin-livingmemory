@@ -1,5 +1,8 @@
 import * as React from 'react'
-import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@chatluna/ui-kit'
+import {
+    Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+    DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger
+} from '@chatluna/ui-kit'
 import { apiErrorMessage, callAction, toast, useTranslate } from '@chatluna/ui-client/client'
 
 type MemoryExportFile = {
@@ -34,7 +37,7 @@ function downloadExportFile(presetId: string, data: unknown) {
     setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
-export function MemoryImportExport({ presetId }: { presetId: string | undefined }) {
+export function PresetActions({ presetId, onClear }: { presetId: string | undefined; onClear(id: string): void }) {
     const t = useTranslate('livingmemory')
     const input = React.useRef<HTMLInputElement>(null)
     const [busy, setBusy] = React.useState(false)
@@ -85,8 +88,18 @@ export function MemoryImportExport({ presetId }: { presetId: string | undefined 
 
     return <>
         <input ref={input} type="file" hidden accept=".json,application/json" onChange={selectFile} />
-        <Button variant="outline" disabled={busy} onClick={() => input.current?.click()}>{t('transfer.import')}</Button>
-        <Button variant="outline" disabled={busy || !presetId} onClick={exportFile}>{t('transfer.export')}</Button>
+        <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="outline" />}>
+                {t('preset.actions')} <span aria-hidden="true">▾</span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+                <DropdownMenuItem disabled={busy} onClick={() => input.current?.click()}>{t('transfer.import')}</DropdownMenuItem>
+                <DropdownMenuItem disabled={busy || !presetId} onClick={exportFile}>{t('transfer.export')}</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled={busy || !presetId} variant="destructive"
+                    onClick={() => { if (presetId) onClear(presetId) }}>{t('deletion.clearPreset')}</DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
         {pending && <Dialog open onOpenChange={open => { if (!open && !busy) setPending(undefined) }}>
             <DialogContent>
                 <DialogHeader>

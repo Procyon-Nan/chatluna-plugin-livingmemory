@@ -294,7 +294,7 @@ it('removes a snapshot and signals the page to refresh', async () => {
     })
 })
 
-it('selects all matching rows and deletes only the requested preset’s memories', async () => {
+it('selects matching memories and permanently deletes only archived entries from the preset', async () => {
     await withWebUI(async (ctx, repository, ui) => {
         const active = await seed(ctx, repository, '周五聚餐')
         const archived = await seed(ctx, repository, '周六聚餐')
@@ -307,13 +307,19 @@ it('selects all matching rows and deletes only the requested preset’s memories
         const page = await ui.read('livingmemory.entries', { ...filter, pageSize: 1 }) as LivingMemoryEntriesSnapshot
         assert.equal(page.entries.length, 1)
         assert.equal(page.total, 2)
-        const ids = await ui.call('livingmemory.listMemoryIds', filter) as string[]
-        assert.deepEqual(new Set(ids), new Set([active.id, archived.id]))
+        const selection = await ui.call('livingmemory.listMemorySelection', filter) as { id: string; status: string }[]
+        assert.deepEqual(new Map(selection.map(row => [row.id, row.status])), new Map([[active.id, 'active'], [archived.id, 'archived']]))
+        const ids = selection.map(row => row.id)
         const result = await ui.call('livingmemory.deleteMemories', {
             presetId: filter.presetId, ids: [...ids, other.id, active.id]
         })
-        assert.deepEqual(result, { deleted: 2 })
-        assert.deepEqual((await repository.listEntriesByPreset(filter.presetId)).map(item => item.id), [kept.id])
+        assert.deepEqual(result, { deleted: 1 })
+        assert.equal((await repository.getEntryById(active.id))?.status, 'active')
+        assert.equal(await repository.getEntryById(archived.id), undefined)
+        const archive = await ui.call('livingmemory.archiveMemories', { presetId: filter.presetId, ids })
+        assert.deepEqual(archive, { archived: 1 })
+        assert.equal((await repository.getEntryById(active.id))?.status, 'archived')
+        assert.equal((await repository.getEntryById(kept.id))?.status, 'active')
         assert.ok(await repository.getEntryById(other.id))
     })
 })

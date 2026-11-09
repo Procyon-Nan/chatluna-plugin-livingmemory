@@ -36,13 +36,16 @@ entries.saved: Memory saved
 entries.choosePreset: Select or enter a preset ID
 entries.noSpeakers: No users linked
 entries.archive: Archive
+entries.archiveCount: 'Archive ({count})'
+entries.archivedCount: 'Archived {count} memories'
 entries.purge: Delete
 
 deletion.selectEntry: 'Select memory: {label}'
 deletion.selectPage: Select this page
-deletion.selectAll: Select all matching memories
+deletion.selectAll: Select all
+deletion.selectMatches: 'Select all {count} results'
+deletion.selected: '{count} selected'
 deletion.deselect: Clear selection
-deletion.deleteSelected: 'Permanently delete selected ({count})'
 deletion.confirmDelete: Confirm permanent deletion
 deletion.entryWarning: 'Permanently delete {count} memories from “{preset}”? This cannot be undone.'
 deletion.deleted: 'Deleted {count} memories'
@@ -67,6 +70,9 @@ field.updatedAt: Updated
 field.content: Content
 
 jobs.dream: Run Dream
+jobs.dreamStarted: 'Dream started for “{preset}”'
+jobs.dreamRunning: 'Dream is already running for “{preset}”'
+jobs.dreamInsufficient: 'Not enough memories in “{preset}” to run Dream'
 jobs.rebuildIndex: Rebuild vector index
 jobs.empty: No jobs recorded yet
 job.kind.extract: Extract
@@ -118,3 +124,5 @@ search.keywords: Keywords (comma separated, optional)
 search.run: Search
 search.empty: No memory matched
 search.scores: 'cosine {cosine} · keywords {keyword} · boosted {boosted}'
+preset.actions: Preset actions
+tab.navigation: Memory management

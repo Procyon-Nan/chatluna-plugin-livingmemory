@@ -214,17 +214,28 @@ export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
     )
 
     ctx.chatluna_webui.action(
-        'livingmemory.listMemoryIds',
+        'livingmemory.listMemorySelection',
         { input: Schema.object(entryFilters) },
         async (filter, action) => {
             await requireActionLevel(ctx, action, WRITE_LEVEL)
-            return ui.admin.listMemoryIds(filter)
+            return ui.admin.listMemorySelection(filter)
         }
     )
 
+    const entrySelection = Schema.object({ presetId: Schema.string().required(), ids: Schema.array(Schema.string()).required() })
+    ctx.chatluna_webui.action(
+        'livingmemory.archiveMemories',
+        { input: entrySelection },
+        async ({ presetId, ids }, action) => {
+            await requireActionLevel(ctx, action, WRITE_LEVEL)
+            const result = await ui.admin.archiveMemories(presetId, ids)
+            notifyChanged(ctx)
+            return result
+        }
+    )
     ctx.chatluna_webui.action(
         'livingmemory.deleteMemories',
-        { input: Schema.object({ presetId: Schema.string().required(), ids: Schema.array(Schema.string()).required() }) },
+        { input: entrySelection },
         async ({ presetId, ids }, action) => {
             await requireActionLevel(ctx, action, WRITE_LEVEL)
             const result = await ui.admin.deleteMemories(presetId, ids)
