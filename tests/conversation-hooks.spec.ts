@@ -5,7 +5,7 @@ import SchemaRegistry from '@chatluna/ui-schema-registry'
 import { routeIdOf } from '@chatluna/satori'
 import { registerRouteSettings, routeSettings } from '../src/routing.ts'
 import type { RouteSettings } from '../src/routing.ts'
-import type { Agent, RequestMiddleware } from '@chatluna/agent'
+import type { Agent } from '@chatluna/agent'
 import { ChatMessage, contentText } from '@chatluna/message'
 import { CallId, ModelId, ProviderId } from '@chatluna/symbol'
 import { absorb } from '@chatluna/chat-observer'
@@ -22,7 +22,6 @@ const settle = async () => {
     await new Promise<void>((resolve) => setImmediate(resolve))
     await new Promise<void>((resolve) => setImmediate(resolve))
 }
-type Prepare = (input: { agent: Agent; stepNumber: number; messages: readonly ChatMessage[] }) => Promise<{ contribute?: readonly ChatMessage[] } | undefined>
 const model = { provider: ProviderId('test'), model: ModelId('chat') }
 
 function createHarness(config: {
@@ -39,9 +38,7 @@ function createHarness(config: {
     const extractions: { scope: ChatHistoryScope; boundary: number; eligible?: number }[] = []
     const cleared: string[] = []
     const profiles: string[][] = []
-    let onRequest!: RequestMiddleware
     const order: string[] = []
-    let prepare!: Prepare
     let snapshotText = ''
     let presetId: string | undefined = 'preset-1'
     let headPresetId: string | undefined = presetId
@@ -56,10 +53,6 @@ function createHarness(config: {
     }
     const ctx = {
         get: (name: string) => name === 'engines' ? { presetOf: (agent: Agent) => agent.options.engine ? presetId : undefined } : undefined,
-        agents: {
-            request: (middleware: RequestMiddleware) => { onRequest = middleware; return () => {} },
-            prepareStep: (callback: Prepare) => { prepare = callback; return () => {} }
-        },
         on: (name: string, listener: (payload: unknown) => unknown) => {
             const entries = listeners.get(name) ?? []
             entries.push(listener)
@@ -140,17 +133,14 @@ function createHarness(config: {
             agent, turn: agent.session.lastTurn, input: typeof input === 'number' ? [user(input)] : input,
             signal: new AbortController().signal
         }),
-        prepare: (agent: Agent, messages: ChatMessage[] = [], stepNumber = 1) =>
-            prepare({ agent, stepNumber, messages }),
-        request: async (agent: Agent, messages: readonly ChatMessage[]) => {
-            const request = { messages, model: 'test:chat', system: '', config: model, toolSchemas: [] }
-            let dispatched: readonly ChatMessage[] | undefined
-            await onRequest({ agent, request, attempt: 1, signal: new AbortController().signal }, async call => {
-                dispatched = call?.request.messages ?? messages
-                return { kind: 'completed', finish: { kind: 'stop' } }
+        request: async (agent: Agent, history: readonly ChatMessage[] = [], attempt = 1) => {
+            const messages = Object.freeze([...history])
+            const appended: ChatMessage[] = []
+            await emit('agent/before-request', {
+                agent, messages, attempt,
+                append: (...items: ChatMessage[]) => appended.push(...items)
             })
-            assert.ok(dispatched)
-            return dispatched
+            return [...messages, ...appended]
         },
         send: (ids: number[], turn = 1, originPreset = presetId) => emit('send', {
             chatSent: { own: true, reply: { conversationKey: 'conv-1', sessionId, presetId: originPreset, turn },
@@ -182,52 +172,60 @@ function createHarness(config: {
 }
 
 describe('LivingMemoryConversationHooks', () => {
-    it('injects the current snapshot and speaker profiles as separate sections on step one only', async () => {
-        const harness = createHarness({ rules: { enableUserProfileInjection: true } })
-        await harness.observed(10, '问')
-        harness.setSnapshot('用户喜欢红茶')
-        const agent = harness.agent()
-        await harness.begin(agent, 10)
-        const first = await harness.prepare(agent)
-        const second = await harness.prepare(agent, [], 2)
-        assert.equal(contentText(first!.contribute![0].content),
-            '<memory>\n用户喜欢红茶\n</memory>\n\n<users_profile>\n测试画像\n</users_profile>')
-        assert.equal(second, undefined)
+    it('appends one snapshot with profiles and reuses it after tools and on retry', async () => {
+        const h = createHarness({ rules: { enableUserProfileInjection: true } })
+        await h.observed(1, '问')
+        h.setSnapshot('用户喜欢红茶')
+        const agent = h.agent()
+        const user = h.user(1)
+        await h.begin(agent, [user])
+        const history = [user]
+        const first = await h.request(agent, history)
+        assert.deepEqual(first.slice(0, -1), [user])
+        const snapshot = first[1]
+        assert.equal(contentText(snapshot.content), '<memory>\n用户喜欢红茶\n</memory>\n\n<users_profile>\n测试画像\n</users_profile>')
+
+        h.setSnapshot('更新后的记忆')
+        const callId = CallId('call-1')
+        const toolCall = ChatMessage.assistant([{ type: 'tool-call', toolCallId: callId, toolName: 'lookup', input: {} }], model)
+        const toolResult = ChatMessage.tool(callId, 'lookup', { type: 'text', value: '查询结果' })
+        const afterTool = [user, toolCall, toolResult]
+        assert.deepEqual(await h.request(agent, afterTool), [...afterTool, snapshot])
+        assert.deepEqual(await h.request(agent, afterTool, 2), [...afterTool, snapshot])
+        assert.equal(h.profiles.length, 1)
     })
 
-    it('keeps only this turn’s injection in place, including after a tool result', async () => {
+    it('reads new content on the next turn and stops appending after a preset switch', async () => {
         const h = createHarness()
         const agent = h.agent()
         const first = h.user(1)
         const second = h.user(2)
-        const snapshot = (turn: number) => ChatMessage.notice('chatluna:livingmemory', '沿用同一份快照', { meta: { turn } })
-        const previous = snapshot(1)
-        const reply = ChatMessage.assistant('答复', model)
-        await h.engineTurn(agent, 2, [second])
-        const current = snapshot(2)
-        const notice = ChatMessage.notice('chatluna:character', '本轮通知')
-        const history = Object.freeze([first, previous, reply, second, notice, current])
-        const visible = [first, reply, second, notice, current]
-        assert.deepEqual(await h.request(agent, history), visible)
+        h.setSnapshot('第一轮')
+        await h.begin(agent, [first])
+        const initial = await h.request(agent, [first])
+        assert.equal(contentText(initial[1].content), '<memory>\n第一轮\n</memory>')
+        await h.turn(agent)
 
-        const callId = CallId('call-1')
-        const toolCall = ChatMessage.assistant([{ type: 'tool-call', toolCallId: callId, toolName: 'lookup', input: {} }], model)
-        const toolResult = ChatMessage.tool(callId, 'lookup', { type: 'text', value: '查询结果' })
-        assert.deepEqual(await h.request(agent, [...history, toolCall, toolResult]), [...visible, toolCall, toolResult])
-        assert.deepEqual(await h.request(agent, [first, previous]), [first])
+        h.setSnapshot('第二轮')
+        await h.engineTurn(agent, 2, [second])
+        const reply = ChatMessage.assistant('答复', model)
+        const notice = ChatMessage.notice('chatluna:character', '本轮通知')
+        const history = [first, reply, second, notice]
+        const sent = await h.request(agent, history)
+        assert.deepEqual(sent.slice(0, -1), history)
+        assert.equal(contentText(sent.at(-1)!.content), '<memory>\n第二轮\n</memory>')
 
         h.switch('preset-2')
-        assert.deepEqual(await h.request(agent, history), [first, reply, second, notice])
+        assert.deepEqual(await h.request(agent, history), history)
     })
 
-    it('hides all earlier injections when the new turn has no content to inject', async () => {
+    it('leaves existing history untouched when there is nothing to append', async () => {
         const h = createHarness()
         const agent = h.agent()
         const user = ChatMessage.user('<memory>用户输入</memory>')
-        const old = ChatMessage.notice('chatluna:livingmemory', '## 短期记忆\n旧快照')
+        const old = ChatMessage.notice('chatluna:livingmemory', '旧快照')
         await h.begin(agent, [user])
-        assert.equal(await h.prepare(agent), undefined)
-        assert.deepEqual(await h.request(agent, [old, user]), [user])
+        assert.deepEqual(await h.request(agent, [old, user]), [old, user])
     })
 
     it('uses the actual input batch while a later user message is already recorded', async () => {
@@ -397,7 +395,7 @@ describe('LivingMemoryConversationHooks', () => {
         assert.deepEqual(harness.extractions.map(x => x.eligible), [1])
     })
 
-    it('attributes a direct engine reply even when the engine skips prepareStep', async () => {
+    it('attributes a direct engine reply even when the engine does not request a model', async () => {
         const harness = createHarness()
         await harness.observed(1, 'question')
         const agent = harness.agent(7, 'test-engine')
@@ -491,9 +489,9 @@ it('freezes Alice’s triggering window on enqueue across folded inputs, buffer 
     assert.equal(h.hooks.settingsForTurn(a)?.enableConversationIsolation, true)
 
     await h.observed(3, 'queued next', { userId: 'alice' })
-    const first = await h.prepare(a, [h.user(3)])
-    assert.equal(contentText(first!.contribute![0].content), '<users_profile>\n测试画像\n</users_profile>')
-    assert.equal((await h.prepare(a))?.contribute?.[0], first!.contribute![0])
+    const first = await h.request(a, [h.user(3)])
+    assert.equal(contentText(first.at(-1)!.content), '<users_profile>\n测试画像\n</users_profile>')
+    assert.equal((await h.request(a)).at(-1), first.at(-1))
     assert.equal(h.recalls.length, 1)
     assert.deepEqual(h.recalls[0].history.map(m => m.contentLines), [['earlier'], ['question']])
     assert.deepEqual(h.profiles, [['dave', 'alice'].map(id => createSpeakerKey('onebot', id))])
@@ -504,7 +502,8 @@ it('freezes Alice’s triggering window on enqueue across folded inputs, buffer 
     assert.deepEqual(h.recalls[1].history.map(m => m.contentLines), [['same batch'], ['queued next']])
     h.switch('preset-2')
     assert.equal(h.hooks.settingsForTurn(a), undefined)
-    assert.equal(await h.prepare(a, [h.user(3)]), undefined)
+    const nextInput = h.user(3)
+    assert.deepEqual(await h.request(a, [nextInput]), [nextInput])
 })
 
 it('schedules a bare agent’s first wake on enqueue and reuses it at turn start', async () => {
@@ -520,7 +519,7 @@ it('schedules a bare agent’s first wake on enqueue and reuses it at turn start
     assert.deepEqual(h.recalls[0].history.map(m => m.contentLines), [['question']])
     await h.input(a, first, 'taken')
     await h.begin(a, [first])
-    await h.prepare(a)
+    await h.request(a)
     assert.equal(h.recalls.length, 1)
 })
 
@@ -578,7 +577,7 @@ it('captures each proactive wake at enqueue and shares the first window with pro
     assert.deepEqual(h.recalls[1].history.map(m => m.contentLines), [['quiet chat'], ['before notice'], ['after notice']])
     for (const input of [quiet, timer, idle]) await h.input(agent, input, 'taken')
     await h.engineTurn(agent, 1, [quiet, timer, idle])
-    await h.prepare(agent)
+    await h.request(agent)
     assert.equal(h.recalls.length, 2)
     assert.deepEqual(h.profiles, [['alice', 'charlie'].map(id => createSpeakerKey('onebot', id))])
 })
@@ -591,7 +590,7 @@ it('does not recall for a notice without a wake', async () => {
     await h.input(agent, notice, 'queued')
     await h.input(agent, notice, 'taken')
     await h.begin(agent, [notice])
-    await h.prepare(agent)
+    await h.request(agent)
     assert.equal(h.recalls.length, 0)
 })
 
@@ -680,7 +679,7 @@ it('keeps a queued recall in its original preset after a switch before engine-tu
     h.switch('preset-2')
     await h.input(agent, input, 'taken')
     await h.engineTurn(agent, 1, [input])
-    assert.equal(await h.prepare(agent), undefined)
+    assert.deepEqual(await h.request(agent), [])
     assert.deepEqual(h.recalls.map(call => call.scope.presetId), ['preset-1'])
     assert.deepEqual(h.profiles.flat(), [])
 })
@@ -695,7 +694,7 @@ it('keeps the group settings and leaves the window empty when the trigger was ev
     await h.engineTurn(a, 1, [batch])
     assert.equal(h.hooks.settingsForTurn(a)?.enableUserProfileInjection, true)
     assert.equal(h.recalls.length, 0)
-    await h.prepare(a)
+    await h.request(a)
     assert.deepEqual(h.profiles.flat(), [])
 })
 
@@ -706,7 +705,7 @@ it('still injects profiles from the triggering window when recall is disabled', 
     const a = h.agent(1, 'test-engine')
     await h.engineTurn(a, 1, [foldedChat(1, 'alice', direct), foldedChat(2, 'bob')])
     h.framework.messages.splice(0)
-    await h.prepare(a)
+    await h.request(a)
     assert.deepEqual(h.profiles, [[createSpeakerKey('onebot', 'alice')]])
     assert.equal(h.recalls.length, 0)
 })

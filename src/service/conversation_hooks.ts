@@ -18,9 +18,6 @@ import type { LivingMemoryExtractionCoordinator } from './workflows/extraction/c
 import type { LivingMemoryUserProfileService } from './user_profile.ts'
 import type { SnapshotRepository } from '../contracts/workflows.ts'
 
-const SNAPSHOT_PLUGIN = 'chatluna:livingmemory'
-const RECALL_STEP_ORDER = 870
-
 interface LivingMemoryConversationHooksOptions {
     history: LivingMemoryChatHistory
     recall: LivingMemoryRecallCoordinator
@@ -91,19 +88,12 @@ export class LivingMemoryConversationHooks {
         this.disposables.push(this.ctx.on('agent/before-turn', ({ agent, turn, input }) => {
             if (agent.options.engine === undefined) return this.beginTurn(agent, turn, input)
         }))
-        this.disposables.push(this.ctx.agents.prepareStep(
-            ({ agent, stepNumber }) => this.injectFirstStep(agent, stepNumber),
-            { name: 'livingmemory:recall', order: RECALL_STEP_ORDER }
-        ))
-        this.disposables.push(this.ctx.agents.request((call, next) => {
-            const running = this.turns.get(call.agent)
-            const turn = running && this.isCurrent(running) ? running.number : undefined
-            const messages = call.request.messages.filter(({ source, form, meta }) => {
-                if (source.kind !== 'plugin' || source.plugin !== SNAPSHOT_PLUGIN || form !== 'notice') return true
-                return turn !== undefined && meta?.turn === turn
-            })
-            if (messages.length === call.request.messages.length) return next()
-            return next({ ...call, request: { ...call.request, messages } })
+        this.disposables.push(this.ctx.on('agent/before-request', async request => {
+            const turn = this.turns.get(request.agent)
+            if (!turn || !this.isCurrent(turn)) return
+            turn.injection ??= this.renderInjection(turn)
+            const injection = await turn.injection
+            if (injection && this.isCurrent(turn)) request.append(injection)
         }))
         this.disposables.push(this.ctx.on('chatluna/engine-preset', ({ agent, presetId }) => {
             const key = agent.options.conversationKey
@@ -242,14 +232,6 @@ export class LivingMemoryConversationHooks {
         })
     }
 
-    private async injectFirstStep(agent: Agent, stepNumber: number) {
-        const running = this.turns.get(agent)
-        if (stepNumber !== 1 || !running || !this.isCurrent(running)) return
-        running.injection ??= this.renderInjection(running)
-        const injection = await running.injection
-        if (injection && this.isCurrent(running)) return { contribute: [injection] }
-    }
-
     private async renderInjection({ state, chatHistory, settings }: TurnInput): Promise<ChatMessage | undefined> {
         const { scope } = state
         const sections: string[] = []
@@ -269,7 +251,7 @@ export class LivingMemoryConversationHooks {
             event: '记忆注入',
             detail: `${formatLogScope(scope)}; 注入长度：${text.length} 字符`
         }))
-        return ChatMessage.notice(SNAPSHOT_PLUGIN, text)
+        return ChatMessage.notice('chatluna:livingmemory', text)
     }
 
     private changeScope(key: string, sessionId: string, presetId: string | undefined, sessionChanged: boolean) {
