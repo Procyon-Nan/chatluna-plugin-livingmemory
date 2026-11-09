@@ -1,4 +1,5 @@
 import type { Context } from 'cordis'
+import type { Modality } from '@chatluna/ai'
 import Schema from 'schemastery'
 import { modelAddressSchema } from '@chatluna/schema'
 import { registerRouteSettings } from './routing.ts'
@@ -33,7 +34,7 @@ export const inject = [
 
 export type Config = LivingMemoryConfig
 
-const modelField = (description: string, modality: string) =>
+const modelField = (description: string, modality: Modality) =>
     modelAddressSchema({ description, default: '无', modality, roles: true })
 
 /**
@@ -57,9 +58,9 @@ export const Config: Schema<Config> = Schema.intersect([
         subModel: modelField('子 LLM 模型，用于召回记忆。', 'chat').label('召回模型'),
         embeddingModel: modelField(
             '将记忆和查询文本转换为向量，供检索和 Dream 比较语义相似度。',
-            'embeddings'
+            'embed'
         ).label('嵌入模型'),
-        rerankModel: modelField('可选。按候选记忆与查询的相关性重新排列检索结果。', 'reranker').label('重排序模型')
+        rerankModel: modelField('可选。按候选记忆与查询的相关性重新排列检索结果。', 'rerank').label('重排序模型')
     }).description('模型配置'),
     Schema.object({
         memorySearchToolMaxResults: Schema.number()
