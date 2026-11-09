@@ -240,7 +240,10 @@ function EntriesPanel({ presetId, initialStatus, onCreate }: { presetId: string;
                         ))}
                     </SelectContent>
                 </Select>
-                <div className="ml-auto flex items-center gap-2">
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                    <Button variant="outline" onClick={() => void callAction('livingmemory.rebuildIndex', { presetId }).catch(report)}>
+                        {t('jobs.rebuildIndex')}
+                    </Button>
                     <RunDreamButton presetId={presetId} />
                     <Button onClick={onCreate}>{t('entries.create')}</Button>
                 </div>
@@ -868,31 +871,11 @@ function JobsPanel({ presetId }: { presetId: string }) {
     const t = useT()
     const jobs = useLive('livingmemory.jobs', { presetId })
     const items = jobs.data ?? []
+    if (items.length === 0) return <EmptyState title={t('jobs.empty')} />
     return (
-        <div className="flex min-h-0 flex-1 flex-col gap-2">
-            <div className="flex gap-2">
-                <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                        void callAction('livingmemory.rebuildIndex', {
-                            presetId
-                        }).catch(report)
-                    }
-                >
-                    {t('jobs.rebuildIndex')}
-                </Button>
-            </div>
-            {items.length === 0 ? (
-                <EmptyState title={t('jobs.empty')} />
-            ) : (
-                <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-                    {items.map((job) => (
-                        <JobRow key={job.id} job={job} />
-                    ))}
-                </ul>
-            )}
-        </div>
+        <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+            {items.map(job => <JobRow key={job.id} job={job} />)}
+        </ul>
     )
 }
 
