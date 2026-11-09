@@ -121,10 +121,14 @@ export interface MemoryEntryRecord {
   updatedAt: Date
 }
 
-export interface MemorySnapshotRecord {
-  id: string
+export interface SnapshotScope {
   presetId: string
-  conversationId: string
+  /** null 表示该预设的共享快照。 */
+  conversationId: string | null
+}
+
+export interface MemorySnapshotRecord extends SnapshotScope {
+  id: string
   query: string
   items: AgenticMemorySnapshotItem[]
   createdAt: Date

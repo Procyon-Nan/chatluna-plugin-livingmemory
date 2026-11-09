@@ -1,6 +1,7 @@
 import type { RouteSettings } from '../../../routing.ts'
 import { isModelConfigured } from '../../shared/utils.ts'
-import { scopeKey } from '../../memory/helpers.ts'
+import { SerialTaskQueue } from '../../shared/serial_task_queue.ts'
+import { scopeKey, snapshotScopeOf } from '../../memory/helpers.ts'
 import { formatLogScope, type LivingMemoryLogger } from '../../logging/logger.ts'
 import { renderSnapshotText } from '../../memory/snapshot/snapshot_text.ts'
 import { renderLivingMemoryTranscript } from '../../transcript/transcript_renderer.ts'
@@ -12,10 +13,11 @@ import type {
 import type { ChatHistoryScope, LivingMemoryChatHistory } from '../../chat_history.ts'
 import type {
     LivingMemoryTranscriptMessage,
-    MemoryScope
+    MemoryScope,
+    SnapshotScope
 } from '../../../contracts/memory.ts'
 
-type RecallSettings = Pick<RouteSettings, 'recallIntervalMessages' | 'snapshotMaxLines' | 'enableConversationIsolation'>
+type RecallSettings = Pick<RouteSettings, 'recallIntervalMessages' | 'snapshotMaxLines' | 'enableConversationIsolation' | 'snapshotScope'>
 
 /** 召回间隔锚点所需的消息日志读取面。 */
 type RecallMessageLog = Pick<LivingMemoryChatHistory, 'after'>
@@ -24,15 +26,15 @@ type RecallAgenticExecutor = Pick<LivingMemoryAgenticRecallExecutor, 'run'>
 export type RecallWorkflowRepository = Pick<JobRepository, 'createFailedJob'> &
     Pick<SnapshotRepository, 'upsertSnapshot' | 'getLatestSnapshotByScope'>
 
+interface RecallWindow {
+    /** 上次召回的聊天位置；下一次只统计此后的真实聊天条数。 */
+    anchor?: number
+    pending: boolean
+}
+
 export class LivingMemoryRecallCoordinator {
-    private readonly recallLockByConversation = new Set<string>()
-    /**
-     * 召回窗口锚点：上次实际执行召回时的聊天历史位置。间隔按此后累计
-     * 的聊天条数（含闲聊）计；锚点只在召回实际执行时前移，
-     * 召回失败时清除，使下次触发立即重试。
-     */
-    private readonly anchorPositionByScope = new Map<string, number>()
-    private readonly generations = new Map<string, object>()
+    private readonly snapshotUpdates = new SerialTaskQueue()
+    private readonly windows = new Map<string, RecallWindow>()
     /**
      * 卸载时取消在途召回：停止接收新触发、中止模型调用、等待任务收尾。
      * 召回不写任务行（只在失败时记一条），因此取消不产生额外记录。
@@ -64,12 +66,14 @@ export class LivingMemoryRecallCoordinator {
             return
         }
 
-        const lockKey = scopeKey(scope)
-        const generation = this.generations.get(scope.conversationId) ?? {}
-        this.generations.set(scope.conversationId, generation)
-        const anchorPosition = this.anchorPositionByScope.get(lockKey)
-        if (anchorPosition !== undefined) {
-            const messagesSinceRecall = (await this.messageLog.after(scope, anchorPosition, currentPosition + 1)).length
+        const key = scopeKey(scope)
+        let window = this.windows.get(key)
+        if (!window) {
+            window = { pending: false }
+            this.windows.set(key, window)
+        }
+        if (window.anchor !== undefined) {
+            const messagesSinceRecall = (await this.messageLog.after(scope, window.anchor, currentPosition + 1)).length
             if (messagesSinceRecall < settings.recallIntervalMessages) {
                 this.logger.diagnosticSummary(() => ({
                     event: '跳过记忆召回',
@@ -79,11 +83,9 @@ export class LivingMemoryRecallCoordinator {
             }
         }
 
-        if (this.controller.signal.aborted || this.generations.get(scope.conversationId) !== generation) return
+        if (this.controller.signal.aborted || this.windows.get(key) !== window) return
 
-        if (this.recallLockByConversation.has(lockKey)) {
-            // 同一会话同一预设已有召回在跑，本次请求直接丢弃，不做 coalescing。
-            // snapshot 由后续请求基于最新历史消息重新触发追上，最多滞后一轮。
+        if (window.pending) {
             this.logger.diagnosticSummary(() => ({
                 event: '跳过记忆召回',
                 detail: `${formatLogScope(scope)}; 原因：当前召回任务运行中`
@@ -93,13 +95,17 @@ export class LivingMemoryRecallCoordinator {
 
         const input = renderLivingMemoryTranscript(chatHistory)
         const runLogger = this.logger.with({ ...scope })
-        this.recallLockByConversation.add(lockKey)
-        this.anchorPositionByScope.set(lockKey, currentPosition)
-        const task = this.run(settings, scope, input, runLogger)
+        window.pending = true
+        window.anchor = currentPosition
+        const snapshotScope = snapshotScopeOf(scope, settings)
+        const snapshotKey = JSON.stringify([snapshotScope.presetId, snapshotScope.conversationId])
+        const task = this.snapshotUpdates.run(snapshotKey, async () => {
+            // 等待同一份快照时会话已重置，旧聊天不再启动召回。
+            if (this.windows.get(key) !== window) return
+            await this.run(settings, scope, snapshotScope, input, runLogger)
+        })
             .catch((error) => {
-                if (this.generations.get(scope.conversationId) === generation) {
-                    this.anchorPositionByScope.delete(lockKey)
-                }
+                delete window.anchor
                 if (this.controller.signal.aborted) {
                     runLogger.summary(
                         '记忆召回已取消',
@@ -115,7 +121,7 @@ export class LivingMemoryRecallCoordinator {
                 )
             })
             .finally(() => {
-                this.recallLockByConversation.delete(lockKey)
+                window.pending = false
             })
         this.tasks.add(task)
         void task.finally(() => this.tasks.delete(task))
@@ -125,19 +131,13 @@ export class LivingMemoryRecallCoordinator {
     async stop() {
         this.controller.abort(new Error('记忆召回服务正在停止。'))
         await Promise.allSettled([...this.tasks])
-        this.clearAll()
-    }
-
-    clearAll() {
-        this.anchorPositionByScope.clear()
-        this.generations.clear()
+        this.windows.clear()
     }
 
     clearByConversation(conversationId: string) {
-        this.generations.delete(conversationId)
-        for (const key of this.anchorPositionByScope.keys()) {
+        for (const key of this.windows.keys()) {
             if (key.endsWith(`\n${conversationId}`)) {
-                this.anchorPositionByScope.delete(key)
+                this.windows.delete(key)
             }
         }
     }
@@ -145,13 +145,15 @@ export class LivingMemoryRecallCoordinator {
     private async run(
         settings: RecallSettings,
         scope: MemoryScope,
+        snapshotScope: SnapshotScope,
         input: string,
         logger: LivingMemoryLogger
     ) {
+        this.controller.signal.throwIfAborted()
         const startedAt = new Date()
         try {
             const snapshot =
-                await this.repository.getLatestSnapshotByScope(scope)
+                await this.repository.getLatestSnapshotByScope(snapshotScope)
             const snapshotText = renderSnapshotText(snapshot?.items ?? [])
             const snapshotLines =
                 snapshotText === '' ? [] : snapshotText.split(/\r?\n/)
@@ -163,7 +165,7 @@ export class LivingMemoryRecallCoordinator {
                 async (item) => {
                     this.controller.signal.throwIfAborted()
                     await this.repository.upsertSnapshot(
-                        scope,
+                        snapshotScope,
                         JSON.stringify(item.toolCallSummary),
                         [item]
                     )

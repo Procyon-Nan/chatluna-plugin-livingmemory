@@ -12,6 +12,7 @@ import { resolveTranscriptOrigin } from './transcript/origin_context.ts'
 import { toHistoryTranscriptMessages } from './chat_history.ts'
 import type { ChatHistoryEntry, ChatHistoryScope, LivingMemoryChatHistory } from './chat_history.ts'
 import { collectUserProfileSpeakerKeys } from './user_profile.ts'
+import { snapshotScopeOf } from './memory/helpers.ts'
 import { renderSnapshotText } from './memory/snapshot/snapshot_text.ts'
 import type { LivingMemoryRecallCoordinator } from './workflows/recall/coordinator.ts'
 import type { LivingMemoryExtractionCoordinator } from './workflows/extraction/coordinator.ts'
@@ -236,7 +237,7 @@ export class LivingMemoryConversationHooks {
         const { scope } = state
         const sections: string[] = []
         if (settings.enableSnapshotInjection) {
-            const snapshot = await this.options.repository.getLatestSnapshotByScope(scope)
+            const snapshot = await this.options.repository.getLatestSnapshotByScope(snapshotScopeOf(scope, settings))
             const text = renderSnapshotText(snapshot?.items ?? [])
             if (text.length > 0) sections.push(`<memory>\n${text}\n</memory>`)
         }

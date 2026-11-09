@@ -33,6 +33,7 @@ yarn build
 | `enableConversationIsolation` | boolean | `false` | 只检索当前会话与全局记忆 |
 | `recallIntervalMessages` | number | `20` | 有聊天记录时，首次唤醒即召回；之后在唤醒时按新增聊天条数触发。`0` 关闭自动召回 |
 | `recallHistoryMessages` | number | `20` | 每次唤醒时，用于召回和画像注入的最近聊天条数 |
+| `snapshotScope` | string | `conversation` | 记忆快照范围：会话独立快照（`conversation`）或同一预设内共享（`preset`）。开启隔离会话检索时使用独立快照。 |
 | `snapshotMaxLines` | number | `5` | 记忆快照的最大行数 |
 | `extractionWindowMessages` | number | `60` | 未提取消息达到该条数时提取（0—360）；`0` 关闭 |
 | `enableAutoDream` | boolean | `true` | 提取保存新记忆后自动整理 |

@@ -11,6 +11,7 @@ import type {
     MemoryUpdatePatch,
     MemoryScope,
     MemorySnapshotRecord,
+    SnapshotScope,
     MemorySourceMessage,
     PresetSpeakerInput,
     PresetSpeakerRecord,
@@ -176,11 +177,11 @@ export interface LivingMemoryArchiveProvider {
 
 export interface SnapshotRepository {
     getLatestSnapshotByScope(
-        scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
+        scope: SnapshotScope
     ): Promise<MemorySnapshotRecord | undefined>
     listSnapshotsByPreset(presetId: string): Promise<MemorySnapshotRecord[]>
     upsertSnapshot(
-        scope: MemoryScope,
+        scope: SnapshotScope,
         query: string,
         items: AgenticMemorySnapshotItem[]
     ): Promise<void>

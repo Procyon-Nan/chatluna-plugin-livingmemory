@@ -10,6 +10,7 @@ import type {
     MemoryMutationInput,
     MemoryScope,
     MemorySnapshotRecord,
+    SnapshotScope,
     MemorySourceMessage,
     MemoryUpdatePatch,
     PresetSpeakerInput,
@@ -293,7 +294,7 @@ export class LivingMemoryRepository
     }
 
     getLatestSnapshotByScope(
-        scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
+        scope: SnapshotScope
     ): Promise<MemorySnapshotRecord | undefined> {
         return this.snapshots.getLatestSnapshotByScope(scope)
     }
@@ -303,7 +304,7 @@ export class LivingMemoryRepository
     }
 
     upsertSnapshot(
-        scope: MemoryScope,
+        scope: SnapshotScope,
         query: string,
         items: AgenticMemorySnapshotItem[]
     ): Promise<void> {

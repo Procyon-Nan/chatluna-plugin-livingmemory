@@ -16,6 +16,7 @@ import {
     scope as baseScope,
     waitFor
 } from './workflow-test-utils.ts'
+import { withLivingMemoryRepository } from './persistence-test-utils.ts'
 
 const scope = { ...baseScope, sessionId: 'session-1' }
 
@@ -74,8 +75,73 @@ const createCoordinator = (options: {
             }
         },
         options.logger ?? logger
-    ), { rules: { recallIntervalMessages: options.recallIntervalMessages ?? 1, snapshotMaxLines: 5, enableConversationIsolation: false } })
+    ), { rules: { recallIntervalMessages: options.recallIntervalMessages ?? 1, snapshotMaxLines: 5, snapshotScope: 'conversation' as const, enableConversationIsolation: false } })
 }
+
+it('edits a shared snapshot in order while retaining the triggering conversation', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const bothSaved = Promise.withResolvers<void>()
+        const started: string[] = []
+        const gate = Promise.withResolvers<void>()
+        const coordinator = new LivingMemoryRecallCoordinator('test/model', { after: async () => [] }, repository, {
+            run: async (_settings, origin, _input, previous, save) => {
+                started.push(origin.conversationId)
+                if (origin.conversationId === 'A') await gate.promise
+                const item = createSnapshotItem([...previous, origin.conversationId].join('\n'))
+                await save(item)
+                if (origin.conversationId === 'B') bothSaved.resolve()
+                return item
+            }
+        }, logger)
+        const rules = { recallIntervalMessages: 2, snapshotMaxLines: 5, enableConversationIsolation: false, snapshotScope: 'preset' as const }
+        const shared = { presetId: scope.presetId, conversationId: null }
+        try {
+            await coordinator.queue(rules, { ...scope, conversationId: 'A' }, chatHistory, 1)
+            await waitFor(() => started.length === 1, 'A starts')
+            await coordinator.queue(rules, { ...scope, conversationId: 'B' }, chatHistory, 1)
+            assert.deepEqual(started, ['A'])
+            gate.resolve()
+            await waitFor(() => started.length === 2, 'B starts')
+            await bothSaved.promise
+            assert.equal((await repository.getLatestSnapshotByScope(shared))?.items[0]?.finalText, 'A\nB')
+            assert.equal((await repository.listSnapshotsByPreset(scope.presetId)).length, 1)
+            await repository.deleteSnapshotsByConversation('A')
+            assert.equal((await repository.getLatestSnapshotByScope(shared))?.items[0]?.finalText, 'A\nB')
+            assert.equal(await repository.getLatestSnapshotByScope({ ...shared, presetId: 'other' }), undefined)
+        } finally {
+            gate.resolve()
+            await coordinator.stop()
+        }
+    })
+})
+
+it('replaces a queued recall with the first turn after a conversation reset', async () => {
+    const release = Promise.withResolvers<void>()
+    const calls: string[] = []
+    const coordinator = createCoordinator({ run: async input => {
+        const label = input.split('：').at(-1)!
+        calls.push(label)
+        if (label === 'A') await release.promise
+        return null
+    } })
+    const rules = { ...coordinator.rules, snapshotScope: 'preset' as const }
+    const send = (conversationId: string, text: string) => coordinator.queue(
+        rules, { ...scope, conversationId }, [{ ...chatHistory[1], contentLines: [text] }], 1
+    )
+    try {
+        await send('A', 'A')
+        await waitFor(() => calls.length === 1, 'A starts')
+        await send('B', 'before reset')
+        coordinator.clearByConversation('B')
+        await send('B', 'after reset')
+        release.resolve()
+        await waitFor(() => calls.length >= 2, 'B starts')
+        assert.deepEqual(calls, ['A', 'after reset'])
+    } finally {
+        release.resolve()
+        await coordinator.stop()
+    }
+})
 
 it('persists the agentic snapshot without persisting a successful job', async () => {
     const jobStore = createJobStore()

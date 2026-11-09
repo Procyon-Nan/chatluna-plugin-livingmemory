@@ -1,6 +1,7 @@
 import type { Context } from 'cordis'
 import type {} from '@chatluna/preset'
-import type { MemoryScope } from '../../contracts/memory.ts'
+import type { RouteSettings } from '../../routing.ts'
+import type { MemoryScope, SnapshotScope } from '../../contracts/memory.ts'
 import type { MemoryTranscriptOrigin } from '../transcript/origin_context.ts'
 import type { ChatHistoryEntry } from '../chat_history.ts'
 
@@ -18,6 +19,14 @@ export interface QueueExtractionOptions {
 export const scopeKey = (
     scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
 ) => `${scope.presetId}\n${scope.conversationId}`
+
+export function snapshotScopeOf(
+    { presetId, conversationId }: MemoryScope,
+    settings: Pick<RouteSettings, 'snapshotScope' | 'enableConversationIsolation'>
+): SnapshotScope {
+    const shared = settings.snapshotScope === 'preset' && !settings.enableConversationIsolation
+    return { presetId, conversationId: shared ? null : conversationId }
+}
 
 /**
  * 解析面向 LLM 的助手标签：优先使用 preset 展示名（presetLabel），

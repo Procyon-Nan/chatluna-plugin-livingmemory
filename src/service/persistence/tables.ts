@@ -67,7 +67,7 @@ export function defineLivingMemoryTables(ctx: Context) {
     {
       id: 'string(64)',
       presetId: 'string(255)',
-      conversationId: 'string(255)',
+      conversationId: { type: 'string', length: 255, nullable: true, initial: null },
       query: 'text',
       items: {
         type: 'json',

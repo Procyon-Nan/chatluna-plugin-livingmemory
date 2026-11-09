@@ -695,6 +695,9 @@ function SnapshotsPanel({ presetId }: { presetId: string }) {
 
 function SnapshotRow({ snapshot }: { snapshot: LivingMemorySnapshotView }) {
     const t = useT()
+    const owner = snapshot.conversationId === null
+        ? t('snapshots.presetShared')
+        : snapshot.conversationLabel ?? t('snapshots.conversation', { id: snapshot.conversationId })
     function deleteSnapshot() {
         void callAction('livingmemory.deleteSnapshot', { id: snapshot.id }).catch(report)
     }
@@ -702,7 +705,7 @@ function SnapshotRow({ snapshot }: { snapshot: LivingMemorySnapshotView }) {
         <li className="flex flex-col gap-2 rounded-md border border-border p-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
                 <span className="min-w-0 break-words font-medium">
-                    {snapshot.conversationLabel ?? t('snapshots.conversation', { id: snapshot.conversationId })}
+                    {owner}
                 </span>
                 <span className="ml-auto text-xs text-muted-foreground">
                     {formatTime(snapshot.createdAt)}

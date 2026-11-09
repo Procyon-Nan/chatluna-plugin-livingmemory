@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { Context } from 'cordis'
 import type {
     AgenticMemorySnapshotItem,
-    MemoryScope,
+    SnapshotScope,
     MemorySnapshotRecord
 } from '../../contracts/memory.ts'
 import type { SnapshotRepository } from '../../contracts/workflows.ts'
@@ -16,7 +16,7 @@ export class LivingMemorySnapshotRepository implements SnapshotRepository {
     }
 
     async getLatestSnapshotByScope(
-        scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
+        scope: SnapshotScope
     ) {
         const sorted = await this.loadSortedSnapshotsByScope(scope)
         return sorted[0]
@@ -38,7 +38,7 @@ export class LivingMemorySnapshotRepository implements SnapshotRepository {
     }
 
     async upsertSnapshot(
-        scope: MemoryScope,
+        scope: SnapshotScope,
         query: string,
         items: AgenticMemorySnapshotItem[]
     ) {
@@ -82,13 +82,13 @@ export class LivingMemorySnapshotRepository implements SnapshotRepository {
     }
 
     private async loadSortedSnapshotsByScope(
-        scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
+        scope: SnapshotScope
     ): Promise<MemorySnapshotRecord[]> {
         const snapshots = await this.database.get(
             'living_memory_snapshot',
             {
                 presetId: scope.presetId,
-                conversationId: scope.conversationId
+                conversationId: scope.conversationId ?? { $exists: false }
             }
         )
 

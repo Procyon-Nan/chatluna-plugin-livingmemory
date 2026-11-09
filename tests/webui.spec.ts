@@ -276,8 +276,10 @@ it('shows the saved snapshot text and the matches recorded at recall time', asyn
         await ctx.database.create('chatluna_conversations', { key: 'shared', peer: group.peer })
         await repository.upsertSnapshot({ presetId, conversationId: 'shared' }, '', [])
 
+        await repository.upsertSnapshot({ presetId, conversationId: null }, '', [item])
         const { snapshots } = await ui.read('livingmemory.snapshots', { presetId }) as LivingMemorySnapshotsSnapshot
         const byConversation = new Map(snapshots.map(row => [row.conversationId, row]))
+        assert.equal(byConversation.get(null)?.content, finalText)
         assert.equal(byConversation.get(dm.conversationId)?.conversationLabel, '「小林」（用户 ID：42）')
         assert.partialDeepStrictEqual(byConversation.get(group.conversationId), {
             conversationLabel: '「读书群」（群聊 ID：42）',

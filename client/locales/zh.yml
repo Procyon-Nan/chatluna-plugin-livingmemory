@@ -116,6 +116,7 @@ profiles.sourceCount: '关联 {count} 条记忆'
 profiles.regenerate: 重新生成
 profiles.delete: 删除
 
+snapshots.presetShared: 预设共享快照
 snapshots.empty: 还没有召回快照
 snapshots.conversation: '会话 {id}'
 snapshots.noContent: 快照内容为空

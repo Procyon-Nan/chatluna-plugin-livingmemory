@@ -4,6 +4,8 @@ import Routing from '@chatluna/routing'
 import SchemaRegistry from '@chatluna/ui-schema-registry'
 import { routeIdOf } from '@chatluna/satori'
 import { registerRouteSettings, routeSettings } from '../src/routing.ts'
+import type { SnapshotRepository } from '../src/contracts/workflows.ts'
+import { withLivingMemoryRepository } from './persistence-test-utils.ts'
 import type { RouteSettings } from '../src/routing.ts'
 import type { Agent } from '@chatluna/agent'
 import { ChatMessage, contentText } from '@chatluna/message'
@@ -15,7 +17,7 @@ import { LivingMemoryConversationHooks } from '../src/service/conversation_hooks
 import { LivingMemoryChatHistory } from '../src/service/chat_history.ts'
 import type { ChatHistoryScope } from '../src/service/chat_history.ts'
 import type { LivingMemoryTranscriptMessage } from '../src/contracts/memory.ts'
-import { createCapturedLogger, createJobStore } from './workflow-test-utils.ts'
+import { createCapturedLogger, createJobStore, createSnapshotItem } from './workflow-test-utils.ts'
 import { FrameworkHistoryFixture, historyMessage } from './chat-history-test-utils.ts'
 
 const settle = async () => {
@@ -28,6 +30,7 @@ function createHarness(config: {
     overheard?: boolean
     extractionWindow?: number
     recallInterval?: number
+    snapshots?: Pick<SnapshotRepository, 'getLatestSnapshotByScope'>
     rules?: Partial<RouteSettings>
     settingsOf?: ConstructorParameters<typeof LivingMemoryConversationHooks>[1]['settingsOf']
     onRecallModel?: (input: string) => void
@@ -92,12 +95,12 @@ function createHarness(config: {
             clearByConversation: () => {}
         } as never,
         userProfiles: { renderForSpeakers: async (_preset: string, keys: string[]) => { profiles.push(keys); return keys.length ? '测试画像' : '' } } as never,
-        repository: { getLatestSnapshotByScope: async () => snapshotText === '' ? undefined : {
+        repository: config.snapshots ?? { getLatestSnapshotByScope: async () => snapshotText === '' ? undefined : {
             items: [{ finalText: snapshotText, matchedMemories: [], toolCallSummary: { searchTexts: [], searchKeywords: [], maxCandidates: 0 } }]
         } as never },
         logger: captured.logger,
         settingsOf: config.settingsOf ?? (() => ({
-            enableAutoDream: true, enableConversationIsolation: false, snapshotMaxLines: 5,
+            enableAutoDream: true, enableConversationIsolation: false, snapshotScope: 'conversation', snapshotMaxLines: 5,
             enableSnapshotInjection: true, enableUserProfileInjection: false,
             recallIntervalMessages: config.recallInterval ?? 1, recallHistoryMessages: 20,
             extractionWindowMessages: config.extractionWindow ?? 2,
@@ -172,6 +175,27 @@ function createHarness(config: {
 }
 
 describe('LivingMemoryConversationHooks', () => {
+    it('injects the selected snapshot even with automatic recall disabled', async () => {
+        await withLivingMemoryRepository(async (_ctx, repository) => {
+            for (const [conversationId, text] of [[null, '群 A 的更新'], ['conv-1', '本会话']] as const) {
+                await repository.upsertSnapshot({ presetId: 'preset-1', conversationId }, '', [createSnapshotItem(text)])
+            }
+            for (const [snapshotScope, isolation, expected] of [
+                ['preset', false, '群 A 的更新'],
+                ['preset', true, '本会话'],
+                ['conversation', false, '本会话']
+            ] as const) {
+                const h = createHarness({ snapshots: repository, rules: {
+                    snapshotScope, enableConversationIsolation: isolation, recallIntervalMessages: 0
+                } })
+                const agent = h.agent()
+                await h.begin(agent, 1)
+                const [injection] = await h.request(agent)
+                assert.equal(contentText(injection.content), `<memory>\n${expected}\n</memory>`)
+            }
+        })
+    })
+
     it('appends one snapshot with profiles and reuses it after tools and on retry', async () => {
         const h = createHarness({ rules: { enableUserProfileInjection: true } })
         await h.observed(1, '问')

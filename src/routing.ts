@@ -17,6 +17,11 @@ export const ROUTE_SCHEMA = Schema.object({
         .description('首次唤醒时有聊天就召回，之后按新增聊天条数判断；0 表示关闭。'),
     recallHistoryMessages: Schema.natural().min(1).max(200).default(20).label('召回上下文条数')
         .description('唤醒时读取的最近聊天条数。用户发言触发时包含该条；定时或冷场唤醒时只读已有聊天。'),
+    snapshotScope: Schema.union([
+        Schema.const('conversation').description('会话独立快照'),
+        Schema.const('preset').description('预设共享快照')
+    ]).default('conversation').label('记忆快照范围')
+        .description('开启「隔离会话检索」的会话始终使用独立快照。'),
     snapshotMaxLines: Schema.natural().min(5).max(50).default(5).label('快照最大行数'),
     enableConversationIsolation: Schema.boolean().default(false).label('隔离会话检索')
         .description('自动召回与记忆检索工具只检索当前会话和全局记忆。'),

@@ -107,6 +107,7 @@ profiles.sourceCount: '{count} linked memories'
 profiles.regenerate: Regenerate
 profiles.delete: Delete
 
+snapshots.presetShared: Shared preset snapshot
 snapshots.empty: No recall snapshot yet
 snapshots.conversation: 'Conversation {id}'
 snapshots.noContent: This snapshot is empty

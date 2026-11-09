@@ -90,7 +90,7 @@ export interface LivingMemoryProfileView {
 
 export interface LivingMemorySnapshotView {
     id: string
-    conversationId: string
+    conversationId: string | null
     conversationLabel: string | null
     content: string
     searchTexts: string[]

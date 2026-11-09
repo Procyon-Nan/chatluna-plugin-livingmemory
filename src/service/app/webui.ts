@@ -147,11 +147,11 @@ export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
         }),
         get: async (query: SnapshotListQuery): Promise<LivingMemorySnapshotsSnapshot> => {
             const result = await ui.admin.listSnapshots(query)
-            const conversationIds = result.items.map(item => item.conversationId)
+            const conversationIds = result.items.map(item => item.conversationId).filter(id => id !== null)
             const sources = await resolveConversationSources(ctx, conversationIds)
             return {
                 presetId: query.presetId,
-                snapshots: result.items.map(snapshot => toSnapshotView(snapshot, sources.get(snapshot.conversationId))),
+                snapshots: result.items.map(snapshot => toSnapshotView(snapshot, sources)),
                 total: result.total,
                 page: result.page,
                 pageSize: result.pageSize
@@ -474,7 +474,8 @@ const toProfileView = (profile: UserProfileRecord): LivingMemoryProfileView => (
     updatedAt: profile.updatedAt.getTime()
 })
 
-function toSnapshotView(snapshot: MemorySnapshotRecord, source?: SourcePeer): LivingMemorySnapshotView {
+function toSnapshotView(snapshot: MemorySnapshotRecord, sources: Map<string, SourcePeer>): LivingMemorySnapshotView {
+    const source = snapshot.conversationId === null ? undefined : sources.get(snapshot.conversationId)
     const searchTexts = new Set<string>()
     const searchKeywords = new Set<string>()
     const matchedMemories: LivingMemorySnapshotView['matchedMemories'] = []
