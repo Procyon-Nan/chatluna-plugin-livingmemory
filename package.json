@@ -5,7 +5,7 @@
         "registry": "https://registry.npmjs.org/",
         "access": "public"
     },
-    "description": "ChatLuna plugin livingmemory",
+    "description": "让 AI 以第一人称的叙事记忆，记录下与你共度的时光。",
     "type": "module",
     "engines": {
         "node": ">=24.0.0"
@@ -94,7 +94,8 @@
     },
     "cordis": {
         "description": {
-            "en": "ChatLuna plugin livingmemory"
+            "zh": "让 AI 以第一人称的叙事记忆，记录下与你共度的时光。",
+            "en": "Let the AI record the time spent with you as a first-person narrative memory."
         }
     }
 }
