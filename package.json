@@ -1,6 +1,10 @@
 {
     "name": "chatluna-plugin-livingmemory",
-    "version": "0.0.1",
+    "version": "0.0.2",
+    "publishConfig": {
+        "registry": "https://registry.npmjs.org/",
+        "access": "public"
+    },
     "description": "ChatLuna plugin livingmemory",
     "type": "module",
     "engines": {
@@ -37,6 +41,7 @@
     "scripts": {
         "build": "tsc -p tsconfig.json && node scripts/build.mjs",
         "clean": "node scripts/clean.mjs",
+        "pub": "npm run clean && npm run build && npm publish",
         "test": "node --test --experimental-transform-types --import ./tests/setup.ts \"tests/**/*.spec.ts\""
     },
     "dependencies": {
