@@ -11,7 +11,7 @@ const createManifest = (): MemoryVectorIndexManifest => ({
     embeddingModelId: 'model-a',
     dimension: 3,
     storageEngine: 'pglite-pgvector',
-    vectorExtensionVersion: '0.8.1',
+    vectorExtensionVersion: '0.8.7',
     generation: 'generation-1',
     builtAt: 1
 })
@@ -31,7 +31,8 @@ const createPreset = (
 const createInspection = (
     presets: MemoryVectorIndexPresetStatus[]
 ): VectorIndexInspection => ({
-    vectorExtensionVersion: '0.8.1',
+    availableVectorExtensionVersion: '0.8.7',
+    vectorExtensionVersion: '0.8.7',
     manifest: createManifest(),
     indexedCount: presets.length,
     inventory: [],

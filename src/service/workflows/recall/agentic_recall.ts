@@ -43,7 +43,6 @@ interface RecordedAgenticSearchCall {
     results: LivingMemorySearchResult[]
 }
 
-/** 与 v1 一致：单次召回的模型调用上限。 */
 const agenticRecallMaxModelCalls = 6
 
 const noMemoryFoundMessage = '没有找到相关记忆。'
@@ -86,7 +85,7 @@ const uniqueSnapshotMemoryItems = (
 }
 
 /**
- * 按 v1 语义把按行编辑应用到旧快照：行号指向同一份基线，删除不改变其余
+ * 快照编辑的行号指向同一份基线，删除不改变其余
  * 原行编号，追加按提交顺序接在末尾。全部校验通过后才返回最终文本。
  */
 const applySnapshotOperations = (
@@ -134,10 +133,6 @@ const applySnapshotOperations = (
     return finalLines.join('\n')
 }
 
-/**
- * 召回用的三个工具：检索、提交快照、跳过。作用域与旧快照由闭包带入，
- * 与 v1 按实例构造工具的结构一致。
- */
 export const createRecallTools = (options: {
     searchEngine: Pick<LivingMemorySearchEngine, 'searchMemories'>
     config: LivingMemoryAgenticRecallConfig

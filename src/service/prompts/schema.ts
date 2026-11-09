@@ -5,9 +5,7 @@ import { MAX_MEMORY_KEYWORDS } from '../memory/entry_fields.ts'
 /**
  * 多个记忆工具共用的记忆字段结构、说明和运行时校验。
  *
- * v1 用 zod 的 `.describe()` 承载字段说明，v2 的 `schemasteryToJsonSchemaNode`
- * 不输出 `description`（见 `doc/framework-requirements.md` 第 7 项），因此说明
- * 另以 `memoryFieldDocs` 随工具描述下发，保证模型看到的约束与 v1 一致。
+ * 框架生成的 JSON Schema 省略字段说明，由 memoryFieldDocs 随工具描述提供。
  */
 
 /**

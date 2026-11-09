@@ -93,7 +93,7 @@ const createHarness = (
                 }
                 return { name: presetId }
             },
-            // v2 的预设按 kind 组织成提示块，这里只提供 system 区原文。
+
             blocks: (record: { name: string }) => [
                 {
                     id: 'system',
@@ -143,7 +143,6 @@ const deleteLines = (lineNumbers: number[]) => ({ deletedLineNumbers: lineNumber
 
 const prunedCard = [presetLines[0], presetLines[1], presetLines[4]].join('\n')
 
-/** v2 没有 langchain 的请求失败分类，模型侧失败统一由 `ModelError` 表示。 */
 const modelFailure = (message: string) => new ModelError({ message, code: 'TRANSPORT' })
 
 it('keeps original text and only deletes selected lines', async () => {
@@ -225,7 +224,7 @@ it('retries with a correction when line numbers fall out of range', async () => 
 })
 
 it('falls back to the raw text when every response is invalid', async () => {
-    // v2 的结构化输出直接取 JSON，无效结果由 schema 校验拒绝并重试。
+
     const harness = createHarness([
         'plain text one',
         'plain text two',

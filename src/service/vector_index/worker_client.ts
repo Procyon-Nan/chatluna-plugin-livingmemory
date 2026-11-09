@@ -134,10 +134,6 @@ export class LivingMemoryVectorIndexWorkerClient {
         return this.request({ type: 'inspect' })
     }
 
-    upgradeSchema() {
-        return this.request({ type: 'upgradeSchema' })
-    }
-
     queryHybrid(query: VectorIndexHybridQuery) {
         return this.request({ type: 'queryHybrid', ...query })
     }

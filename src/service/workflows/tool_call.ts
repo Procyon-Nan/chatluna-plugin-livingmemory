@@ -10,7 +10,7 @@ export interface LivingMemoryChatHistory {
     messages: ChatSpecMessage[]
 }
 
-/** 内部循环里的工具：提示词契约 + 实际执行。不需要 v2 工具服务的调用上下文。 */
+/** 内部循环里的工具：提示词契约 + 实际执行。 */
 export interface LivingMemoryLoopTool<I = any, O = unknown> {
     name: string
     description: string

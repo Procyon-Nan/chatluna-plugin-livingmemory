@@ -4,17 +4,11 @@ import type {} from 'koishi'
 import type { LivingMemoryAdminService } from './admin_service.ts'
 import { formatLogScope } from '../logging/logger.ts'
 
-/** 命令的权限等级，与 v1 一致：只在管理员会话里可用。 */
 const COMMAND_AUTHORITY = 3
 
 /**
  * `/livingmemory` 命令：按文本或用户归档记忆、删除用户画像。
- *
- * 与 v1 的差异只在预设 id 的解析：v1 用 `-c` 把预设名转成 Character 的预设 id；
- * v2 的 Character 引擎直接以预设 id 运行，`-c` 不再需要。
- *
- * 危险操作先发确认消息再等待回复，与 v1 相同；等待本身由平台的
- * `session.prompt` 完成，超时即视为取消。
+ * 归档和删除前通过 session.prompt 等待确认；超时取消。
  */
 export const livingMemoryCommands = (ctx: Context, admin: LivingMemoryAdminService) => {
     const command = ctx

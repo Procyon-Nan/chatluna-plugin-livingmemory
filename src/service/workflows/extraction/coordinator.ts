@@ -202,8 +202,7 @@ export class LivingMemoryExtractionCoordinator {
     private readonly runningScopeKeys = new Set<string>()
     /**
      * 卸载时取消全部在途排干：停止接收新触发、中止模型调用、等待任务收尾。
-     * 会话清理与预设切换不走这里，它们只使消费状态失效（见
-     * `2026-11-04-extraction-inflight-lifecycle.md`）。
+     * 会话清理与预设切换只重置消费状态。
      */
     private readonly controller = new AbortController()
     private readonly tasks = new Set<Promise<void>>()

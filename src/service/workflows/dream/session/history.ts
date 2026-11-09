@@ -16,7 +16,7 @@ import { textBlocks, type LivingMemoryChatHistory } from '../../tool_call.ts'
 export const dreamCompressionThreshold = 200_000
 
 /**
- * Dream 会话历史。与 v1 一致：system 固定，批次边界之后的内容永不压缩；
+ * system 固定，当前批次不参与压缩；
  * 达到阈值时把更早批次摘要成一条 `<dream_history_summary>` 消息。
  *
  * 历史对象直接交给工具循环持有，循环在它上面追加消息。

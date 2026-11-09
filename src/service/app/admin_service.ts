@@ -58,8 +58,7 @@ export interface LivingMemoryAdminDeps {
 }
 
 /**
- * v1 `ChatLunaLivingMemoryService` 的管理面。v2 把服务拆成了多个协作对象，
- * 这里只做组合与投影：所有写操作都经过变更服务，所有读取都走仓储与查询层。
+ * 管理界面与命令共用的读写入口。
  *
  * 这一层是为管理界面与命令准备的；工作流的运行时依赖不从这里取，避免把
  * 展示用的读模型混进执行路径。

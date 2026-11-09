@@ -9,7 +9,6 @@ const schema = Schema.object({
     note: Schema.transform(Schema.string(), (value) => value.trim()).optional()
 })
 
-/** v2 的 schema 校验失败由 `extract` 抛 `ProtocolError`，与 v1 的解析失败同义。 */
 const parseFailure = (message: string) => new ProtocolError({ message })
 
 /** 按顺序返回预设响应：值表示成功，Error 表示调用失败。 */

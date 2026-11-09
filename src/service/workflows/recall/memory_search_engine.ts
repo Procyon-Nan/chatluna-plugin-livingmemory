@@ -138,9 +138,7 @@ export class LivingMemorySearchEngine implements LivingMemorySearchProvider {
         limit: number
     ): Promise<LivingMemorySearchDetailedResult[]> {
         const documents = candidates.map((candidate) => candidate.content)
-        // v2 的 `ctx.chatluna.rerank` 返回按输入顺序排列的分数；v1 的 langchain
-        // Reranker 返回 (index, relevanceScore) 对。这里按同样的口径取每条查询
-        // 短语对应候选的分数，再取各次最大值。
+        // 每个候选取各查询短语的最高分；rerank 的分数与候选顺序一致。
         const rankings = await Promise.all(
             searchTexts.map((searchText) =>
                 this.ctx.chatluna.rerank(searchText, documents, {

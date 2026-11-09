@@ -33,7 +33,6 @@ export const inject = [
 
 export type Config = LivingMemoryConfig
 
-/** 模型项的取值沿用 v1：`无` 表示未配置，工作流据此跳过。 */
 const modelField = (description: string, modality: string) =>
     modelAddressSchema({ description, default: '无', modality, roles: true })
 

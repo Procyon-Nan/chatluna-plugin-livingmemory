@@ -97,37 +97,6 @@ export const createVectorIndexSchema = async (
     )
 }
 
-export const upgradeVectorIndexSchema = async (database: PGlite) => {
-    await database.transaction(async (transaction) => {
-        const { rows } = await transaction.query<{ schemaVersion: number }>(
-            'SELECT schema_version AS "schemaVersion" FROM lm_index_manifest WHERE singleton = 1'
-        )
-        const version = rows[0].schemaVersion
-        if (version !== 3 && version !== 4) {
-            throw new Error(
-                `index schema migration requires v3 or v4: ${version}`
-            )
-        }
-        if (version === 3) {
-            await transaction.exec(`
-                ALTER TABLE lm_index_memory ADD COLUMN source_conversation_id text;
-                CREATE INDEX lm_index_memory_conversation_filter
-                ON lm_index_memory (preset_id, source_conversation_id)
-                WHERE status = 'active';
-            `)
-        }
-        await transaction.exec(`
-            DROP INDEX lm_index_memory_consolidated_filter;
-            DROP INDEX lm_index_memory_preset_filter;
-            ALTER TABLE lm_index_memory DROP COLUMN is_consolidated;
-            CREATE INDEX lm_index_memory_preset_filter
-            ON lm_index_memory (preset_id, status, type);
-            UPDATE lm_index_manifest SET schema_version = 5 WHERE singleton = 1;
-        `)
-    })
-    return { schemaVersion: VECTOR_INDEX_SCHEMA_VERSION }
-}
-
 export const analyzeVectorIndex = async (database: PGlite) => {
     await database.exec(`
         ANALYZE lm_index_memory;

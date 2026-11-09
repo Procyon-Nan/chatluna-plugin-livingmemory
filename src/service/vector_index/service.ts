@@ -94,8 +94,6 @@ export class LivingMemoryVectorIndexService
                 )
         })
 
-        // v1 取 koishi 的 ctx.baseDir；v2 用 CHATLUNA_DATA（缺省 data/chatluna）
-        // 解析数据目录，索引仍放在其下的 living-memory 子目录。
         const indexDirectory = resolve(resolveChatlunaDataDir(process.cwd()), 'living-memory')
         this.databaseDirectory = resolve(
             indexDirectory,

@@ -6,8 +6,6 @@ import { rolldown } from 'rolldown'
 /**
  * 打包 Worker 产物。Worker 以 Node 原生线程运行，只把项目源码打进单文件，
  * PGlite 保持外部依赖，由运行时从 node_modules 解析。
- *
- * 模板项目用 rolldown 而非 v1 的 esbuild，避免在插件仓库里引入第二套打包器。
  */
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outputDirectory = resolve(projectRoot, 'lib')

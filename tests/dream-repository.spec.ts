@@ -202,7 +202,7 @@ it('maintains active memory speaker links across memory lifecycle changes', asyn
 })
 
 it('defines active memory indexes', async () => {
-    // v2 的表定义挂在 `ctx.model` 上，必须先加载数据库驱动。
+
     await withRepository(async (ctx, repository) => {
     assert.deepEqual(
         ctx.model.tables.living_memory_entry.indexes.map((index) => index.keys),

@@ -52,7 +52,7 @@ it('normalizes optional importance consistently', () => {
 
 it('applies shared field rules to extracted memories', async () => {
     const extractionKeywords = ['  alpha  ', 'alpha', 'keyword-0']
-    // v2 的提取走 `chatluna.extract` 结构化输出，直接给出解析后的结果。
+
     const raw = {
         reason: '聊天中包含值得长期记录的事实。',
         memories: [

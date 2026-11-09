@@ -55,7 +55,7 @@ type DreamMutations = Pick<
 /**
  * Dream 服务：规划批次、准备人设与说话人、驱动对话会话，并汇总覆盖情况。
  *
- * 模型调用走插件自己的工具循环（见 `session/runner.ts`），不经过 v2 的对话
+ * 模型调用走插件自己的工具循环（见 `session/runner.ts`），不经过对话
  * agent：Dream 的批次状态机、历史压缩与跳过条件都是插件自己的语义。
  */
 export class LivingMemoryDreamService {
@@ -242,9 +242,7 @@ export class LivingMemoryDreamService {
     }
 
     /**
-     * v1 要求 Dream 模型至少 200k 上下文：历史压缩阈值固定为 200k，低于该值
-     * 压缩永远不会触发而输入必然溢出。v2 从模型能力读 `contextWindow`，未知
-     * 时按该下限处理。
+     * 历史压缩阈值为 200k，模型至少需要同样大的上下文窗口。
      */
     private async resolveContextLimit(): Promise<number> {
         const caps = await this.ctx.ai.caps<'chat'>(this.config.mainModel)

@@ -59,9 +59,6 @@ const execute = async (
             case 'inspect':
                 result = await database.inspect()
                 break
-            case 'upgradeSchema':
-                result = await database.upgradeSchema()
-                break
             case 'queryHybrid':
                 result = await database.queryHybrid(command)
                 break

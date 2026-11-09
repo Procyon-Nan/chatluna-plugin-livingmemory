@@ -1,55 +1,21 @@
-# Agent Note: 内部工作流自行驱动模型调用，不使用 v2 的 Agent 层
+# Agent Note: 召回与 Dream 自行驱动工具循环
 
 Status: implemented
 
 ## Problem
 
-LivingMemory 有三个内部工作流需要模型自行决定调用哪些记忆工具：代理式召回（检索记忆、更新快照、结束）、Dream 会话（逐批对记忆做合并、拆分、更新、删除、确认），以及它们的轮次上限与历史压缩。v2 提供了 `ctx.agents`，包含会话、工具检索、提示词组装与轮次驱动，是插件接入模型调用的官方入口。
-
-核对 v2 的 Agent 层之后，有三条硬性约束：
-
-1. `AgentRegistry` 的 `AGENT_INJECT` 要求 `agents`、`chatluna`、`ai`、`tools`、`prompt`、`sessions`、`trace`、`presets`、`tool_search` 九个服务同时在场。本插件只注入 `chatluna`、`memory`、`database`、`chatluna_collector` 四个；接 `agents` 会把插件依赖扩大到九个服务，宿主少装任何一个都会让整个插件不加载。
-2. `chat-observer` 会索引每个带 `options.conversationKey` 的 agent。内部召回与 Dream 会话一旦注册，就会进入用户消息池，污染自动提取的素材边界与召回窗口。
-3. Dream 需要按批次推进的状态机、每轮结束后的进度反馈消息、以及超过 20 万 token 时的历史压缩；这些都不是「给一句用户输入、等模型自然停止」的 turn driver 能表达的。
+召回要等模型明确选择更新快照或跳过。Dream 要核对一批记忆的处理进度；一次工具调用成功，并不表示整批已经完成。
 
 ## Decision
 
-插件自带一层最小的工具循环，直接驱动 `ctx.chatluna.chat`，不经过 `ctx.agents`。
-
-`src/service/workflows/tool_call.ts` 负责执行工具并生成工具结果。`src/service/workflows/tool_loop.ts` 的 `runRound()` 每次调用一次模型，将接受的工具调用及对应结果写入历史，再返回本轮执行情况。
-
-召回与 Dream 共用单轮执行逻辑，各自决定何时结束：
-
-| 行为 | 召回 | Dream |
-| --- | --- | --- |
-| 完成条件 | 成功执行 pass 或更新快照；6 次调用仍未收尾则报错 | 批次没有待处理记忆 |
-| 同一响应调用多个工具 | 整轮拒绝并提示逐个调用 | 顺序执行 |
-| 下一轮输入 | 工具结果或纠正提示 | 按批次管理历史，告知模型剩余记忆 |
-| 批次限制 | — | 连续 3 轮无有效操作或满 60 轮，跳过剩余记忆 |
-
-模型没有调用工具时，两个流程都会追加纠正提示。`signal.throwIfAborted()` 在每次模型调用与每次工具执行前检查。
-
-工具不注册到 `ctx.tools`：它们的作用域与批次状态由闭包持有，只在本循环内可见，不出现在模型工具的全局清单里。
+两个流程共用 `LivingMemoryToolLoop.runRound()` 调用模型和执行内部工具，再分别判断是否结束。召回用 `runUntilConclusion()` 等待结束工具；Dream 每轮执行后查看剩余记忆，必要时把进度反馈给模型。内部工具绑定本次运行的状态，不注册到全局工具列表。
 
 ## Alternatives considered
 
-**接入 `ctx.agents`**：能直接复用会话持久化、工具检索与 trace，代码量最小。放弃原因是上面三条约束：依赖面从 4 个服务扩到 9 个；内部会话进入 `chat-observer` 索引、污染用户消息池；turn driver 无法表达 Dream 的批次状态机与逐轮推进消息。
+**交给对话 Agent 自行结束。** 模型结束回答不能说明哪些记忆已经处理。Dream 仍需维护批次状态，内部任务也没有需要持久化的用户对话。
 
-**把 Dream 拆成每批一个 agent 会话**：可以让每个会话自然结束，规避状态机。但提示词、人设与历史仍然要跨批次共享，拆分后每批都要重建历史，20 万 token 的压缩逻辑反而要写两遍。
-
-**召回用 `ctx.agents`、Dream 自行驱动**：两种模型调用路径并存，日志、重试与取消语义要维护两套。收益只有召回一侧的代码量，不足以抵消分叉成本。
+**两个流程分别实现工具循环。** 工具调用、结果记录和取消都要维护两次，实际差异只是成功条件和下一轮的输入。
 
 ## Consequences
 
-收益：插件保持四个服务的最小依赖；内部会话不进入观测层与用户消息池；Dream 的批次状态、跳过条件与历史压缩可以按 v1 语义逐条复刻，迁移期的行为对照有据可依。
-
-代价：约 260 行循环代码由插件自己维护，v2 在 agent 层的改进（工具检索、重试策略、用量统计）不会自动惠及这里。工具 schema 到 JSON Schema 的转换、结果渲染、纠正提示措辞也都留在插件侧。
-
-已验证：`agentic-recall`、`dream-session`、`dream-workflows`、`indexed-memory-mutations` 覆盖了工具执行、多调用拒绝、6 次上限、批次跳过与覆盖统计。
-
-## Testing
-
-- `tests/agentic-recall.spec.ts`：脚本化的模型返回驱动工具循环，断言系统提示转义、工具结果文本、6 次调用耗尽、去重与多调用拒绝。
-- `tests/dream-session.spec.ts`：批次推进、连续 3 轮无效跳过、历史压缩触发条件。
-- `tests/dream-workflows.spec.ts`：端到端 Dream 流程与覆盖统计。
-- `tests/indexed-memory-mutations.spec.ts`：会话工具在索引失败、目标失效时的记录与告警语义。
+召回最多调用模型六次，一次响应包含多个工具时要求模型重新选择。Dream 可以顺序执行多个工具，按剩余记忆推进；连续三轮无有效操作或满六十轮时跳过剩余项。相应边界由 `tests/agentic-recall.spec.ts` 和 `tests/dream-session.spec.ts` 覆盖。

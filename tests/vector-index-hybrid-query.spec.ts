@@ -1,14 +1,10 @@
 import assert from 'node:assert/strict'
 import { PGlite } from '@electric-sql/pglite'
 import type {
-    VectorIndexHybridHit,
     VectorIndexHybridQuery,
     VectorIndexKnnHit
 } from '../src/service/vector_index/worker_protocol.ts'
-import {
-    queryVectorIndexHybrid,
-    queryVectorIndexKnn
-} from '../src/service/vector_index/worker/queries.ts'
+import { queryVectorIndexHybrid } from '../src/service/vector_index/worker/queries.ts'
 
 interface QueryCall {
     text: string
@@ -50,55 +46,6 @@ const createDatabase = (
     return { database, calls }
 }
 
-const legacyHybridResult = async (
-    database: PGlite,
-    query: VectorIndexHybridQuery,
-    keywordRows: Array<{
-        memoryId: string
-        cosineScore: number | null
-        matchCount: string
-    }>
-): Promise<VectorIndexHybridHit[]> => {
-    const semanticHits = await queryVectorIndexKnn(database, query)
-    const scores = new Map(
-        semanticHits.map((hit) => [hit.memoryId, hit.cosineScore])
-    )
-    for (const row of keywordRows) {
-        scores.set(row.memoryId, Number(row.cosineScore))
-    }
-    const counts = new Map(
-        keywordRows.map((row) => [row.memoryId, Number(row.matchCount)])
-    )
-    return [...scores]
-        .map(([memoryId, cosineScore]) => {
-            const keywordMatchCount = counts.get(memoryId) ?? 0
-            if (cosineScore >= query.minSimilarity) {
-                return {
-                    memoryId,
-                    cosineScore,
-                    keywordMatchCount,
-                    boostedScore: cosineScore + 0.15 * keywordMatchCount
-                }
-            }
-            if (keywordMatchCount > 0) {
-                return {
-                    memoryId,
-                    cosineScore: 0,
-                    keywordMatchCount,
-                    boostedScore: 0.3 * keywordMatchCount
-                }
-            }
-            return null
-        })
-        .filter((hit): hit is VectorIndexHybridHit => hit !== null)
-        .sort(
-            (left, right) =>
-                right.boostedScore - left.boostedScore ||
-                left.memoryId.localeCompare(right.memoryId)
-        )
-        .slice(0, query.limit)
-}
-
 it('reuses semantic scores for keyword candidates in the top-k intersection', async () => {
     const semanticHits = [
         { memoryId: 'semantic-alpha', cosineScore: 0.9 },
@@ -138,12 +85,12 @@ it('reuses semantic scores for keyword candidates in the top-k intersection', as
     ])
 })
 
-it('preserves legacy hybrid scoring, filtering, and tie ordering', async () => {
+it('orders equal hybrid scores by memory id', async () => {
     const semanticHits = [
         { memoryId: 'semantic-keyword', cosineScore: 0.4 },
         { memoryId: 'semantic-only', cosineScore: 0.6 }
     ]
-    const optimizedKeywordRows = [
+    const keywordRows = [
         {
             memoryId: 'semantic-keyword',
             cosineScore: null,
@@ -152,29 +99,15 @@ it('preserves legacy hybrid scoring, filtering, and tie ordering', async () => {
         { memoryId: 'keyword-b', cosineScore: 0.1, matchCount: '1' },
         { memoryId: 'keyword-a', cosineScore: 0.1, matchCount: '1' }
     ]
-    const legacyKeywordRows = optimizedKeywordRows.map((row) => ({
-        ...row,
-        cosineScore: row.memoryId === 'semantic-keyword' ? 0.4 : row.cosineScore
-    }))
-    const query = createQuery({ minSimilarity: 0, limit: 4 })
-    const optimizedDatabase = createDatabase(
-        semanticHits,
-        optimizedKeywordRows
-    ).database
-    const legacyDatabase = createDatabase(semanticHits, []).database
+    const { database } = createDatabase(semanticHits, keywordRows)
+    const result = await queryVectorIndexHybrid(database, createQuery({ minSimilarity: 0, limit: 4 }))
 
-    const optimized = await queryVectorIndexHybrid(optimizedDatabase, query)
-    const legacy = await legacyHybridResult(
-        legacyDatabase,
-        query,
-        legacyKeywordRows
-    )
-
-    assert.deepEqual(optimized, legacy)
-    assert.deepEqual(
-        optimized.map((hit) => hit.memoryId),
-        ['semantic-only', 'semantic-keyword', 'keyword-a', 'keyword-b']
-    )
+    assert.deepEqual(result.map((hit) => [hit.memoryId, hit.cosineScore, hit.keywordMatchCount, hit.boostedScore]), [
+        ['semantic-only', 0.6, 0, 0.6],
+        ['semantic-keyword', 0.4, 1, 0.55],
+        ['keyword-a', 0.1, 1, 0.25],
+        ['keyword-b', 0.1, 1, 0.25]
+    ])
 })
 
 it('keeps the semantic-only path unchanged for empty normalized keywords', async () => {

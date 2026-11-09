@@ -4,8 +4,7 @@ import type { MemoryScope } from '../../../contracts/memory.ts'
 /**
  * 工具调用所属的会话与预设。
  *
- * v1 从 langchain 的 `ToolRunnableConfig.configurable` 读取，v2 的工具 `run`
- * 收到的是 `ToolCallContext`：`call.agent` 是发起本轮调用的 Agent，
+ * call.agent 是发起本轮工具调用的 Agent。
  * `agent.options` 携带 `presetId` 与 `conversationKey`，`agent.options.location`
  * 是会话所在的平台/群/频道。子代理以自己的 Agent 发起调用，其
  * `options.permissions.origin` 非空，据此拒绝。
@@ -33,10 +32,6 @@ export type LivingMemoryToolPresetIdResolution =
     | { ok: true; presetId: string }
     | { ok: false; reason: 'missing-preset' }
 
-/**
- * 解析工具调用所属的记忆预设。v2 的引擎把预设解析结果写进 `agent.options.presetId`：
- * Character 引擎同样写入预设记录自身的 id，因此不再需要 v1 的「（Character）」后缀拼接。
- */
 export const resolveToolMemoryPresetId = (
     agent: LivingMemoryToolAgent | undefined
 ): LivingMemoryToolPresetIdResolution => {
@@ -55,8 +50,7 @@ export type LivingMemoryToolScopeResolution =
       }
 
 /**
- * 从工具调用上下文重建 `MemoryScope`。会话键直接采用 v2 解析结果，
- * 平台与群/频道取自 `location`；子代理调用一律拒绝。
+ * 从工具调用的 Agent 读取会话作用域；子代理调用一律拒绝。
  */
 export const resolveToolMemoryScope = (
     agent: LivingMemoryToolAgent | undefined

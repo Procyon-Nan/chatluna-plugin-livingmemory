@@ -94,7 +94,7 @@ const createHarness = (
         deleteUserProfile: async () => {}
     }
     let pending: unknown[] = []
-    // v2 的画像生成经 `chatluna.extract` 直接取结构化结果，不再构造工具调用消息。
+
     const ctx = {
         ai: { chat: () => ({ bind: async () => ({}) }) },
         presets: { get: (id: string) => options.presets?.[id] },
@@ -261,7 +261,6 @@ it('uses the preset display name as the user profile assistant label', async () 
 
     const { system, prompt } = harness.invocations[0]
     assert.match(system, /你是角色甲，/u)
-    assert.doesNotMatch(system, /角色甲（Character）/u)
     assert.doesNotMatch(prompt, /<assistant_label>/u)
 })
 

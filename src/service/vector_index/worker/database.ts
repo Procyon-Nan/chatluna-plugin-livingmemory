@@ -1,14 +1,12 @@
 import { PGlite } from '@electric-sql/pglite'
 import { vector } from '@electric-sql/pglite-pgvector'
-import { randomUUID } from 'node:crypto'
-import { cpSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type {
     DreamNeighborQuery,
     MemoryVectorIndexManifest,
     MemoryVectorIndexState
 } from '../../../contracts/vector_index.ts'
-import { formatErrorDetails } from '../../shared/utils.ts'
 import type {
     VectorIndexHybridQuery,
     VectorIndexInspection,
@@ -30,11 +28,9 @@ import {
 import {
     analyzeVectorIndex,
     createVectorIndexSchema,
-    hasVectorIndexSchema,
-    upgradeVectorIndexSchema
+    hasVectorIndexSchema
 } from './schema.ts'
 import { LivingMemoryVectorIndexOwnershipEndpoint } from './ownership_endpoint.ts'
-import { LivingMemoryVectorIndexError } from '../errors.ts'
 import { buildDreamAnnIndex, queryDreamNeighbors } from './dream_ann.ts'
 
 interface ManifestRow {
@@ -131,13 +127,6 @@ export class LivingMemoryVectorIndexDatabase {
                 previousDatabaseDirectory
             )
         }
-        if (inspection.vectorExtensionVersion === '0.8.1') {
-            inspection = await this.upgradeVectorExtension(
-                databaseDirectory,
-                inspection
-            )
-        }
-
         if (existsSync(previousDatabaseDirectory)) {
             this.cleanupDatabaseDirectory(
                 previousDatabaseDirectory,
@@ -147,17 +136,12 @@ export class LivingMemoryVectorIndexDatabase {
         return inspection
     }
 
-    async upgradeSchema() {
-        return upgradeVectorIndexSchema(this.requireDatabase())
-    }
-
     async inspect(): Promise<VectorIndexInspection> {
         const database = this.requireDatabase()
-        const vectorExtensionVersion =
-            await this.readVectorExtensionVersion(database)
+        const extensions = await this.readVectorExtensionVersions(database)
         if (!(await hasVectorIndexSchema(database))) {
             return {
-                vectorExtensionVersion,
+                ...extensions,
                 manifest: null,
                 indexedCount: 0,
                 inventory: [],
@@ -205,7 +189,7 @@ export class LivingMemoryVectorIndexDatabase {
         }))
 
         return {
-            vectorExtensionVersion,
+            ...extensions,
             manifest: manifest === undefined ? null : manifest,
             indexedCount: await countVectorIndexMemories(database),
             inventory,
@@ -376,39 +360,6 @@ export class LivingMemoryVectorIndexDatabase {
         }
     }
 
-    private async upgradeVectorExtension(
-        directory: string,
-        inspection: VectorIndexInspection
-    ) {
-        const backupDirectory = `${directory}.vector-0.8.1-backup-${randomUUID()}`
-        try {
-            await this.closeConnection()
-            cpSync(directory, backupDirectory, {
-                recursive: true,
-                errorOnExist: true,
-                force: false
-            })
-            this.database = await this.openConnection(directory)
-            await this.database.transaction(async (tx) => {
-                await tx.exec("ALTER EXTENSION vector UPDATE TO '0.8.7'")
-                if (inspection.manifest !== null) {
-                    await tx.exec(`UPDATE lm_index_manifest
-                        SET vector_extension_version = (
-                            SELECT extversion FROM pg_extension WHERE extname = 'vector'
-                        ) WHERE singleton = 1 AND vector_extension_version = '0.8.1'`)
-                }
-            })
-            return await this.inspect()
-        } catch (cause) {
-            throw new LivingMemoryVectorIndexError(
-                'extension-migration-failed',
-                'unavailable',
-                `pgvector 0.8.1 to 0.8.7 migration failed: database=${directory}, backup=${backupDirectory}: ${formatErrorDetails(cause)}`,
-                { cause }
-            )
-        }
-    }
-
     private async restorePreviousDatabase(
         databaseDirectory: string,
         previousDatabaseDirectory: string
@@ -482,17 +433,20 @@ export class LivingMemoryVectorIndexDatabase {
         return this.rebuildDatabaseDirectory
     }
 
-    private async readVectorExtensionVersion(database: PGlite) {
-        const row = (
-            await database.query<{ extversion: string }>(
-                `SELECT extversion
-                 FROM pg_extension
-                 WHERE extname = 'vector'`
-            )
-        ).rows[0]
-        if (row === undefined) {
+    private async readVectorExtensionVersions(database: PGlite) {
+        const { rows } = await database.query<{
+            vectorExtensionVersion: string | null
+            availableVectorExtensionVersion: string
+        }>(`SELECT installed_version AS "vectorExtensionVersion",
+                   default_version AS "availableVectorExtensionVersion"
+            FROM pg_available_extensions WHERE name = 'vector'`)
+        const versions = rows[0]
+        if (!versions?.vectorExtensionVersion) {
             throw new Error('pgvector extension is not loaded')
         }
-        return row.extversion
+        return {
+            vectorExtensionVersion: versions.vectorExtensionVersion,
+            availableVectorExtensionVersion: versions.availableVectorExtensionVersion
+        }
     }
 }

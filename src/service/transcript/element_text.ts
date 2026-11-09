@@ -1,9 +1,7 @@
 import type { ChatBlock } from '@chatluna/message'
 
 /**
- * `ChatBlock` 到日志文本。v2 的 `toContent` 已把平台元素归一成文本、文件、
- * 引用等有限几种，v1 那套按 satori 元素类型逐项渲染的规则不再需要；
- * 非文本内容退为占位说明，元素标签的序列化形式不进入模型可见历史。
+ * 将聊天内容转为模型可读文本，使用占位说明表示非文本内容。
  */
 export function blocksToLogText(blocks: readonly ChatBlock[]): string {
   return blocks.map(describeBlock).filter((part) => part.length > 0).join('').trim()

@@ -2,7 +2,6 @@ import type { MemoryVectorIndexState } from '../../contracts/vector_index.ts'
 
 export type LivingMemoryVectorIndexErrorCode =
     | 'embedding-unavailable'
-    | 'extension-migration-failed'
     | 'lock-conflict'
     | 'lock-unavailable'
     | 'mutation-failed'

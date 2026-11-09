@@ -215,6 +215,7 @@ it('does not abort through the old worker after finalize takes cleanup ownership
             worker: {
                 openRebuildDatabase: async () => ({
                     vectorExtensionVersion: '0.8.7',
+                    availableVectorExtensionVersion: '0.8.7',
                     manifest: null,
                     indexedCount: 0,
                     inventory: [],
@@ -251,6 +252,7 @@ it('aborts through the worker when finalize fails before taking cleanup ownershi
             worker: {
                 openRebuildDatabase: async () => ({
                     vectorExtensionVersion: '0.8.7',
+                    availableVectorExtensionVersion: '0.8.7',
                     manifest: null,
                     indexedCount: 0,
                     inventory: [],
@@ -261,6 +263,7 @@ it('aborts through the worker when finalize fails before taking cleanup ownershi
                     abortCalls += 1
                     return {
                         vectorExtensionVersion: '0.8.7',
+                        availableVectorExtensionVersion: '0.8.7',
                         manifest: null,
                         indexedCount: 0,
                         inventory: [],

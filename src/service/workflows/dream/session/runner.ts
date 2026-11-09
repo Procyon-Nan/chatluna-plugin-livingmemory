@@ -45,9 +45,7 @@ interface DreamSessionRunInput {
 }
 
 /**
- * Dream 会话：逐批推进，每批最多 60 轮。每轮由插件决定是否追加推进消息来驱动
- * 下一次模型调用，而不是等模型自然停止；批次状态机、历史压缩与跳过条件沿用
- * v1 语义，因此按 v1 的形状直接驱动 `ctx.chatluna.chat`。
+ * 每批最多 60 轮，由剩余记忆和本轮工具结果决定是否继续。
  */
 export async function runDreamSession(input: DreamSessionRunInput) {
     const { ctx, model, maxTokenLimit, state, tools, logger, signal } = input
@@ -116,7 +114,7 @@ export async function runDreamSession(input: DreamSessionRunInput) {
         for (let round = 1; round <= maxBatchRounds; round++) {
             signal?.throwIfAborted()
             let feedback = '请继续处理当前批次。'
-            // 本轮是否有工具成功执行；与 v1 一致，重复操作也算有效。
+            // 只要工具成功执行，本轮即有效，包括重复操作。
             let effective = false
             try {
                 const successfulTools = await loop.runRound(round)

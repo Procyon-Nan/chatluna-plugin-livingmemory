@@ -79,19 +79,11 @@ export class LivingMemoryVectorIndexMaintenance {
 
     async initialize(inspection: VectorIndexInspection) {
         const { embeddings, dimension } = await this.createEmbeddingContext()
-        const upgradeSchema =
-            (inspection.manifest?.schemaVersion === 3 ||
-                inspection.manifest?.schemaVersion === 4) &&
-            this.options.schemaVersion === 5
-        const rebuildReason = this.resolveRebuildReason(
-            inspection,
-            dimension,
-            upgradeSchema
-        )
+        const rebuildReason = this.resolveRebuildReason(inspection, dimension)
         if (rebuildReason !== null) {
             await this.runRebuildJob(embeddings, dimension, rebuildReason)
         } else {
-            await this.runReconcileJob(embeddings, dimension, upgradeSchema)
+            await this.runReconcileJob(embeddings, dimension)
         }
         await this.maintainDreamAnnIndex()
     }
@@ -154,11 +146,6 @@ export class LivingMemoryVectorIndexMaintenance {
         })
     }
 
-    /**
-     * v1 经 `ctx.chatluna.createEmbeddings` 取得 langchain 的 Embeddings 实例；
-     * v2 的 `ctx.chatluna.embed` 直接返回向量，这里按 `EmbeddingsLike` 的形状
-     * 薄封装一层，使索引维护与重建代码不需要改动。
-     */
     private async createEmbeddings(): Promise<EmbeddingsLike> {
         const { ctx, config } = this.options
         if (!isModelConfigured(config.embeddingModel)) {
@@ -203,8 +190,7 @@ export class LivingMemoryVectorIndexMaintenance {
 
     private resolveRebuildReason(
         inspection: VectorIndexInspection,
-        dimension: number,
-        upgradeSchema: boolean
+        dimension: number
     ) {
         const { config, schemaVersion } = this.options
         if (inspection.manifest === null) {
@@ -218,6 +204,9 @@ export class LivingMemoryVectorIndexMaintenance {
                 inspection.manifest.storageEngine
             )
         }
+        if (inspection.vectorExtensionVersion !== inspection.availableVectorExtensionVersion) {
+            return `pgvector version changed: installed=${inspection.vectorExtensionVersion}, available=${inspection.availableVectorExtensionVersion}`
+        }
         if (
             inspection.vectorExtensionVersion !==
             inspection.manifest.vectorExtensionVersion
@@ -230,7 +219,7 @@ export class LivingMemoryVectorIndexMaintenance {
         }
 
         const manifest = inspection.manifest
-        if (manifest.schemaVersion !== schemaVersion && !upgradeSchema) {
+        if (manifest.schemaVersion !== schemaVersion) {
             return (
                 `schema version changed: expected=${schemaVersion}, ` +
                 `actual=${manifest.schemaVersion}`
@@ -275,7 +264,7 @@ export class LivingMemoryVectorIndexMaintenance {
                     storageEngine: VECTOR_STORAGE_ENGINE,
                     vectorExtensionVersion: (
                         await this.options.worker().inspect()
-                    ).vectorExtensionVersion,
+                    ).availableVectorExtensionVersion,
                     generation: randomUUID(),
                     builtAt: Date.now()
                 }
@@ -329,20 +318,16 @@ export class LivingMemoryVectorIndexMaintenance {
 
     private async runReconcileJob(
         embeddings: EmbeddingsLike,
-        dimension: number,
-        upgradeSchema: boolean
+        dimension: number
     ) {
         await this.jobRunner.run(
             GLOBAL_INDEX_JOB_PRESET,
             'reconcile: startup',
             async (job) => {
                 this.options.onBuilding(job.id)
-                await this.options.operationGate.runExclusive(async () => {
-                    if (upgradeSchema) {
-                        await this.options.worker().upgradeSchema()
-                    }
-                    await this.reconcileAllPresets(embeddings, dimension, job)
-                })
+                await this.options.operationGate.runExclusive(() =>
+                    this.reconcileAllPresets(embeddings, dimension, job)
+                )
                 const inspection = await this.options.worker().inspect()
                 this.options.onInspection(inspection)
                 return `处理记忆：${inspection.indexedCount} 条`

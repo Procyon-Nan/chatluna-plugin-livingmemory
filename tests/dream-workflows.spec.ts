@@ -241,9 +241,8 @@ it('reports missing model configuration as failed with the entire target set', a
     assert.equal(rounds, 0)
 })
 
-it.each(['completed', 'partial', 'failed'] as const)(
-    'persists %s outcome and successful-operation details',
-    async (status) => {
+for (const status of ['completed', 'partial', 'failed'] as const) {
+    it(`persists ${status} outcome and successful-operation details`, async () => {
         const store = createJobStore()
         const job = await store.createJob(scope, 'dream', '')
         const runner = new LivingMemoryDreamJobRunner(
@@ -262,8 +261,8 @@ it.each(['completed', 'partial', 'failed'] as const)(
         assert.equal(job.status, status)
         assert.match(job.detail!, /checked 1/)
         assert.ok(job.finishedAt)
-    }
-)
+    })
+}
 
 it('serializes starts, recovers stale jobs and aborts and drains running jobs on stop', async () => {
     const store = createJobStore()

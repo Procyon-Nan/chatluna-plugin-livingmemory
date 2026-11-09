@@ -120,7 +120,6 @@ export class LivingMemoryExtractor {
         }
     }
 
-    /** v1 通过 `createChatModel` 的返回值判定模型可用；v2 以解析模型地址的结果为准。 */
     private async isModelAvailable() {
         try {
             await this.ctx.ai.chat(this.mainModel).bind()

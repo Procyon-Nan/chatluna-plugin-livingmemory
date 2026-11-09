@@ -60,7 +60,6 @@ export const createSearchMemoryTool = (
                 { ...input, memoryTypes: ['all'], memoryStatus: 'active' },
                 conversationId
             )
-            // 模型看到的是渲染后的记忆文本，与 v1 的工具输出一致。
             return formatResults(results, includeMemoryIds)
         }
     })

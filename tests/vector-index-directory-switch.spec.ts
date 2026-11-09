@@ -44,7 +44,7 @@ it(
                 embeddingModelId: 'model-a',
                 dimension: 3,
                 storageEngine: 'pglite-pgvector',
-                vectorExtensionVersion: '0.8.1',
+                vectorExtensionVersion: '0.8.7',
                 generation: 'windows-switch',
                 builtAt: Date.now()
             })

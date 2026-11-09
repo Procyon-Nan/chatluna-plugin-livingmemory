@@ -67,15 +67,6 @@ it('reads the preset from the agent options', () => {
     assert.match(describeLivingMemoryToolScopeFailure('missing-preset'), /Missing preset/u)
 })
 
-it('uses the resolved preset id for character sessions', () => {
-    // v2 的 Character 引擎把预设记录自身的 id 写进 Agent options，
-    // 不再需要 v1 的「（Character）」后缀拼接。
-    assert.deepEqual(resolveToolMemoryPresetId(agent({ presetId: 'surtur' })), {
-        ok: true,
-        presetId: 'surtur'
-    })
-})
-
 it('rebuilds the whole scope from the agent options', () => {
     assert.deepEqual(
         resolveToolMemoryScope(

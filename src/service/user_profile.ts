@@ -207,7 +207,7 @@ export class LivingMemoryUserProfileService {
         }
 
         const assistantLabel = resolvePresetAssistantLabel(this.ctx, presetId)
-        // 与 v1 一致：主模型不可用时整次生成失败，不逐个说话者记失败。
+        // 主模型不可用时整次生成失败，不逐个说话者记录失败。
         await this.ctx.ai.chat(this.config.mainModel).bind()
         signal.throwIfAborted()
         const presetPrompt =

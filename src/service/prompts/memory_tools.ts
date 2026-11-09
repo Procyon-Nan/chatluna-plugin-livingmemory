@@ -8,9 +8,7 @@ export const snapshotMaxLineLength = 100
 /**
  * 工具的模型可见契约：名称、描述与参数 schema。
  *
- * v2 的 `schemasteryToJsonSchemaNode` 不输出字段 `description`，因此每个工具
- * 的字段说明都并入 `description`（见 `doc/framework-requirements.md` 第 7 项）。
- * `withParameterDocs` 把参数说明逐项接在工具描述之后。
+ * 框架生成的 JSON Schema 省略字段说明，withParameterDocs 将它们附在工具描述中。
  */
 export interface LivingMemoryToolDoc<T = any> {
     name: string

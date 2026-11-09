@@ -283,7 +283,7 @@ describe('planExtractionChunks', () => {
             10,
             false
         )
-        expect(chunks.map((chunk) => chunk.length)).toEqual([6])
+        assert.deepEqual(chunks.map((chunk) => chunk.length), [6])
     })
 
     it('treats an assistant-only leading segment as one exchange', () => {
@@ -293,7 +293,7 @@ describe('planExtractionChunks', () => {
             10,
             false
         )
-        expect(chunks.map((chunk) => chunk.length)).toEqual([4])
+        assert.deepEqual(chunks.map((chunk) => chunk.length), [4])
     })
 
     it('keeps an orphan assistant run beyond the window as an exchange', () => {
@@ -312,13 +312,13 @@ describe('planExtractionChunks', () => {
             2,
             false
         )
-        expect(chunks.map((chunk) => chunk.length)).toEqual([2, 4])
-        expect(chunks[0].map((e) => e.content)).toEqual([
+        assert.deepEqual(chunks.map((chunk) => chunk.length), [2, 4])
+        assert.deepEqual(chunks[0].map((e) => e.content), [
             'assistant-0',
             'assistant-1'
         ])
-        expect(chunks[1][0].content).toBe('user-4')
-        expect(chunks.flat().map((e) => e.content)).not.toContain('user-2')
+        assert.equal(chunks[1][0].content, 'user-4')
+        assert.ok(!chunks.flat().map((e) => e.content).includes('user-2'))
     })
 
     it('merges the exchange containing the window cut into one fuzzy chunk', () => {
@@ -327,8 +327,8 @@ describe('planExtractionChunks', () => {
             3,
             false
         )
-        expect(chunks.map((chunk) => chunk.length)).toEqual([4])
-        expect(chunks[0].map((e) => e.content)).toEqual([
+        assert.deepEqual(chunks.map((chunk) => chunk.length), [4])
+        assert.deepEqual(chunks[0].map((e) => e.content), [
             'user-0',
             'assistant-1',
             'user-2',
@@ -341,10 +341,10 @@ describe('planExtractionChunks', () => {
         roles.push('assistant')
         const chunks = planExtractionChunks(log(roles), 30, false)
         // 段长 51、交流 2 条：核心＝交流＋窗口＝32，其余闲聊丢弃
-        expect(chunks).toHaveLength(1)
-        expect(chunks[0]).toHaveLength(32)
-        expect(chunks[0][0].content).toBe('user-19')
-        expect(chunks[0][31].role).toBe('assistant')
+        assert.equal(chunks.length, 1)
+        assert.equal(chunks[0].length, 32)
+        assert.equal(chunks[0][0].content, 'user-19')
+        assert.equal(chunks[0][31].role, 'assistant')
     })
 
     it('keeps an exchange plus one window of context beyond the absorb budget', () => {
@@ -354,10 +354,10 @@ describe('planExtractionChunks', () => {
             roles.push('assistant')
         }
         const chunks = planExtractionChunks(log(roles), 30, false)
-        expect(chunks).toHaveLength(1)
-        expect(chunks[0]).toHaveLength(71)
-        expect(chunks[0][0].content).toBe('user-10')
-        expect(chunks[0][70].role).toBe('assistant')
+        assert.equal(chunks.length, 1)
+        assert.equal(chunks[0].length, 71)
+        assert.equal(chunks[0][0].content, 'user-10')
+        assert.equal(chunks[0][70].role, 'assistant')
     })
 
     it('keeps beyond-window exchanges but drops their chitchat in anchored mode', () => {
@@ -375,16 +375,16 @@ describe('planExtractionChunks', () => {
         }
         roles.push('assistant')
         const chunks = planExtractionChunks(log(roles), 6, false)
-        expect(chunks.map((chunk) => chunk.length)).toEqual([2, 8])
-        expect(chunks[0].map((e) => e.content)).toEqual([
+        assert.deepEqual(chunks.map((chunk) => chunk.length), [2, 8])
+        assert.deepEqual(chunks[0].map((e) => e.content), [
             'user-10',
             'assistant-11'
         ])
-        expect(chunks[1][0].content).toBe('user-22')
-        expect(chunks[1].map((e) => e.content)).toContain('user-24')
-        expect(chunks[1][7].content).toBe('assistant-29')
-        expect(chunks.flat().map((e) => e.content)).not.toContain('user-0')
-        expect(chunks.flat().map((e) => e.content)).not.toContain('user-12')
+        assert.equal(chunks[1][0].content, 'user-22')
+        assert.ok(chunks[1].map((e) => e.content).includes('user-24'))
+        assert.equal(chunks[1][7].content, 'assistant-29')
+        assert.ok(!chunks.flat().map((e) => e.content).includes('user-0'))
+        assert.ok(!chunks.flat().map((e) => e.content).includes('user-12'))
     })
 
     it('keeps a segment within the absorb budget whole in overheard mode', () => {
@@ -394,7 +394,7 @@ describe('planExtractionChunks', () => {
             5,
             true
         )
-        expect(chunks.map((chunk) => chunk.length)).toEqual([6])
+        assert.deepEqual(chunks.map((chunk) => chunk.length), [6])
     })
 
     it('splits an over-budget segment preferring assistant boundaries in overheard mode', () => {
@@ -412,8 +412,8 @@ describe('planExtractionChunks', () => {
             4,
             true
         )
-        expect(chunks.map((chunk) => chunk.length)).toEqual([6, 1])
-        expect(chunks[0][chunks[0].length - 1].role).toBe('assistant')
+        assert.deepEqual(chunks.map((chunk) => chunk.length), [6, 1])
+        assert.equal(chunks[0][chunks[0].length - 1].role, 'assistant')
     })
 
     it('splits pure-chatter stretches at the absorb budget in overheard mode', () => {
@@ -432,8 +432,8 @@ describe('planExtractionChunks', () => {
             3,
             true
         )
-        expect(chunks.map((chunk) => chunk.length)).toEqual([4, 4])
-        expect(chunks[chunks.length - 1][3].role).toBe('assistant')
+        assert.deepEqual(chunks.map((chunk) => chunk.length), [4, 4])
+        assert.equal(chunks[chunks.length - 1][3].role, 'assistant')
     })
 
     it('absorbs whole segments tail-anchored in overheard mode', () => {
@@ -450,16 +450,15 @@ describe('planExtractionChunks', () => {
             4,
             true
         )
-        expect(chunks.map((chunk) => chunk.length)).toEqual([6])
-        expect(chunks[0][0].content).toBe('user-0')
-        expect(chunks[0][5].content).toBe('assistant-5')
+        assert.deepEqual(chunks.map((chunk) => chunk.length), [6])
+        assert.equal(chunks[0][0].content, 'user-0')
+        assert.equal(chunks[0][5].content, 'assistant-5')
     })
 })
 
 describe('LivingMemoryExtractionCoordinator', () => {
-    it.each([false, true])(
-        'extracts at the threshold with overheard=%s',
-        async (includeOverheard) => {
+    for (const includeOverheard of [false, true]) {
+        it(`extracts at the threshold with overheard=${includeOverheard}`, async () => {
             const harness = createHarness({ window: 4, includeOverheard })
             const initialCursor = includeOverheard
                 ? harness.messageLog.captureCursor()
@@ -471,7 +470,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
                 entry(role, '回答')
             ])
             await queueExtraction(harness, initialCursor)
-            expect(harness.getExtractorCalls()).toBe(0)
+            assert.equal(harness.getExtractorCalls(), 0)
 
             harness.messageLog.append(scope.conversationId, [
                 entry('user', '追问'),
@@ -482,10 +481,10 @@ describe('LivingMemoryExtractionCoordinator', () => {
                 () => harness.getExtractorCalls() === 1,
                 'drain settle'
             )
-            expect(harness.getExtractorInputs()[0]).toContain('问题')
-            expect(harness.getExtractorInputs()[0]).toContain('补充')
-        }
-    )
+            assert.ok(harness.getExtractorInputs()[0].includes('问题'))
+            assert.ok(harness.getExtractorInputs()[0].includes('补充'))
+        })
+    }
 
     it('skips extraction entirely when the window is zero', async () => {
         const harness = createHarness({ window: 0 })
@@ -496,7 +495,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
         ])
         await queueExtraction(harness)
         await settleDrain()
-        expect(harness.getExtractorCalls()).toBe(0)
+        assert.equal(harness.getExtractorCalls(), 0)
     })
 
     it('initializes the cold cursor at the current tail without dumping history', async () => {
@@ -507,7 +506,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
         ])
         // 首个 after-chat：游标落在当时末尾，不回溯提取
         await queueExtraction(harness)
-        expect(harness.getExtractorCalls()).toBe(0)
+        assert.equal(harness.getExtractorCalls(), 0)
 
         harness.messageLog.append(scope.conversationId, [
             entry('user', '新消息'),
@@ -518,7 +517,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
             () => harness.getExtractorCalls() === 1,
             'post-init drain'
         )
-        expect(harness.getExtractorInputs()[0]).not.toContain('旧消息')
+        assert.ok(!harness.getExtractorInputs()[0].includes('旧消息'))
     })
 
     it('leaves an assistant-less tail unconsumed for the next drain', async () => {
@@ -531,8 +530,8 @@ describe('LivingMemoryExtractionCoordinator', () => {
         ])
         await queueExtraction(harness)
         await waitFor(() => harness.getExtractorCalls() === 1, 'drain segment')
-        expect(harness.getExtractorInputs()[0]).toContain('问题')
-        expect(harness.getExtractorInputs()[0]).not.toContain('只有闲聊')
+        assert.ok(harness.getExtractorInputs()[0].includes('问题'))
+        assert.ok(!harness.getExtractorInputs()[0].includes('只有闲聊'))
 
         // 追加闲聊不闭合段：不消费
         harness.messageLog.append(scope.conversationId, [
@@ -540,7 +539,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
         ])
         await queueExtraction(harness)
         await settleDrain()
-        expect(harness.getExtractorCalls()).toBe(1)
+        assert.equal(harness.getExtractorCalls(), 1)
     })
 
     it('absorbs a sub-half-window overshoot into one fuzzy chunk', async () => {
@@ -557,8 +556,8 @@ describe('LivingMemoryExtractionCoordinator', () => {
         await queueExtraction(harness)
         await waitFor(() => harness.getExtractorCalls() === 1, 'fuzzy chunk')
         // 三段共 6 条 > 窗口 4，但盈余 2 ≤ 半窗 2：并入同块，最新交换带上下文
-        expect(harness.getExtractorInputs()[0]).toContain('q1')
-        expect(harness.getExtractorInputs()[0]).toContain('q3')
+        assert.ok(harness.getExtractorInputs()[0].includes('q1'))
+        assert.ok(harness.getExtractorInputs()[0].includes('q3'))
     })
 
     it('splits whole-exchange chunks only when the remainder exceeds half the window', async () => {
@@ -575,8 +574,8 @@ describe('LivingMemoryExtractionCoordinator', () => {
         await queueExtraction(harness)
         await waitFor(() => harness.getExtractorCalls() === 3, 'three chunks')
         // 窗口 2、半窗 1：每段 2 条，盈余 2 > 1 才允许独立成块，段不腰斩
-        expect(harness.getExtractorInputs()[0]).toContain('q1')
-        expect(harness.getExtractorInputs()[2]).toContain('q3')
+        assert.ok(harness.getExtractorInputs()[0].includes('q1'))
+        assert.ok(harness.getExtractorInputs()[2].includes('q3'))
     })
 
     it('retries a failing chunk and abandons it after three failures', async () => {
@@ -604,7 +603,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
         await waitFor(() => harness.warnings.length === 1, 'first failure')
         await queueExtraction(harness)
         await waitFor(() => harness.warnings.length === 2, 'second failure')
-        expect(harness.jobStore.jobs).toHaveLength(0)
+        assert.equal(harness.jobStore.jobs.length, 0)
 
         // 第三次失败达到上限：块 1 记任务放弃，同次排干继续块 2 并成功
         await queueExtraction(harness)
@@ -612,9 +611,9 @@ describe('LivingMemoryExtractionCoordinator', () => {
             () => harness.getExtractorCalls() === 4,
             'abandon and next'
         )
-        expect(harness.jobStore.jobs).toHaveLength(1)
-        expect(harness.getExtractorInputs()[0]).toContain('q1')
-        expect(harness.getExtractorInputs()[3]).toContain('q2')
+        assert.equal(harness.jobStore.jobs.length, 1)
+        assert.ok(harness.getExtractorInputs()[0].includes('q1'))
+        assert.ok(harness.getExtractorInputs()[3].includes('q2'))
     })
 
     it('retries exactly the failed batch when new messages arrive before retry', async () => {
@@ -699,13 +698,13 @@ describe('LivingMemoryExtractionCoordinator', () => {
         await queueExtraction(harness)
 
         await waitFor(() => harness.appended.length === 1, 'memory written')
-        expect(harness.appended[0].extracted).toHaveLength(1)
+        assert.equal(harness.appended[0].extracted.length, 1)
         await waitFor(
             () => harness.queued.length === 1,
             'post-extraction task queued'
         )
-        expect(harness.queued).toEqual([['extracted-0']])
-        expect(harness.jobStore.jobs).toHaveLength(0)
+        assert.deepEqual(harness.queued, [['extracted-0']])
+        assert.equal(harness.jobStore.jobs.length, 0)
     })
 
     it('submits window speakers with extracted memories for registry coverage', async () => {
@@ -726,10 +725,8 @@ describe('LivingMemoryExtractionCoordinator', () => {
         await queueExtraction(harness)
 
         await waitFor(() => harness.appended.length === 1, 'memory written')
-        expect(harness.appended[0].scope.presetId).toBe(scope.presetId)
-        expect(harness.appended[0].windowSpeakers).toEqual([
-            expect.objectContaining({ speakerLabel: '用户A' })
-        ])
+        assert.equal(harness.appended[0].scope.presetId, scope.presetId)
+        assert.deepEqual(harness.appended[0].windowSpeakers.map((speaker) => speaker.speakerLabel), ['用户A'])
     })
 
     it('skips speaker registration when no memories are extracted', async () => {
@@ -772,11 +769,9 @@ describe('LivingMemoryExtractionCoordinator', () => {
         await queueExtraction(harness)
         await waitFor(() => harness.appended.length === 1, 'memory written')
 
-        expect(harness.getExtractorCalls()).toBe(2)
-        expect(harness.appended).toHaveLength(1)
-        expect(harness.appended[0].windowSpeakers).toEqual([
-            expect.objectContaining({ speakerLabel: '用户B' })
-        ])
+        assert.equal(harness.getExtractorCalls(), 2)
+        assert.equal(harness.appended.length, 1)
+        assert.deepEqual(harness.appended[0].windowSpeakers.map((speaker) => speaker.speakerLabel), ['用户B'])
     })
 
     it('records a failed job and consumes the chunk on parse errors', async () => {
@@ -794,12 +789,12 @@ describe('LivingMemoryExtractionCoordinator', () => {
         ])
         await queueExtraction(harness)
         await waitFor(() => harness.jobStore.jobs.length === 1, 'parse job')
-        expect(harness.getExtractorCalls()).toBe(1)
+        assert.equal(harness.getExtractorCalls(), 1)
 
         // 解析失败视为该块已消费，不重试
         await queueExtraction(harness)
         await settleDrain()
-        expect(harness.getExtractorCalls()).toBe(1)
+        assert.equal(harness.getExtractorCalls(), 1)
     })
 
     it('clears scope state by conversation', async () => {
@@ -809,7 +804,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
             entry('assistant', 'a')
         ])
         await queueExtraction(harness)
-        expect(harness.getExtractorCalls()).toBe(0)
+        assert.equal(harness.getExtractorCalls(), 0)
 
         harness.coordinator.clearByConversation(scope.conversationId)
         harness.messageLog.append(scope.conversationId, [
@@ -819,7 +814,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
         await queueExtraction(harness)
         // 清空后游标重置为当前末尾，重新起算
         await settleDrain()
-        expect(harness.getExtractorCalls()).toBe(0)
+        assert.equal(harness.getExtractorCalls(), 0)
     })
 
     it('retries an unavailable history head without keeping a rejected initializer', async () => {
@@ -833,12 +828,12 @@ describe('LivingMemoryExtractionCoordinator', () => {
         fail = false
         await queueExtraction(harness)
         await settleDrain()
-        expect(harness.getExtractorCalls()).toBe(0)
+        assert.equal(harness.getExtractorCalls(), 0)
         harness.messageLog.append(scope.conversationId, [entry('user', 'new-q'), entry('assistant', 'new-a')])
         await queueExtraction(harness)
         await waitFor(() => harness.getExtractorCalls() === 1, 'history retry')
-        expect(harness.getExtractorInputs()[0]).toContain('new-q')
-        expect(harness.getExtractorInputs()[0]).not.toContain('old-q')
+        assert.ok(harness.getExtractorInputs()[0].includes('new-q'))
+        assert.ok(!harness.getExtractorInputs()[0].includes('old-q'))
     })
 
     it('stops a running drain whose scope state was cleared mid-run', async () => {
@@ -871,9 +866,9 @@ describe('LivingMemoryExtractionCoordinator', () => {
         await new Promise((resolve) => setTimeout(resolve, 20))
 
         // 旧排干只完成在途块，不再消费新纪元消息
-        expect(harness.getExtractorCalls()).toBe(1)
-        expect(harness.getExtractorInputs()[0]).toContain('q')
-        expect(harness.getExtractorInputs()[0]).not.toContain('new-q')
+        assert.equal(harness.getExtractorCalls(), 1)
+        assert.ok(harness.getExtractorInputs()[0].includes('q'))
+        assert.ok(!harness.getExtractorInputs()[0].includes('new-q'))
     })
 
     it('cancels an in-flight drain without recording a failed job or committing memories', async () => {
@@ -901,13 +896,13 @@ describe('LivingMemoryExtractionCoordinator', () => {
         ])
         await queueExtraction(harness)
         await waitFor(() => harness.getExtractorCalls() === 1, 'drain started')
-        expect(harness.getExtractorSignal()?.aborted).toBe(false)
+        assert.equal(harness.getExtractorSignal()?.aborted, false)
 
         await harness.coordinator.stop()
 
         // 取消不写失败任务、不提交记忆
-        expect(harness.jobStore.jobs).toEqual([])
-        expect(harness.appended).toEqual([])
+        assert.deepEqual(harness.jobStore.jobs, [])
+        assert.deepEqual(harness.appended, [])
 
         // 停止后不再接收新触发
         harness.messageLog.append(scope.conversationId, [
@@ -918,7 +913,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
         ])
         await queueExtraction(harness)
         await new Promise((resolve) => setTimeout(resolve, 20))
-        expect(harness.getExtractorCalls()).toBe(1)
+        assert.equal(harness.getExtractorCalls(), 1)
     })
 })
 

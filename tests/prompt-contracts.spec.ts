@@ -127,7 +127,6 @@ it('keeps memory field rules in tool schemas without prompt duplication', () => 
     }).systemPrompt
     const dream = buildDreamSystemPrompt('助手', '你是测试助手。')
 
-    // schemastery 把字段说明放在 `meta.description`，子字段在 `dict` 上，对应 v1 的 `.describe()` 与 `.shape`。
     const memoryFields = generatedMemorySchema.dict
     const schemaDescriptions = [
         generatedMemorySchema.meta.description,

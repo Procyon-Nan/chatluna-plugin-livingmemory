@@ -130,11 +130,6 @@ const formatBlock = (block: LivingMemoryLogBlock) => {
     return lines.join('\n')
 }
 
-/**
- * 诊断日志。cordis 的 Logger 每行有长度上限且不提供解除入口，v1 用
- * `Logger.targets` 临时放宽的逻辑不再成立；这里把整条消息作为单个参数
- * 输出，格式与 v1 保持一致。
- */
 export class LivingMemoryLogger {
     constructor(
         private readonly sink: LivingMemoryLogSink,

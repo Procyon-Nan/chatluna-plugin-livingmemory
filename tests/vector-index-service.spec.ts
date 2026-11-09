@@ -131,11 +131,6 @@ const createVector = (text: string, dimension: number) => {
     return vector
 }
 
-/**
- * v1 的 `createEmbeddings` 返回 langchain Embeddings 实例；v2 的调用方直接走
- * `ctx.chatluna.embed`。这里按同样的时序给出替身：数组入参对应文档（含维度探针），
- * 字符串入参对应查询。
- */
 const createEmbeddings = (
     dimension: number,
     calls: string[][],
@@ -227,10 +222,6 @@ const createService = (options: {
     )
 }
 
-/**
- * v1 由 `ctx.baseDir` 推导 `data/chatluna/living-memory`；v2 从 `CHATLUNA_DATA`
- * 解析数据目录。测试为每个临时目录单独设置该变量，索引路径与 v1 一致。
- */
 const withTemporaryDirectory = async (
     callback: (baseDir: string) => Promise<void>
 ) => {
@@ -254,8 +245,6 @@ const withTemporaryDirectory = async (
 const resolveIndexDirectory = (baseDir: string) =>
     resolve(baseDir, 'data', 'chatluna', 'living-memory')
 
-// v1 里等待的是 ChatLuna 平台加载；v2 的 `ctx.chatluna.embed` 内部完成平台解析，
-// 插件侧保留的行为是初始化必须等到向量可用后才进入就绪。
 it('stays in building until the embedding provider resolves', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         let releaseEmbed: (() => void) | undefined
@@ -486,8 +475,7 @@ it('clears orphaned preset state rows during startup reconcile', async () => {
         await first.waitForInitialization()
         await first.stop()
 
-        // 模拟历史残留：既无 DB 条目也无索引文档、只剩状态行的 building 孤儿。
-        // 旧版本可直接落盘 building，现行协议输入已收窄为终态，故经 PGlite 直写。
+        // 没有记忆和向量文档的预设仍有一条 dirty 状态记录。
         const indexDirectory = resolveIndexDirectory(baseDir)
         const database = new PGlite(
             resolve(indexDirectory, 'vector-index.pglite')
@@ -496,7 +484,7 @@ it('clears orphaned preset state rows during startup reconcile', async () => {
             `INSERT INTO lm_index_preset_state (
                 preset_id, state, expected_count, indexed_count,
                 last_error, updated_at
-            ) VALUES ('ghost-preset', 'building', 0, 0, NULL, $1)`,
+            ) VALUES ('ghost-preset', 'dirty', 0, 0, NULL, $1)`,
             [Date.now()]
         )
         await database.close()
@@ -707,6 +695,42 @@ it('rolls back to the previous index when the candidate worker cannot open', asy
         await recovered.stop()
     })
 }, 120_000)
+
+it('rebuilds memories with the bundled pgvector version when the installed extension differs', async () => {
+    await withTemporaryDirectory(async (baseDir) => {
+        const repository = new TestVectorIndexRepository([createSource('memory-a')])
+        const options = { repository, modelId: 'embedding', dimension: 3 }
+        const first = createService(options)
+        await first.start()
+        await first.waitForInitialization()
+        const manifest = first.getStatus().manifest!
+        await first.stop()
+
+        const database = new PGlite(resolve(resolveIndexDirectory(baseDir), 'vector-index.pglite'))
+        try {
+            await database.exec(`
+                UPDATE pg_extension SET extversion = '0.8.1' WHERE extname = 'vector';
+                UPDATE lm_index_manifest SET vector_extension_version = '0.8.1';
+            `)
+        } finally {
+            await database.close()
+        }
+
+        const second = createService(options)
+        try {
+            await second.start()
+            await second.waitForInitialization()
+            const status = second.getStatus()
+            assert.equal(status.state, 'ready', status.lastError ?? undefined)
+            assert.notEqual(status.manifest?.generation, manifest.generation)
+            assert.equal(status.manifest?.vectorExtensionVersion, manifest.vectorExtensionVersion)
+            const snapshot = await second.readVectorSnapshot('preset-a', ['memory-a'])
+            assert.deepEqual(snapshot.items.map(item => item.memoryId), ['memory-a'])
+        } finally {
+            await second.stop()
+        }
+    })
+})
 
 it('rebuilds when the model, dimension, or schema version changes', async () => {
     await withTemporaryDirectory(async (baseDir) => {

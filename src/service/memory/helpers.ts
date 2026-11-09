@@ -27,10 +27,6 @@ export const resolveScopeAssistantLabel = (
     scope: Pick<MemoryScope, 'presetLabel' | 'presetId'>
 ): string => scope.presetLabel?.trim() || scope.presetId
 
-/**
- * 按预设 id 取展示名。v2 的 Character 引擎直接以其预设 id 运行，预设的展示名
- * 就是角色名，不再需要 v1 的「（Character）」后缀裁剪。
- */
 export const resolvePresetAssistantLabel = (
     ctx: Context,
     presetId: string
@@ -39,9 +35,6 @@ export const resolvePresetAssistantLabel = (
 /**
  * 取预设 system 部分的未渲染原文，作为人设卡片的删减来源。不经模板渲染器、
  * 不取任何变量值：system 部分应为固定人设，写入其中的占位符原样保留。
- *
- * v1 直接读 ChatLuna 预设的 system 消息原文；v2 的预设在 `ctx.presets` 里按
- * kind 组织成提示块，这里取 system 区中角色为 system 的块，按 order 拼接。
  */
 export const resolvePresetPrompt = async (
     ctx: Context,

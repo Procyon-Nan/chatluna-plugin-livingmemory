@@ -1,6 +1,6 @@
 {
     "name": "chatluna-plugin-livingmemory",
-    "version": "0.0.0",
+    "version": "0.0.1",
     "description": "ChatLuna plugin livingmemory",
     "type": "module",
     "engines": {

@@ -21,10 +21,6 @@ import type {
 import type { MemoryVectorIndexManifest } from '../src/contracts/vector_index.ts'
 import { LivingMemoryVectorIndexDatabase } from '../src/service/vector_index/worker/database.ts'
 import { startVectorIndexWorker } from '../src/service/vector_index/worker/runtime.ts'
-import {
-    createVectorIndexSchema,
-    upgradeVectorIndexSchema
-} from '../src/service/vector_index/worker/schema.ts'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client.ts'
 import type {
     VectorIndexDocument,
@@ -557,95 +553,6 @@ it('closes the worker port when database disposal fails', async () => {
     assert.equal(response.error.message, disposeError.message)
 })
 
-for (const fail of [false, true]) {
-    it(`preserves the database and cold backup during extension migration (fail=${fail})`, async () => {
-        const name = `extension-migration-${fail}`
-        const formalPath = resolve(temporaryDirectory, name)
-        const manifest = {
-            ...createManifest(),
-            vectorExtensionVersion: '0.8.1'
-        }
-        const seed = await PGlite.create(formalPath, { extensions: { vector } })
-        try {
-            await seed.exec('CREATE EXTENSION vector')
-            await createVectorIndexSchema(seed, manifest)
-            // 模拟旧版本元数据以覆盖升级事务；旧二进制目录兼容性纳入发布验收。
-            await seed.exec(`
-            UPDATE pg_extension SET extversion = '0.8.1' WHERE extname = 'vector';
-            INSERT INTO lm_index_memory VALUES (
-                'retained', 'preset-a', NULL, 'active', 'fact',
-                'content-retained', 'keywords', 0, '[1,2,3]'
-            );
-        `)
-            if (fail) {
-                await seed.exec(`ALTER TABLE lm_index_manifest ADD CONSTRAINT fail_upgrade
-                CHECK (vector_extension_version = '0.8.1')`)
-            }
-        } finally {
-            await seed.close()
-        }
-        const client = new LivingMemoryVectorIndexWorkerClient(workerPath)
-        try {
-            const opening = client.open(formalPath, `${formalPath}.previous`)
-            if (fail) {
-                await assert.rejects(opening, {
-                    code: 'extension-migration-failed'
-                })
-            } else {
-                const inspection = await opening
-                assert.equal(inspection.vectorExtensionVersion, '0.8.7')
-                assert.deepEqual(inspection.manifest, {
-                    ...manifest,
-                    vectorExtensionVersion: '0.8.7'
-                })
-                const vectors = await client.readVectorSnapshot('preset-a', [
-                    'retained'
-                ])
-                assert.deepEqual([...vectors.items[0].vector], [1, 2, 3])
-                assert.equal(vectors.items[0].contentHash, 'content-retained')
-            }
-        } finally {
-            await client.dispose()
-        }
-        const directories = await readdir(temporaryDirectory)
-        assert.equal(
-            directories.some((item) => item.startsWith(`${name}.failed-`)),
-            false
-        )
-        const backup = directories.find((item) =>
-            item.startsWith(`${name}.vector-0.8.1-backup-`)
-        )!
-        assert.ok(backup)
-        for (const path of [formalPath, resolve(temporaryDirectory, backup)]) {
-            const stored = await PGlite.create(path, { extensions: { vector } })
-            try {
-                const expectedVersion =
-                    fail || path !== formalPath ? '0.8.1' : '0.8.7'
-                const extension = await stored.query<{ extversion: string }>(
-                    "SELECT extversion FROM pg_extension WHERE extname = 'vector'"
-                )
-                assert.equal(extension.rows[0].extversion, expectedVersion)
-                const row = await stored.query<{
-                    generation: string
-                    version: string
-                }>(
-                    'SELECT generation, vector_extension_version AS version FROM lm_index_manifest'
-                )
-                assert.deepEqual(row.rows[0], {
-                    generation: manifest.generation,
-                    version: expectedVersion
-                })
-                const vectorRow = await stored.query<{ embedding: string }>(
-                    'SELECT embedding::text AS embedding FROM lm_index_memory'
-                )
-                assert.equal(vectorRow.rows[0].embedding, '[1,2,3]')
-            } finally {
-                await stored.close()
-            }
-        }
-    }, 60_000)
-}
-
 it('rejects pending requests when the worker cannot start', async () => {
     const client = new LivingMemoryVectorIndexWorkerClient(
         resolve(temporaryDirectory, 'missing-worker.mjs')
@@ -658,62 +565,3 @@ it('rejects pending requests when the worker cannot start', async () => {
         /Cannot find module|cannot find module/
     )
 })
-
-for (const version of [3, 4]) {
-    it(`upgrades index schema v${version} without replacing vectors or HNSW`, async () => {
-        const database = await PGlite.create({ extensions: { vector } })
-        try {
-            await database.exec('CREATE EXTENSION vector')
-            await createVectorIndexSchema(database, createManifest())
-            await database.exec(`
-            ALTER TABLE lm_index_memory ADD COLUMN is_consolidated boolean NOT NULL DEFAULT false;
-            DROP INDEX lm_index_memory_preset_filter;
-            CREATE INDEX lm_index_memory_preset_filter
-            ON lm_index_memory (preset_id, status, type, is_consolidated);
-            CREATE INDEX lm_index_memory_consolidated_filter
-            ON lm_index_memory (preset_id, status) WHERE is_consolidated = true;
-            CREATE INDEX upgrade_hnsw ON lm_index_memory USING hnsw (embedding vector_cosine_ops);
-            INSERT INTO lm_index_memory (
-                memory_id, preset_id, status, type, content_hash, keywords_hash, updated_at, embedding
-            ) VALUES ('memory', 'preset', 'active', 'fact', 'content', 'keywords', 1, '[1,0,0]');
-        `)
-            if (version === 3) {
-                await database.exec(`
-                DROP INDEX lm_index_memory_conversation_filter;
-                ALTER TABLE lm_index_memory DROP COLUMN source_conversation_id;
-            `)
-            }
-            await database.query(
-                'UPDATE lm_index_manifest SET schema_version = $1',
-                [version]
-            )
-            const before = await database.query(
-                "SELECT oid FROM pg_class WHERE relname = 'upgrade_hnsw'"
-            )
-            assert.deepEqual(await upgradeVectorIndexSchema(database), {
-                schemaVersion: 5
-            })
-            const after = await database.query(
-                "SELECT oid FROM pg_class WHERE relname = 'upgrade_hnsw'"
-            )
-            assert.deepEqual(after.rows, before.rows)
-            const entries = await database.query(
-                'SELECT embedding::text AS embedding, source_conversation_id FROM lm_index_memory'
-            )
-            assert.deepEqual(entries.rows, [
-                { embedding: '[1,0,0]', source_conversation_id: null }
-            ])
-            const columns = await database.query<{ column_name: string }>(
-                "SELECT column_name FROM information_schema.columns WHERE table_name = 'lm_index_memory'"
-            )
-            assert.equal(
-                columns.rows.some(
-                    (column) => column.column_name === 'is_consolidated'
-                ),
-                false
-            )
-        } finally {
-            await database.close()
-        }
-    })
-}

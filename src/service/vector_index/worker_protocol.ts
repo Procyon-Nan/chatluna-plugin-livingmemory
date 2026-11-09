@@ -27,6 +27,7 @@ export interface VectorIndexPresetStateMark {
 }
 
 export interface VectorIndexInspection {
+    availableVectorExtensionVersion: string
     vectorExtensionVersion: string
     manifest: MemoryVectorIndexManifest | null
     indexedCount: number
@@ -121,10 +122,6 @@ export interface VectorIndexWorkerCommandMap {
     inspect: {
         input: Record<never, never>
         result: VectorIndexInspection
-    }
-    upgradeSchema: {
-        input: Record<never, never>
-        result: { schemaVersion: number }
     }
     queryHybrid: {
         input: VectorIndexHybridQuery

@@ -6,11 +6,11 @@ English | [中文](2026-11-07-standalone-memory.zh.md)
 
 ## Problem
 
-LivingMemory already owns automatic extraction, Dream, profiles and legacy imports. Making it a native memory backend introduced a second owner for scheduling and task presentation, and disabling native memory prevented the plugin from loading. The conversation rules and chat history are the parts that need to be shared.
+LivingMemory schedules extraction, Dream and profile generation. These tasks need to run independently of native memory while sharing the framework’s conversation rules and chat history.
 
 ## Decision
 
-LivingMemory starts, stops, stores data and schedules its own work. Its task page subscribes to its repository and retains partially completed Dream results. Both plugins may run at the same time and process their own memories. This replaces D01 in the [migration plan](../../../../doc/migration-plan.md) and the backend entry point in the [v1 behavior proposal](../../proposed/architecture/2026-11-04-v1-behavior-preservation.md) and [extraction window proposal](../../proposed/architecture/2026-11-03-extraction-window-and-chunking.md); their business rules still apply.
+LivingMemory starts, stops, stores data and schedules its own work. Its task page subscribes to its repository and retains partially completed Dream results. Both plugins may run at the same time and process their own memories.
 
 The framework owns the `livingmemory` conversation rule section. Group chats match by platform, bot and guild or channel; direct chats match by their conversation address. Everyone at the same address shares the settings for recall, isolation, injection, extraction windows, overheard messages and post-extraction Dream. Models, tool registration and profile generation belong to the instance. Rules govern how a trigger is handled; the [official observer](2026-11-07-official-observer-window.md) still provides shared channel history. The sender, mentions and message text do not participate in this match.
 
@@ -22,4 +22,4 @@ The framework owns the `livingmemory` conversation rule section. Group chats mat
 
 ## Consequences
 
-A conversation with an extraction interval of zero skips automatic extraction. To enable it only in selected chats, set the global interval to zero and override it for those chats. Replies and batches already submitted to the extractor retain their trigger settings; subsequent triggers use the new rules. Routing tests cover inheritance and live changes, and repository and WebUI tests cover job notifications and partial results. Cross-engine acceptance on a real platform with models is tracked in the [stage checklist](../../../../doc/migration-stages.md).
+A conversation with an extraction interval of zero skips automatic extraction. To enable it only in selected chats, set the global interval to zero and override it for those chats. Replies and batches already submitted to the extractor retain their trigger settings; subsequent triggers use the new rules. Routing tests cover inheritance and live changes, and repository and WebUI tests cover job notifications and partial results.

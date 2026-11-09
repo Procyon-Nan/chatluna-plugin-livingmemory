@@ -38,8 +38,7 @@ interface DreamSessionToolDependencies {
 }
 
 /**
- * Dream 会话工具。与 v1 一致，作用域与批次状态由闭包带入；工具不经过 v2 的
- * 工具服务，因此不依赖 Agent 层，也不出现在任何工具的可见清单里。
+ * 这些工具只在当前 Dream 批次内使用，不注册到对话 Agent。
  */
 export const createDreamSessionTools = ({
     presetId,

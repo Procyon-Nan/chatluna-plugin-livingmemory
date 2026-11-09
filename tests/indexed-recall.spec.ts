@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import type { Context } from 'koishi'
+import type { Context } from 'cordis'
 import type { MemoryEntryRecord } from '../src/contracts/memory.ts'
 import type {
     MemoryHybridSearchHit,
@@ -52,7 +52,7 @@ const createHit = (
     boostedScore
 })
 
-/** v2 的 rerank 逐条查询调用，返回与 documents 同序的分数。 */
+/** rerank 逐条查询调用，返回与 documents 同序的分数。 */
 const createRerankerContext = (
     rerank: (query: string, documents: string[]) => Promise<number[]>
 ) =>

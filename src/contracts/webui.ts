@@ -99,7 +99,7 @@ export interface LivingMemorySnapshotView {
     createdAt: number
 }
 
-/** 召回测试的命中项：保留混合检索的各路分数，与 v1 的测页面板同形。 */
+/** 召回测试展示混合检索的各路分数。 */
 export interface LivingMemorySearchHitView {
     id: string
     type: MemoryEntryRecord['type']

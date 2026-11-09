@@ -1,13 +1,12 @@
 ## 项目规范
 
-- 通用协作规则保留在本文件，具体实现约定与业务说明放在 `doc/`。
+- 通用协作规则保留在本文件，插件使用说明放在 `README.md`，设计决策放在 `.agent/note/`。
 - 除受控配置之外不在源码中写密钥；本地 `.env`、上传数据、依赖目录、构建输出和临时文件不进入交付源码包。
 - 临时文件、脚本、截图与验证产物统一放入 `tmp/`。交付前执行构建、类型检查和针对主要业务闭环的集成验证，按实际结果更新交付文档。
 
 ## 参考
 - chatluna v2 开发文档：https://github.com/ChatLunaLab/doc.git
 - chatluna v2 源代码：https://github.com/ChatLunaLab/v2-mirror.git
-- chatluna v1 下的 livingmemory 插件源代码：https://github.com/Procyon-Nan/koishi-plugin-chatluna-livingmemory
 
 ## 代码与设计
 
@@ -31,7 +30,7 @@
 
 ## 代码结构
 
-本项目为 `chatluna-plugin-livingmemory`，位于 ChatLuna v2 模板项目的 `external/livingmemory/`，由模板项目提供开发运行环境。S7 管理与导入已有交付；M05/M06 已改用官方 observer 频道缓冲，验证进度见 `doc/message-pool.md`。
+本项目为 `chatluna-plugin-livingmemory`，位于 ChatLuna v2 模板项目的 `external/livingmemory/`，由模板项目提供开发运行环境。
 
 ```text
 livingmemory/
@@ -55,13 +54,13 @@ livingmemory/
 │   │   ├── app/                # 应用层组装：管理服务与命令、WebUI 数据面、启动与每日维护、变更服务、管理页视图与任务通知
 │   │   ├── logging/            # 诊断日志构造、凭据脱敏与模型调用记录
 │   │   ├── memory/             # 字段规范化、说话人身份、来源消息、人设卡片
-│   │   │   ├── origins/        # 来源消息的规范化与迁移
+│   │   │   ├── origins/        # 读取与校验记忆的消息来源
 │   │   │   ├── snapshot/       # 召回快照的文本渲染
 │   │   │   └── tools/          # 记忆工具：检索、增删改合并拆分与注册入口
 │   │   ├── persistence/        # 表定义、条目/快照/任务/画像/人设仓储与事务
 │   │   ├── prompts/            # 提示词骨架：结构化 schema、工具参数说明、记忆渲染
 │   │   ├── shared/             # 串行任务队列与通用工具
-│   │   ├── transcript/         # 纯聊天转写、来源与文本渲染；不再保存消息日志或自行回填
+│   │   ├── transcript/         # 聊天转写、来源与文本渲染
 │   │   ├── vector_index/       # PGlite + pgvector 索引：维护、重建、对账、状态与 Worker
 │   │   │   └── worker/         # 索引进程内实现：schema、查询、变更、Dream 近邻
 │   │   └── workflows/          # 工作流：工具循环、结构化输出、任务跟踪
@@ -72,13 +71,13 @@ livingmemory/
 │   │           ├── session/    # Dream 会话：批次状态、历史压缩、会话工具
 │   │           └── worker/     # 语义分组 Worker 的客户端、协议与入口
 ├── tests/
-│   ├── setup.ts                # 把 node:test 的同名函数装回全局，兼容 v1 测试体
+│   ├── setup.ts                # 注册 node:test 的全局测试函数与生命周期钩子
 │   ├── persistence-test-utils.ts # 内存 SQLite 的仓储测试环境
 │   ├── worker-test-utils.ts    # 打包 Vector Worker 并给出产物路径
 │   ├── tool-test-utils.ts      # 工具调用上下文与执行辅助
 │   ├── workflow-test-utils.ts  # 工作流测试的日志捕获、作用域与等待辅助
 │   ├── chat-history-test-utils.ts # 框架历史查询夹具，覆盖缓冲滚动、真实时间和实际发送归属
-│   └── *.spec.ts               # 与源码同期迁移的测试
+│   └── *.spec.ts               # 各模块的单元和集成测试
 ├── scripts/
 │   ├── build.mjs               # 打包服务端与 WebUI，串行执行 Worker 构建
 │   ├── clean.mjs               # 清理插件构建产物与增量编译记录
@@ -92,33 +91,22 @@ livingmemory/
 │   └── locales/
 │       ├── zh.yml              # 中文界面文案
 │       └── en.yml              # 英文界面文案
-├── .agent/
-│   └── note/                   # Agent Note 工作流与迁移设计记录
-│       ├── proposed/           # 尚未实施的提案
-│       ├── implemented/         # 已实施并保留的决策记录
-│       ├── rejected/            # 已否决但仍有参考价值的提案
-│       └── archived/            # 冻结的历史记录
-└── doc/
-    ├── migration-plan.md       # v1 → v2 迁移方案、任务进度与验收清单
-    ├── migration-stages.md      # S1—S8 实施阶段、交付物与阻塞项
-    ├── message-pool.md          # 框架聊天历史读取、插件消费进度与验收清单
-    ├── framework-requirements.md # ChatLuna v2 框架侧接口需求，供 v2 开发者实施
-    └── v1-behavior-inventory.md # v1 全量业务行为清单与迁移核对入口
+└── .agent/
+    └── note/                   # Agent Note 工作流与设计决策
+        ├── proposed/           # 尚未实施的提案
+        ├── implemented/         # 已实施并保留的决策记录
+        ├── rejected/            # 已否决但仍有参考价值的提案
+        └── archived/            # 冻结的历史记录
 ```
 
-目录树记录当前已落地文件。新增、删除、移动或重命名文件时同步更新本节；迁移中的模块划分先记录到方案文档，落地后补入目录树。
+目录树记录当前已落地文件。新增、删除、移动或重命名文件时同步更新本节。
 
 ## 文档索引
 
 | 文档 | 内容 |
 | --- | --- |
 | [README.md](README.md) | 插件简介、构建方法、配套服务、配置项表、命令与管理页入口 |
-| [doc/migration-plan.md](doc/migration-plan.md) | 迁移目标、确认事项、任务编号与依赖、设计/实施/验收进度、双方接口及职责草案、旧数据迁移范围 |
-| [doc/migration-stages.md](doc/migration-stages.md) | S1—S8 实施阶段划分、各阶段交付物、模块归属、向量索引与测试处置、提交粒度与阻塞项 |
-| [doc/message-pool.md](doc/message-pool.md) | M05 框架聊天历史、纯聊天消息筛选、插件消费进度、重新计数与实施验收 |
-| [doc/framework-requirements.md](doc/framework-requirements.md) | 由 ChatLuna v2 承担的接口项：统一采集、交付归属、会话与预设通知、对话规则注册与任务归属，含当前源码事实与验收条件 |
-| [doc/v1-behavior-inventory.md](doc/v1-behavior-inventory.md) | D11 的 v1 全量业务行为清单、源码/测试核对入口、v2 适配归属和执行标记 |
 | [.agent/note/README.zh.md](.agent/note/README.zh.md) | Agent Note 工作流、目录约定、状态转换和归档规则 |
 
-迁移讨论持续更新方案文档，分别标记已确认事项、设计草案与待讨论问题。新增 `doc/` 专题文档时同步本索引。Agent Note 只保留工作流入口，具体记录通过生命周期、类别目录及文内交叉链接查找，不逐篇追加到本索引。
+Agent Note 只保留工作流入口，具体记录通过生命周期、类别目录及文内交叉链接查找，不逐篇追加到本索引。
 

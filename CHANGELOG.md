@@ -1,98 +1,77 @@
 # 变更记录
 
+## 2026-11-09 version:0.0.1
+
+- pending: 插件版本更新为 0.0.1，清理首次发布前的迁移文档与开发记录。
+- pending: 向量索引格式或 pgvector 版本不匹配时从记忆主数据重建，移除旧索引的原地升级逻辑。
+- pending: 测试改用 Node.js 原生断言和模拟函数，删除手写的 Vitest 兼容层。
+
+## 2026-11-09 version:0.0.0
+
+- 799d70e: 对话请求只保留本轮注入的记忆与用户画像；调用工具后仍沿用它们在本轮输入后的位置。
+- 21df10b: 模型收到的短期记忆和用户画像分别使用 `<memory>` 和 `<users_profile>` 标签。
+- bf4640d: 将「重建向量索引」移到记忆页的「运行 Dream」旁，按当前预设执行。
+- 9905f9d: 人设卡片页按当前预设读取并直接展示卡片全文，修正自动生成卡片的来源标签。
+- 2319218: 归档清理测试按运行日期构造宽限期内的记忆，避免固定日期导致用例过期。
+- de9549b: 记忆卡片正文超过三行时在第四行显示省略号，悬停或键盘聚焦可查看全文，长文支持键盘滚动。
+- de9549b: 同行记忆卡片按最高标题对齐正文起点，关键词和属性贴近底部操作栏，短正文的余白留在关键词之前，并用字号和字重区分摘要与正文。
+- de9549b: 记忆卡片按列表宽度最多排四列，创建与更新时间显示年份；活跃记忆可归档，已归档记忆可彻底删除，批量操作遵循相同规则。
+- de9549b: 调整管理页导航和预设操作菜单，将运行 Dream 放在记忆页，支持按页和跨页全选，列表刷新时清除已确认失效的选择。
+- aaec904: 修复 Dream 成功处理记忆后仍记录本轮失败、并将错误反馈发给下一轮模型的问题。
+- 34dd6f4: 快照列表显示快照正文和所属群聊或私聊，展开后可查看当时的搜索词与命中记忆正文。
+- 34dd6f4: 简化管理页的面板选择、召回结果展示和分页读取，整理会话来源查询与快照详情的生成逻辑。
+- d42d7c5: 统一模型调用日志的阶段名，移除未使用的日志标签、上下文字段和运行编号；人设卡片重新生成失败时显示具体原因。
+- 0f96916: 任务列表显示索引维护进度、Dream 整理结果和中断原因，保留失败原因及未处理记忆的 ID。
+- 9e67095: 提取按原消息所在的群聊或私聊记录来源，让共享会话能区分群名和私聊昵称，离线查询和导出也保留来源名称。
+- c17e951: 记忆工具直接使用 Agent 会话与用户身份，移除重复的身份字段。
+- c17e951: 移除已由按预设批量删除取代的单条删除链和未使用的管理读取入口。
+- b8b4843: 重建向量索引时使用当前配置的嵌入模型。
+
+## 2026-11-08 version:0.0.0
+
+- c3b0f37: 管理页移除页首标题和副标题，记忆列表改为随宽度排列的卡片，分区展示正文、关键词、属性和操作。
+- d1d5f34: 移除原生记忆后端遗留的标题、主题、自定义字段和管理接口，记忆读写及文件迁移使用 LivingMemory 自身的数据结构。
+- 9d34e92: 管理页支持按筛选跨页选取记忆，确认后单条或批量永久删除；清空预设前须输入包含预设名的确认短语。
+- 25f3a36: 管理页支持手动新建记忆；编辑时可修改摘要、关联用户、类型、状态、情绪和重要度，列表分别展示摘要和正文。
+- 845873b: WebUI 构建显示 Vite 的产物大小和耗时，过滤组件的 `"use client"` 指令提示。
+- 74c37ef: 修复代理式记忆召回收到模型回复后因消息列表被冻结而中断的问题，使搜索和跳过操作能够正常执行。
+- 4702843: 在管理页提供记忆 JSON 的导入确认和导出下载，支持 LivingMemory v1 导出的记忆文件。
+- f771534: 修复会话记录缺少预设时，机器人已使用预设却跳过记忆召回、注入和旁听提取的问题。
+
+## 2026-11-07 version:0.0.0
+
+- 0618101: 移除插件的自动提取白名单，统一通过对话规则中的自动提取间隔控制哪些会话参与提取。
+- 6ad71a6: 将侧栏「能力」中的插件入口从「长期记忆」更名为「LivingMemory」。
+- 4c0732e: 修复重启后私聊首次定时唤醒漏用专属路由规则的问题；尚无聊天记录时从通知目标确定私聊地址，对端不作为发言人参与规则匹配。
+- 23819dd: LivingMemory 的对话配置按群、频道或私聊地址生效，同群换人不切换设置。触发消息只确定历史截止位置，画像仍按窗口中的实际发言人选取。
+- 8c44204: 将监听对话事件的模块、类和测试统一更名为 `conversation_hooks.ts`、`LivingMemoryConversationHooks` 和 `conversation-hooks.spec.ts`。
+- 8c44204: 入队时准备召回失败只记录一次，不打断开轮；只有等待预设时才在开轮后使用原聊天窗口继续准备。关闭旁听时，自动提取须等本轮回复渲染结束，且所有已发送的回复都被 observer 观察到。
+- 8c44204: 唤醒时固定最近 N 条聊天供召回与画像共用。用户唤醒取到触发消息；定时与冷场唤醒取到通知入队时，通知不计入聊天或召回间隔。召回输入统一为一段聊天历史。会话钩子统一识别普通消息、合批消息和通知的触发来源，历史读取只按消息 ID 定位。
+
+- ae0660a: 删除未注册的快照编辑工具，保留其有效行为的召回测试；普通记忆工具与 Dream 工具共用写入字段及说话人键转换。
+- 762513d: WebUI 服务端与客户端共用一份状态和动作声明，发布包包含客户端源码所需的契约；清理未用 RPC 类型、管理服务依赖及 Dream 执行参数，保留任务审计 ID。
+
+- a48490f: LivingMemory 改为独立插件，移除原生 memory 后端和任务投影；专用页直接订阅自身仓储并保留部分完成状态。补齐实际使用的服务依赖，等待插件启动完成再报告加载成功。
+- a48490f: 自动提取、召回、Dream、隔离及注入共九项配置移至「对话规则 → 能力 → LivingMemory」，按本轮触发身份生效；保留插件级模型、工具、画像生成和提取白名单。
+
+- b43bd1d: 提取与召回直接从官方 observer 频道缓冲读取聊天；按实际发送归属识别助手回复，缓冲滚动后仍能计数，预设与历史切换重新计算阈值。
+
 ## 2026-11-06 version:0.0.0
 
-- pending: 插件自行提供 TypeScript 配置、构建和清理脚本，移除对上层目录及 Yakumo 配置的依赖；补齐直接使用的构建与类型依赖，通过一条 yarn build 生成类型声明、服务端、WebUI 和 Worker。
-- pending: README 仅列出插件自身的构建入口，移除迁移过程说明；AGENTS 文档索引仅保留 Agent Note 工作流入口。
-- pending: 修正旧 SQLite 数据迁移测试的文件路径传参，使用 `pathToFileURL` 将绝对路径转为文件 URL，避免 Windows 盘符被驱动解析为 URL 协议而导致启动失败；验证待执行。
+- b2ca1d7: 插件自行提供 TypeScript 配置、构建和清理脚本，移除对上层目录及 Yakumo 配置的依赖；补齐直接使用的构建与类型依赖，通过一条 yarn build 生成类型声明、服务端、WebUI 和 Worker。
+- b2ca1d7: README 补充插件构建入口与配套服务列表。
+- b43bd1d: 移除插件采集器和消息池注册表，新增无缓存框架聊天历史读取；提取与召回只消费用户聊天及实际发送回复，保留逐条真实时间、昵称和 `[时间] 昵称：正文` 转写。
+- b43bd1d: 接入聊天新增、实际交付等待、预设与历史变化边界；提取和召回按聊天条数计数，切换/重启重新计算，保留完整交流上界、固定失败批次和卸载取消。
+
+## 2026-11-05 version:0.0.0
+
+- 3e9d692: 实现自动提取、召回和 Dream 整理，以及用户画像与预设人设卡片。Dream 语义分组在独立 Worker 中执行。
+- 809ab68: 支持取消 Dream 任务；卸载时取消进行中的提取与召回，并等待任务结束。
+- 10fb3c9: 管理页按预设查看和编辑记忆、画像与人设，支持召回测试和数据导入导出。
+- ccadde3: 模型将数组字段返回为字符串时，要求模型重新生成符合结构的结果。
+- b68af87: 添加 AGPL-3.0 许可证全文。
 
 ## 2026-11-04 version:0.0.0
 
-- pending: 新增 `doc/framework-requirements.md`，按 M01-C1/C2/C3、M02-C1、M05-C1/C2、M06-C1 列出 ChatLuna v2 需补充的接口项、当前源码事实与验收条件；同步 `AGENTS.md` 目录树与文档索引。
-- pending: 新增 `doc/migration-stages.md`，把 M01—M09 重新切分为 S1—S8 实施阶段，给出各阶段交付物、模块归属、向量索引与测试处置、提交粒度和阻塞项。
-- pending: 新增两篇 Agent Note：`2026-11-04-vector-index-retention.md` 记录保留 v1 向量索引、只替换 embedding 层的决策依据；`2026-11-04-test-migration-strategy.md` 给出 48 个测试文件的三档处置与文件清单。
-- pending: `doc/migration-plan.md` 新增已确认事项 D12（向量索引保留）与 D13（测试迁移策略）。
-- pending: 完成 S1 数据层迁移。从 v1 移植 `src/contracts/`（4 个文件）、`src/query.ts`、`src/service/{app,memory,persistence,shared,workflows}/` 共 23 个源文件；koishi 的 `Context` 换成 cordis，`ctx.database` 改为经 `ctx.get('database')` 访问，相对 import 补 `.ts` 后缀。
-- pending: 表定义改用 v2 的 `ctx.model.extend` / `ctx.model.migrate`，并为 8 张表声明 `Tables` 模块增强，使查询带类型。
-- pending: 测试运行器由 vitest 换成 `node --test --experimental-transform-types`；新增 `tests/setup.ts` 把 `it`/`describe` 装回全局，兼容 v1 测试体，不引入新依赖。
-- pending: 迁移 `query`、`query-projections`、`repository-maintenance`、`snapshot-repository`、`user-profile-repository`、`job-repository` 六个测试文件，17 个用例全部通过；`job-repository` 的首个用例改用统一测试环境。
-- pending: 新增 `.gitignore`；`package.json` 增加 `test` 脚本与数据库相关依赖；`tsconfig.json` 开启 `allowImportingTsExtensions`。
-- pending: 完成 S2 后端适配。新增 `src/service/backend.ts` 实现 v2 `MemoryBackend` 的 14 个方法，`src/service.ts` 持有仓储与后端并通过 `ctx.memory.backend` 注册，入口改用 `ctx.effect` 管理注销。
-- pending: 记忆表增加 `topic`/`title`/`fields` 三列以匹配 v2 的 `MemoryEntry`；新增 `src/service/memory/entry_identity.ts` 定义主题与标题的确定性推导，旧行读取时按同一规则补齐标题。
-- pending: 导出格式增加 `topic`/`title`/`fields` 可选字段，旧导出文件按缺省规则导入；`createMemory` 支持显式 id，用于保持导入时的原有身份。
-- pending: 新增 `tests/backend.spec.ts` 共 7 个用例，覆盖主题标题推导、作用域过滤、面统计、检索、归档删除与变更通知、字段更新、索引分组与导出导入往返；全套 24 个用例通过。
-- pending: 完成 S3 采集层。新增 `src/service/message_collector.ts`，把框架的观察、交付与会话变化事件统一接入 `MessageLogRegistry`，各引擎共用同一套入池、回填、去重与读取逻辑；`src/service.ts` 随之持有采集层，`src/index.ts` 增加对 `chatluna_collector` 的依赖声明。
-- pending: 新增 `src/contracts/framework.ts` 声明框架侧待补的采集、交付与变化契约（对应 `doc/framework-requirements.md` 的 M05-C1、M05-C2、M02-C1），上游落地后改为从 `@chatluna/*` 导入即可。
-- pending: `src/service/transcript/element_text.ts` 改为基于 v2 已归一化的 `ChatBlock` 渲染日志文本，替换 v1 按 satori 元素类型逐项解析的 319 行实现。
-- pending: 消息池的历史回填改由框架的可见历史接口按会话键与历史头读取，移除 v1 的频道绑定与 `toBackfillChannelId`；历史头变化（重置、切换、分支）时整池丢弃并按新历史重建，避免旧分支内容混入。
-- pending: 修正回填失败后 `warmup` 不重试的问题：失败时保留实时缓冲并复位状态，下次预热按历史、实时顺序重新入账。
-- pending: 迁移 `message-log`、`message-log-registry`、`message-collector`、`element-text` 四个测试文件共 35 个用例；全套 59 个用例通过，`tsc --noEmit` 无报错。
-- pending: 完成 S4 模型与工具。新增 `src/service/workflows/structured_output.ts`，以 v2 的 `chatluna.extract(schema, …)` 实现结构化输出，保留 v1 的三次尝试、纠正提示措辞与取消传播；v2 无 langchain 的暂存工具调用循环，模型调用失败改为一并重试。
-- pending: 新增 `src/service/prompts/` 四个文件，用 schemastery 重建记忆生成 schema、工具参数说明、提示词 XML 片段与记忆渲染；字段约束说明并入工具描述，规避 v2 `schemasteryToJsonSchemaNode` 丢弃 description 的问题（框架需求见 `doc/framework-requirements.md` 第 7 节）。
-- pending: 新增 `src/service/memory/tools/`，注册检索、读取来源消息、创建、更新、合并、拆分、删除 7 个模型工具；作用域从 `agent.options` 解析，子代理调用按 `permissions.origin` 拒绝；删除 v1 的 Character 预设后缀拼接，v2 Character 引擎已写入自己的预设 id。
-- pending: 新增 `src/service/logging/`，`LivingMemoryLogger` 负责诊断块格式化、凭据脱敏、循环引用处理与日志故障隔离；`invokeLoggedModel` 统一记录模型调用。
-- pending: 从 v1 整体迁移 `src/service/vector_index/` 共 25 个文件，保留 PGlite + pgvector 索引、重建对账、目录切换与 Dream 近邻维护；embedding 层改由 `ctx.chatluna.embed` 提供，数据目录改用 `resolveChatlunaDataDir` 解析 `CHATLUNA_DATA`。
-- pending: 新增 `scripts/build-workers.mjs`，用模板项目的 rolldown 打包 Vector Worker 单文件产物；新增 `src/worker_artifacts.ts` 统一解析产物路径；`package.json` 增加 `@electric-sql/pglite`、`@electric-sql/pglite-pgvector` 依赖与 `rolldown` 开发依赖。
-- pending: 新增 `src/service/app/memory_providers.ts` 接通仓储、后端与向量索引，保持「主数据已提交、索引失败只记警告」的 v1 语义。
-- pending: `src/service.ts` 改为在启动时注册后端、采集与工具并启动向量索引，卸载时先停索引再注销；此前向量索引未启动，记忆写入会因索引未就绪而失败。`src/index.ts` 相应改为调用 `start()`。
-- pending: 新增 `structured-output`、`memory-tools`、`logging`、`update-snapshot-tool`、`vector-index-worker`、`vector-index-hybrid-query`、`vector-index-status-store`、`vector-index-rebuild`、`vector-index-directory-switch` 测试；迁移 `legacy-embedding-migration`、`vector-index-dream-ann`、`vector-index-service`；vitest 的 `vi.spyOn` 改为 `node:test` 的 `mock.method`。全套 153 个用例中 152 个通过，1 个仅 Windows 的目录切换用例跳过；`tsc --noEmit` 无报错。
-## 2026-11-05 version:0.0.0
-
-- pending: 完成 S5 工作流。新增 `src/service/workflows/tool_call.ts`（工具契约与调用结果渲染）与 `src/service/workflows/tool_loop.ts`（内部工具循环），以 `ctx.chatluna.chat` 自行驱动；召回与 Dream 共用该实现，差异由调用次数上限、多工具调用策略、结论工具、消息准备与轮次回调等选项表达。
-- pending: 内部工作流不使用 v2 的 `ctx.agents`：`AGENT_INJECT` 要求 9 个服务全部在场，本插件只注入 4 个；`chat-observer` 会索引每个带 `conversationKey` 的 agent，内部会话会污染用户消息池；Dream 的批次状态机、逐轮推进消息与历史压缩也无法用 turn driver 表达。
-- pending: 迁移 `src/service/workflows/extraction/`，保留 v1 的窗口阈值、吸收预算、锚定筛选、旁听切片与连续失败三次放弃；失败处理区分「未达上限中断本次排干」与「达上限记任务并推进游标」。
-- pending: 迁移 `src/service/workflows/recall/`，代理式召回改用内部工具循环，单次召回模型调用上限 6 次；混合检索经 `ctx.chatluna.rerank(query, documents, options)` 重排，按与输入同序的 `scores` 取各查询短语最大值。
-- pending: 迁移 `src/service/workflows/dream/`，含聚类、语义图谱、会话与 Worker（`dream-semantic-worker.mjs`）；Dream 会话工具改为纯执行器，批次状态、跳过条件与历史压缩沿用 v1。
-- pending: 新增 `src/service/memory/preset_persona.ts` 人设卡片服务与 `src/service/prompts/persona_card.ts` 提示词；新增 `resolvePresetAssistantLabel`，v2 的 Character 引擎直接用自己的预设 id，不再做「（Character）」后缀裁剪。
-- pending: 新增 `src/service/user_profile.ts` 用户画像服务，经 `chatluna.extract` 取结构化结果；画像门槛按实际读取到的活跃记忆数判定，`keep` 结果记录本次审阅输入以避免重复询问模型。
-- pending: 修正 `src/service/workflows/structured_output.ts` 的重试范围：只有解析与校验失败（`extract` 抛 `ProtocolError`）进入三次修正重试，模型请求本身失败原样抛出。此前实现把模型错误一并重试，导致人设卡片的 `invoke-failed` 分支不可达。
-- pending: `src/service/app/memory_providers.ts` 删除自有写入实现，改写为全部委托 `LivingMemoryMutationService`；预设级串行队列、落库后同步索引、索引失败转警告的语义只在变更服务一处实现。
-- pending: `src/service.ts` 完成工作流装配：变更服务、混合检索、人设卡片、用户画像、Dream 服务与协调器、召回协调器、提取协调器全部接入；启停顺序沿用 v1，先停 Dream 与画像，再停语义分组 Worker 与向量索引。
-- pending: `scripts/build-workers.mjs` 增加 `dream-semantic-worker` 入口；`src/service/message_collector.ts` 的 `after` 更名为 `afterSeq`，与注册表读取面同名。
-- pending: 修正 Dream 会话工具与 v1 的行为差异：更新与删除在「事实已落库、仅索引同步失败」时按已处理记录并返回警告；删除 0 条时抛 `MemoryInputError`；`checked_memory` 按去重后的 ID 记录覆盖并回传 `checkedMemoryIds`。
-- pending: `tests/setup.ts` 增加 `expect` 兼容层（`toBe`、`toEqual`、`toContain`、`toHaveLength`、`not`、`objectContaining`），支撑从 vitest 直接迁移的测试体。
-- pending: 迁移并适配 `agentic-recall`、`extraction-coordinator`、`recall-coordinator`、`indexed-recall`、`indexed-memory-mutations`、`dream-candidates`、`dream-clustering`、`dream-refinement`、`dream-repository`、`dream-session`、`dream-worker`、`dream-workflows`、`post-extraction-dream`、`user-profile`、`preset-persona` 等测试；`extraction-coordinator` 的回填夹具改用 `ConversationHistorySource`，`indexed-recall` 的重排夹具改用 `chatluna.rerank`。
-- pending: 全套 338 个用例中 337 通过、1 个仅 Windows 的目录切换用例跳过，`tsc --noEmit` 无报错。
-- pending: 同步 `AGENTS.md` 目录树、`doc/migration-stages.md` 的 S5 交付物与阶段标记、`doc/migration-plan.md` 的执行清单与进度记录。
-- pending: 新增 `.agent/note/implemented/architecture/2026-11-05-internal-tool-loop.md`，记录召回与 Dream 自行驱动模型调用的工具循环，以及不接入 v2 Agent 层的三条依据（服务依赖、观测层污染、批次状态机）；同步 `AGENTS.md` 文档索引。
-- pending: `package.json` 补齐源码实际 import 的 `@chatluna/*` 包声明：新增 `ai-runtime`、`memory`、`message`、`preset`、`schema`、`tool`、`utils` 七项 peer 依赖。此前只声明 `ai`、`core`、`cordis` 与数据库插件，模板根目录 `yarn yakumo build` 会在 rolldown 的外部依赖校验处以 `Missing dependency` 失败。
-- pending: 完成 S6 调度与任务。`src/service/backend.ts` 新增只读 `scheduling: { extract, dream, recall } = true`，声明三项自动流程由插件的协调器负责，原生对应入口让出调度（M01-C1）；契约形状在 `src/contracts/framework.ts` 的 `MemoryBackendScheduling` 声明，框架落地后改为从 `@chatluna/memory` 导入。
-- pending: `src/contracts/memory.ts` 的任务状态增加 `cancelled` 终态；`src/service/persistence/jobs.ts` 新增 `getJob`、`cancelJob` 与 `watchJobs`，`cancelJob` 只接受 `pending`/`running`，写入取消原因并保留已产生的进度文本，任务行每次变化都通知订阅方。
-- pending: 新增 `src/service/app/job_view.ts`，把迁移保留的任务审计行投影为原生 `MemoryJob`：保留 id、预设、状态与错误，补齐 `scope`、毫秒时间戳与由任务输入推导的 `trigger`；统计与操作明细留空，两者原本写在 `detail` 文本里。
-- pending: 新增 `src/service/app/job_surface.ts`，提供 `list`、`get`、`cancel` 与 `watch`，供框架把后端任务并入原生任务页与 `chatluna/memory-job` 事件（M01-C3）；任务状态仍只有审计表一份，投影不引入第二份状态。
-- pending: Dream 取消：协调器按任务持有 `AbortController` 与结算 Promise，`cancelJob(jobId)` 中止该次运行、等任务行落到终态并等预设队列释放后返回；用户取消与协调器停止用 `DreamJobCancelledError` 区分，前者记 `cancelled`，后者仍按失败收尾。预设锁的释放从 `.finally()` 移入队列任务内部，取消返回后可立即重启同一预设。
-- pending: 提取与召回协调器增加 `stop()`：卸载时停止接收新触发、取消在途模型调用并等待任务结算。取消不记失败任务、不推进游标、不提交尚未落库的结果；召回的执行器与提取器顺带补上 `AbortSignal` 参数。
-- pending: `src/service.ts` 新增任务取消路由与 `jobs` 暴露：Dream 交由协调器中止并等结算，`index` 任务返回不可取消（运行在维护队列内，标记终态会与运行器收尾互相覆盖），提取与召回残留的未结束行直接置终态。卸载顺序改为先并行停止 Dream、召回、提取与画像，再停止语义分组 Worker 与向量索引。
-- pending: 新增 `tests/job-surface.spec.ts` 覆盖任务投影与任务面，并补充 `job-repository`（取消、拒绝已结束任务、订阅通知）、`dream-workflows`（单任务取消、停止按失败收尾、拒绝已结束任务）、`extraction-coordinator`、`recall-coordinator` 与 `backend` 的取消与调度声明用例；全套 354 个用例中 353 通过、1 个仅 Windows 的目录切换用例跳过，`tsc --noEmit` 无报错。
-- pending: 修正插件整体不加载的问题。`src/index.ts` 的 `inject` 列有 `chatluna_collector`，该服务在 ChatLuna v2 中不存在（模板依赖与 v2 源码中匹配数为 0），cordis 在依赖缺失时把 fiber 置为 `INACTIVE`，`apply` 从未执行；移除该依赖并改列实际存在的 `chat_observer` 与 `agents`。
-- pending: `src/service/message_collector.ts` 改为拉取式采集：数据源换成 `ctx.chat_observer` 的 `recentOfConversation` 与 `identityOfConversation`，由触发点按需同步；跳过机器人自身的 `self` 回声，回复改由 `recordReplies` 在轮次结束时从 `agent.session.messages()` 的末条 assistant 记录一次，避免同一段内容双份入池。
-- pending: 新增 `src/service/transcript/message_log/session_history.ts`，把会话中的 `ChatMessage` 转成日志条目，跳过带 `form` 的系统注入消息；`MessageCollector.recallWindow` 在池内条目不足时用它补足召回窗口——观察层的回填历史不进入 `observed` 缓冲，冷启动首轮只能从会话历史取。
-- pending: 新增 `src/service/session_hooks.ts`，把 v1 的 `chatluna/before-chat` 与 `chatluna/after-chat` 接到 v2：`ctx.agents.prepareStep(order 870)` 负责同步消息池、触发召回并注入快照与画像，只在该轮第一步执行；`chatluna/agent-turn` 在 `reason` 为 `completed` 时记录回复并调度提取。提取来源标签的群名取 `ctx.chat.environmentOf(sessionId)?.guildName`，取不到时用群号代替。
-- pending: `src/service.ts` 构造采集层时注入 `ctx.chat_observer`，注册会话钩子并随插件卸载注销；`src/contracts/framework.ts` 删除本插件自行声明的 `ChatLunaCollector`，保留其余框架需求形状。
-- pending: 新增 `tests/session-hooks.spec.ts`，重写 `tests/message-collector.spec.ts` 为 `chat_observer` 形状的测试替身并补充会话历史补窗用例；`message_log_registry.ts` 增加 `has()`。全套 365 个用例中 364 通过、1 个仅 Windows 的目录切换用例跳过，`tsc --noEmit` 无报错，`yarn yakumo build` 与 Worker 打包成功。
-- pending: 同步 `AGENTS.md` 目录树与文档索引、`doc/framework-requirements.md` 第 1 项与实施状态表、`.agent/note/proposed/architecture/2026-11-05-session-hooks-and-collector.md` 的落地记录与风险。
-- pending: 完成 S7 管理面。`src/index.ts` 补齐分组配置 schema（基础、模型、工具、用户画像、记忆召回、记忆提取六组），默认值统一取自 `DEFAULT_CONFIG`，`apply` 此前未把用户配置传给服务的问题一并修正；`src/contracts/workflows.ts` 增加 `LivingMemoryToolName` 联合类型，使工具开关的 schema 与运行时类型一致。
-- pending: 新增 `src/service/app/config_status.ts`，照搬 v1 的三条配置自检（召回模型、嵌入模型、提取模型）并把结果并入服务状态；新增 `src/service/app/admin_service.ts` 作为管理面组合层，把仓储、变更、检索、人设、画像、Dream 与索引的读写投影成命令与界面共用的接口，可管理的预设取目录与库中存量的并集。
-- pending: 新增 `src/service/app/commands.ts`，迁移 v1 的 `/livingmemory <预设> delete <text|user|profile> <值>`：删除前发送确认消息并等待 60 秒回复，记忆按归档处理、画像直接删除；移除 v1 的 `-c` 选项，v2 的 Character 引擎直接以预设 id 运行。
-- pending: 新增 `src/service/app/webui.ts` 与 `src/contracts/{webui,webui_live}.ts`，用 `@chatluna/ui-server` 的 live state/action 提供记忆、用户画像、人设卡片、快照、任务、召回测试六个面与写操作；写操作要求权限等级 4，变更后发出 `livingmemory/change` 触发页面刷新。
-- pending: 新增 `client/page.tsx`、`client/contracts.ts` 并把 `client/index.ts` 改为注册 `/livingmemory` 路由与语言资源；页面按预设切换，覆盖记忆检索与编辑、画像编辑与重生成、人设卡片、快照、任务与召回测试，导入导出与索维护在任务面。
-- pending: 补齐 v1 的启动与每日维护。新增 `src/service/app/maintenance.ts`，把 `migrateMemorySourceOriginsArray`、`migrateWebuiSourceConversationKeys`、`migrateActiveMemorySpeakers`、`removeLegacyReferenceSnapshots`、全局中断任务回收、过期任务清理与到期归档记忆清理接回服务生命周期。这些方法此前已迁移但没有任何调用点，等同于从未执行；`src/service.ts` 改为在启动向量索引前先做数据修复，索引就绪后排队一次归档清理，并按日调度维护。
-- pending: 修正旧导出数据的导入。`buildPresetImportRows` 在文件缺 `topic`/`title` 时写入 `null`，与「写入时确定一次、读取侧不再推导」的约定矛盾，导致 v1 导出文件导入后原生记忆页没有标题与主题；改为用同一套 `normalizeMemoryTopic`/`normalizeMemoryTitle` 补齐。
-- pending: 新增 `tests/admin-service.spec.ts`、`tests/config-status.spec.ts`、`tests/maintenance.spec.ts`、`tests/webui.spec.ts`、`tests/legacy-import.spec.ts` 共 28 个用例，覆盖预设并集、按文本与用户匹配、配置告警、启动修复、归档衰减清理、界面投影与写操作、v1 导出文件导入与跨预设 id 换发；全套 393 个用例中 392 通过、1 个仅 Windows 的目录切换用例跳过，`tsc --noEmit` 与 `tsc -p tsconfig.client.json --noEmit` 无报错，`yarn yakumo build` 与 Worker 打包成功。
-- pending: 迁移 `tests/preset-import-export.spec.ts`（7 个用例，断言未改动）与 `tests/extraction-prompt.spec.ts`（6 个用例），补上测试迁移策略中标记为「原样迁移」但此前未落地的两个文件。
-- pending: 结构化输出不再解码模型传成 JSON 字符串的数组字段。v1 的 `normalizeStringifiedArrayField` 会先解码再校验，v2 改用 `chatluna.extract` 后拿不到原始值，且用户确认不保留该路径：格式错误回给模型重写，三次仍不合格时记解析失败并丢弃本批（D14）。`invokeStructuredOutput` 的 `stringifiedArrayField` 只用于纠正提示，注释写明不再解码。
-- pending: 新增 `.agent/note/implemented/architecture/2026-11-05-reject-stringified-structured-output.md` 记录该决策与 v1 的有意差异；`doc/migration-plan.md` 增加 D14 并同步确认日期，`AGENTS.md` 补文档索引。全套 406 个用例中 405 通过、1 个仅 Windows 的目录切换用例跳过，`tsc --noEmit` 无报错。
-- pending: 新增 `tests/session-history.spec.ts` 共 6 个用例，覆盖会话历史到召回窗口条目的转换、注入消息跳过、非文本与非对话角色跳过、身份回退与去重键；对应 v1 `chatluna-transcript-adapter` 的断言。
-- pending: 核对测试迁移策略的全部处置并写入实测结果：48 个 v1 文件中 42 个同名迁移、4 个并入既有测试（`memory-create-tool`、`chat-middleware`、`character-middleware`、`chatluna-transcript-adapter`）、2 个删除（`client-dashboard`、`living-memory-service-lifecycle`），v2 另有 9 个新增文件。Note 移入 `implemented/` 并更新 `AGENTS.md` 与 `doc/migration-stages.md` 的引用路径。全套 412 个用例中 411 通过、1 个仅 Windows 的目录切换用例跳过，`tsc --noEmit` 无报错。
-- pending: 按 M08-D1 调整配置默认值：`memorySearchToolMaxResults` 30 → 15、`recallIntervalMessages` 10 → 20、`extractionWindowMessages` 30 → 60 且范围由 0—200 改为 0—360；其余项沿用 v1 取值。`src/service.ts` 的 `DEFAULT_CONFIG` 与 `src/index.ts` 的 schema 同步，`README.md` 配置表随之更新。
-- pending: `recallIntervalMessages` 的 schema 说明补回 v1 的「会话首次对话时立即召回」：`src/service/workflows/recall/coordinator.ts` 的 `anchorSeqByScope` 初始无锚点，首轮必然执行召回，行为与 v1 一致，此前只是描述遗漏。
-- pending: `tests/session-hooks.spec.ts` 的配置夹具改为从 `DEFAULT_CONFIG` 取未覆盖的项，避免默认值变更后夹具仍锁在旧数值上。
-- pending: `doc/migration-plan.md` 标记 M08-D1 完成并记录三项调整与沿用清单，`doc/migration-stages.md` 的 S8 补上配置默认值核对项，并把跨引擎运行与界面验收标注为由用户执行。全套 412 个用例中 411 通过、1 个仅 Windows 的目录切换用例跳过；`vector-index-service.spec.ts` 在并行压测下出现过一次 PGlite WASM 崩溃，单独运行 3 次与全套重跑均通过。
-- pending: 重写 `extractionIncludeOverheard` 的配置说明。原说明沿用了 v1 最新 HEAD 的 Character 触发描述（「从首条普通消息开始累计，达到阈值即提取；关闭时在 bot 回复后围绕完整交流提取」），而 v2 的提取触发只有 `chatluna/agent-turn` 的 `reason === 'completed'` 一处，没有逐消息触发，「从首条消息累计」在 v2 不成立。改为 v1 `790c89c` 恢复后的语义口径：开关控制 bot 未参与的闲聊是否计入提取，每次对话及其前方一个提取窗口内的消息总是提取，窗口之外的闲聊开启时保留、关闭时丢弃。`README.md` 的配置表同步该条目。
-- pending: `.agent/note/proposed/architecture/2026-11-05-session-hooks-and-collector.md` 的风险清单补充旁听提取缺少独立触发点：v1 在 Character 的 `message_collect` 里逐条消息排队提取，v2 只有 `chatluna/agent-turn` 一处触发，该配置因此只剩切块语义。
-- pending: 发布准备。补充 AGPL-3.0 全文 `LICENSE`（与模板项目、ChatLuna v2 主仓库一致，`package.json` 已声明 `AGPL-3.0-only`）；`AGENTS.md` 与 `doc/migration-plan.md` 的参考路径改为上游仓库地址，移除本地 Windows 目录，避免公开仓库暴露本机用户名与目录结构。
-- pending: `LivingMemoryBackend` 的写路径改为委托 `LivingMemoryMutationService`。原实现直接调用仓储的 `createMemory`/`updateMemory`/`mergeMemories`/`splitMemory`/`archiveActiveEntries`/`deleteEntries`，绕过了预设级串行队列与索引同步：一旦把 `livingmemory` 配成原生后端，主数据会写入而 `lm_index_memory` 不同步，下一次变更的 `indexedCount` 与 `countEntriesByPreset` 校验随即失败，预设被标记为 dirty，召回持续失败直到对账跑完。七个写方法改为 `createMemory`/`updateMemory`/`mergeActiveMemories`/`splitActiveMemory`/`archiveActiveMemories`/`deleteMemories`/`createMemory` 循环，`MemoryChange` 通知保留。
-- pending: `import` 的签名改为契约要求的 `import(into: MemoryScope, data: MemoryExport): Promise<number>`，返回实际写入条数。原签名 `import(presetId: string, ...)` 与 `MemoryBackend` 不匹配，编译报 TS2416 与 TS2322；运行时原生导入传入的是 `MemoryScope` 对象，`presetId` 被当作 `"[object Object]"` 落库，且幂等判断恒为假。同时修正幂等判据：迁移 id 由「目标预设 + 源 id」确定性推导，改为检查目标 id 是否已被占用，重复导入同一份数据返回 0 而不是撞 UNIQUE 约束。
-- pending: 索引就绪预检扩展到全部交互式写入口。`assertPresetReady` 原只在 `createMemory` 调用，现在 `updateMemory`、`updateActiveMemory`、`mergeActiveMemories`、`splitActiveMemory`、`archiveActiveMemories`、`deleteMemory`、`deleteMemories`、`deleteExpiredArchivedMemories` 均在预设级队列内、落库之前预检，索引未就绪时写操作零副作用地失败。`appendExtractedMemories` 保持不预检（提取窗口过期即失，宁可落库后由对账修复）；`clearPresetData` 与 `importPreset` 保持不预检（前者本身就是索引与主数据一起重置的恢复手段，后者写后走对账重建）。
-- pending: `src/service.ts` 的构造顺序调整：`LivingMemoryBackend` 移到 `LivingMemoryMutationService` 之后构造并注入后者与日志器，消除对变更服务的悬空依赖。
-- pending: `tests/backend.spec.ts` 补齐替身与用例：新增索引就绪替身、索引未就绪时全部写入口零副作用失败的用例、`import` 返回写入条数与重复导入幂等的用例；`tests/maintenance.spec.ts`、`tests/webui.spec.ts`、`tests/legacy-import.spec.ts` 的索引替身补上 `assertPresetReady`。全套 414 个用例中 413 通过、1 个仅 Windows 的目录切换用例跳过。
+- 568fa00: 建立记忆、画像、快照与任务仓储，支持按预设筛选和分页。
+- dc511e0: 实现记忆工具、模型调用日志与凭据脱敏，使用 PGlite 和 pgvector 维护向量索引。

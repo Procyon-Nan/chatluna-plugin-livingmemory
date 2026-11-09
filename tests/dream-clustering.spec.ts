@@ -1,3 +1,4 @@
+import { mock } from 'node:test'
 import assert from 'node:assert/strict'
 import type { DreamVectorProvider } from '../src/contracts/vector_index.ts'
 import { DreamClusterer } from '../src/service/workflows/dream/clustering.ts'
@@ -54,9 +55,8 @@ const worker: DreamWorkerRunner = {
     bisect: async (input) => bisectDreamMemories(input)
 }
 
-it.each([0, 1, 29, 30, 31, 59, 60, 61, 135, 701])(
-    'covers %i entries once within the minimum batch count',
-    async (count) => {
+for (const count of [0, 1, 29, 30, 31, 59, 60, 61, 135, 701]) {
+    it(`covers ${count} entries once within the minimum batch count`, async () => {
         const entries = createEntries(count)
         const vectors = createVectorReader(entries)
         const clusterer = new DreamClusterer(vectors.reader, worker)
@@ -80,8 +80,8 @@ it.each([0, 1, 29, 30, 31, 59, 60, 61, 135, 701])(
             [...entries].reverse()
         )
         assert.deepEqual(reordered, clusters)
-    }
-)
+    })
+}
 
 it('reads vectors in pages of 256 and keeps the source records', async () => {
     const entries = createEntries(701)
@@ -132,12 +132,12 @@ it('connects complete candidates to refinement and retains initial on ANN unavai
                 rows
             }
         }
-        const refine = vi.fn(worker.refine)
+        const refine = mock.fn(worker.refine)
         const clusters = await new DreamClusterer(vectors.reader, {
             ...worker,
             refine
         }).buildClusters('preset-1', entries)
-        assert.equal(refine.mock.calls.length, available ? 1 : 0)
+        assert.equal(refine.mock.callCount(), available ? 1 : 0)
         assert.equal(clusters.length, 3)
         assert.ok(
             clusters.every(
@@ -175,7 +175,7 @@ it('rejects changed content before starting the algorithm', async () => {
     const entries = createEntries(31)
     const vectors = createVectorReader(entries)
     vectors.byId.get(entries[0].id)!.contentHash = 'changed'
-    const bisect = vi.fn(worker.bisect)
+    const bisect = mock.fn(worker.bisect)
     await assert.rejects(
         new DreamClusterer(vectors.reader, { ...worker, bisect }).buildClusters(
             'preset-1',
@@ -183,7 +183,7 @@ it('rejects changed content before starting the algorithm', async () => {
         ),
         /正文与向量快照不符/
     )
-    assert.equal(bisect.mock.calls.length, 0)
+    assert.equal(bisect.mock.callCount(), 0)
 })
 
 it('stops submitting vector pages after cancellation', async () => {

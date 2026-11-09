@@ -55,7 +55,7 @@ const createSession = async (
             repository.getEntriesByPresetAndIds(id, ids),
         mutations
     })
-    // v2 的会话工具是纯执行器：参数按 schema 解析后再执行，直接返回结果对象。
+
     const invoke = (
         name: string,
         input: Record<string, unknown>
@@ -146,9 +146,8 @@ class MemoryIndexSinkStub implements MemoryIndexMutationSink {
     }
 }
 
-it.each([false, true])(
-    'splits Dream memories with provenance (index failure: %s)',
-    async (indexFailure) => {
+for (const indexFailure of [false, true]) {
+    it(`splits Dream memories with provenance (index failure: ${indexFailure})`, async () => {
         await withLivingMemoryRepository(async (ctx, repository) => {
             const sink = new MemoryIndexSinkStub()
             if (indexFailure)
@@ -262,8 +261,8 @@ it.each([false, true])(
             })
             assert.equal(getDreamCoverage(state).processedCount, 1)
         })
-    }
-)
+    })
+}
 
 it('rolls back split entries, source archival and speaker links together', async () => {
     await withLivingMemoryRepository(async (ctx, repository) => {
@@ -933,7 +932,7 @@ it('backfills registry rows for active memory keys missing rows on Dream coverag
             scope,
             {
                 type: 'fact',
-                content: 'legacy memory without registry row',
+                content: 'memory without registry row',
                 keywords: [],
                 summary: '',
                 sentiment: '',
