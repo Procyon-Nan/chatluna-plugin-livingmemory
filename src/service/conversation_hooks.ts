@@ -88,9 +88,8 @@ export class LivingMemoryConversationHooks {
             if (state === 'queued') return this.onInputQueued(agent, message)
         }))
         this.disposables.push(this.ctx.on('chatluna/engine-turn', ({ agent, turn, input }) => this.beginTurn(agent, turn, input)))
-        this.disposables.push(this.ctx.agents.turn(async ({ agent, turn, input }, next) => {
-            if (agent.options.engine === undefined) await this.beginTurn(agent, turn, input)
-            return next()
+        this.disposables.push(this.ctx.on('agent/before-turn', ({ agent, turn, input }) => {
+            if (agent.options.engine === undefined) return this.beginTurn(agent, turn, input)
         }))
         this.disposables.push(this.ctx.agents.prepareStep(
             ({ agent, stepNumber }) => this.injectFirstStep(agent, stepNumber),

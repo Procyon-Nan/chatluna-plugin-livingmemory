@@ -5,7 +5,7 @@ import SchemaRegistry from '@chatluna/ui-schema-registry'
 import { routeIdOf } from '@chatluna/satori'
 import { registerRouteSettings, routeSettings } from '../src/routing.ts'
 import type { RouteSettings } from '../src/routing.ts'
-import type { Agent, RequestMiddleware, TurnMiddleware } from '@chatluna/agent'
+import type { Agent, RequestMiddleware } from '@chatluna/agent'
 import { ChatMessage, contentText } from '@chatluna/message'
 import { CallId, ModelId, ProviderId } from '@chatluna/symbol'
 import { absorb } from '@chatluna/chat-observer'
@@ -39,7 +39,6 @@ function createHarness(config: {
     const extractions: { scope: ChatHistoryScope; boundary: number; eligible?: number }[] = []
     const cleared: string[] = []
     const profiles: string[][] = []
-    let onTurn!: TurnMiddleware
     let onRequest!: RequestMiddleware
     const order: string[] = []
     let prepare!: Prepare
@@ -58,7 +57,6 @@ function createHarness(config: {
     const ctx = {
         get: (name: string) => name === 'engines' ? { presetOf: (agent: Agent) => agent.options.engine ? presetId : undefined } : undefined,
         agents: {
-            turn: (middleware: TurnMiddleware) => { onTurn = middleware; return () => {} },
             request: (middleware: RequestMiddleware) => { onRequest = middleware; return () => {} },
             prepareStep: (callback: Prepare) => { prepare = callback; return () => {} }
         },
@@ -138,10 +136,10 @@ function createHarness(config: {
             }
             return emit('chatluna/agent-input', { agent, message, state })
         },
-        begin: (agent: Agent, input: number | ChatMessage[]) => onTurn({
+        begin: (agent: Agent, input: number | ChatMessage[]) => emit('agent/before-turn', {
             agent, turn: agent.session.lastTurn, input: typeof input === 'number' ? [user(input)] : input,
             signal: new AbortController().signal
-        }, async () => ({ reason: 'completed' })),
+        }),
         prepare: (agent: Agent, messages: ChatMessage[] = [], stepNumber = 1) =>
             prepare({ agent, stepNumber, messages }),
         request: async (agent: Agent, messages: readonly ChatMessage[]) => {
@@ -403,6 +401,8 @@ describe('LivingMemoryConversationHooks', () => {
         const harness = createHarness()
         await harness.observed(1, 'question')
         const agent = harness.agent(7, 'test-engine')
+        await harness.begin(agent, 1)
+        assert.equal(harness.recalls.length, 0, 'wait for the engine to resolve its preset')
         await harness.engineTurn(agent, 7, 1)
         assert.equal(harness.recalls.length, 1)
         assert.deepEqual(harness.recalls[0].history.map(m => m.contentLines), [['question']])
