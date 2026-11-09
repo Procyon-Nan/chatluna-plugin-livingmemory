@@ -247,12 +247,12 @@ export class LivingMemoryConversationHooks {
         if (settings.enableSnapshotInjection) {
             const snapshot = await this.options.repository.getLatestSnapshotByScope(scope)
             const text = renderSnapshotText(snapshot?.items ?? [])
-            if (text.length > 0) sections.push(`## 短期记忆\n${text}`)
+            if (text.length > 0) sections.push(`<memory>\n${text}\n</memory>`)
         }
         if (settings.enableUserProfileInjection) {
             const speakerKeys = collectUserProfileSpeakerKeys(chatHistory)
             const profiles = await this.options.userProfiles.renderForSpeakers(scope.presetId, speakerKeys)
-            if (profiles.trim().length > 0) sections.push(`## 用户画像\n${profiles.trim()}`)
+            if (profiles.trim().length > 0) sections.push(`<users_profile>\n${profiles.trim()}\n</users_profile>`)
         }
         if (sections.length === 0) return undefined
         const text = sections.join('\n\n')

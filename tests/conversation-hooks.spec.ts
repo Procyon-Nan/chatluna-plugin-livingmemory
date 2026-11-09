@@ -170,15 +170,16 @@ function createHarness(config: {
 }
 
 describe('LivingMemoryConversationHooks', () => {
-    it('injects the current snapshot on step one only', async () => {
-        const harness = createHarness()
+    it('injects the current snapshot and speaker profiles as separate sections on step one only', async () => {
+        const harness = createHarness({ rules: { enableUserProfileInjection: true } })
         await harness.observed(10, '问')
         harness.setSnapshot('用户喜欢红茶')
         const agent = harness.agent()
         await harness.begin(agent, 10)
         const first = await harness.prepare(agent)
         const second = await harness.prepare(agent, [], 2)
-        assert.match(contentText(first!.contribute![0].content), /用户喜欢红茶/)
+        assert.equal(contentText(first!.contribute![0].content),
+            '<memory>\n用户喜欢红茶\n</memory>\n\n<users_profile>\n测试画像\n</users_profile>')
         assert.equal(second, undefined)
     })
 
@@ -442,7 +443,7 @@ it('freezes Alice’s triggering window on enqueue across folded inputs, buffer 
 
     await h.observed(3, 'queued next', { userId: 'alice' })
     const first = await h.prepare(a, [h.user(3)])
-    assert.match(contentText(first!.contribute![0].content), /测试画像/)
+    assert.equal(contentText(first!.contribute![0].content), '<users_profile>\n测试画像\n</users_profile>')
     assert.equal((await h.prepare(a))?.contribute?.[0], first!.contribute![0])
     assert.equal(h.recalls.length, 1)
     assert.deepEqual(h.recalls[0].history.map(m => m.contentLines), [['earlier'], ['question']])
