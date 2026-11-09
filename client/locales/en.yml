@@ -128,6 +128,32 @@ search.scores: 'cosine {cosine} · keywords {keyword} · boosted {boosted}'
 preset.actions: Preset actions
 tab.navigation: Memory management
 tab.settings: Plugin configuration
+tab.guide: Plugin guide
+guide.start: Getting started
+guide.models.title: Choose your models
+guide.models.text: Under Plugin configuration → Model configuration, choose your models. The main model extracts and organizes memories and generates profiles. The recall model decides whether to look up memories. The embedding model converts memories and queries into vectors so the plugin can compare their meanings. An optional reranker reorders the candidate memories by their relevance to the query. Select Save settings to apply these choices to all presets in this plugin instance.
+guide.openSettings: Open plugin configuration
+guide.rules.title: Choose which conversations use automatic extraction
+guide.rules.text: Open Conversation rules → Capabilities → LivingMemory and set the extraction interval. The default is 60 chat messages. To enable automatic extraction in just one group, set the global interval to 0 and that group’s interval to 60.
+guide.check.title: Try a search with one memory
+guide.check.text: Under Memories, select New memory, choose a preset, and save “I drink my coffee without sugar.” Under Recall test for the same preset, search for “How do I like my coffee?” to see the matches. The test leaves snapshots unchanged. Under Snapshots you can read the snapshot from an actual chat. Expand Recall details to see the search terms and matching memories.
+guide.questions: Common settings
+guide.interval.title: How does the recall interval differ from the history length?
+guide.interval.text: Both settings default to 20 messages. The interval controls when recall runs. The first wake triggers recall if chat history exists. On each later wake, recall runs if the number of new chat messages since the previous recall reaches your chosen interval. Set the interval to 0 to disable automatic recall. The history length controls how many recent messages the bot reads at each wake.
+guide.overheard.title: When can chat between group members trigger extraction?
+guide.overheard.text: Overheard extraction is off by default. Group chatter alone will not trigger extraction. Once the bot replies, the plugin counts unprocessed messages up to that reply, including earlier chatter, and starts extraction if the interval has been reached. With overheard extraction on, group members can reach the threshold on their own without calling the bot or waiting for a reply.
+guide.sharing.title: Can two groups using the same preset share a snapshot?
+guide.sharing.text: Each conversation has its own snapshot by default. To share one between two groups using the same preset, select preset sharing in both groups’ conversation rules. The groups share recall results; each still reads its own chat history and tracks its own recall interval. A group with conversation isolation enabled always uses its own snapshot and searches only its own and global memories within the preset.
+guide.profiles.title: How do I use existing user profiles in a chat?
+guide.profiles.text: By default, profiles are updated after extraction or Dream, and each person needs at least three linked active memories. You can change these settings under Plugin configuration. To use existing profiles during a chat, enable profile injection in the conversation rule (off by default). The bot receives profiles for users who spoke in the recent messages covered by the recall history length.
+guide.dream.title: How Dream organizes memories
+guide.dream.intro: Dream uses the main model to compare memories and decide which to keep, update, merge, split, or archive. For example, “I take my coffee without sugar” and “I like unsweetened coffee” can become a single preference. Choose a main model with a context window of at least 200k tokens for Dream.
+guide.dream.auto.title: Automatic runs start with newly extracted memories
+guide.dream.auto.text: Conversation rules enable Dream after extraction by default. For each newly saved memory, Dream looks for related active memories already in the same preset and reviews them together. If it finds no related older memory, the new entry stays as it is.
+guide.dream.manual.title: Manual runs review a whole preset
+guide.dream.manual.text: Once a preset has at least 30 active memories, select it under Memories and click Run Dream. Dream groups its active memories by similarity and reviews each group in turn. The 30-memory minimum applies only to manual runs.
+guide.dream.result.title: See what changed
+guide.dream.result.text: Open Jobs for the same preset to see how many memories Dream processed, which operations it performed, and any errors. Changes are saved directly to Memories. To see the original entries after a merge or split, change the status filter to Archived.
 settings.scope: Plugin settings apply to all presets.
 settings.save: Save settings
 settings.discard: Discard changes

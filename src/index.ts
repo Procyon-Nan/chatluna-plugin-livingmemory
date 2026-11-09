@@ -56,10 +56,10 @@ export const Config: Schema<Config> = Schema.intersect([
         ).label('主模型'),
         subModel: modelField('子 LLM 模型，用于召回记忆。', 'chat').label('召回模型'),
         embeddingModel: modelField(
-            '嵌入模型，用于记忆检索与 Dream。',
+            '将记忆和查询文本转换为向量，供检索和 Dream 比较语义相似度。',
             'embeddings'
         ).label('嵌入模型'),
-        rerankModel: modelField('Reranker 模型，用于记忆检索结果重排序。', 'reranker').label('重排序模型')
+        rerankModel: modelField('可选。按候选记忆与查询的相关性重新排列检索结果。', 'reranker').label('重排序模型')
     }).description('模型配置'),
     Schema.object({
         memorySearchToolMaxResults: Schema.number()
