@@ -67,7 +67,7 @@ it('keeps job recovery silent when no jobs were interrupted', async () => {
 
 it('deletes an archived entry only after its importance-weighted decay', async () => {
     await withLivingMemoryRepository(async (ctx, repository) => {
-        const now = new Date('2026-11-05T00:00:00.000Z')
+        const now = new Date()
         const create = (
             id: string,
             status: MemoryEntryRecord['status'],
