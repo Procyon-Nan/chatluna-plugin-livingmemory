@@ -43,6 +43,7 @@ const modelField = (description: string, modality: string) =>
 export const Config: Schema<Config> = Schema.intersect([
     Schema.object({
         debug: Schema.boolean()
+            .label('调试日志')
             .description(
                 '记录召回、提取、Dream 每次模型调用的完整提示词、原始响应与诊断事件。'
             )
@@ -52,16 +53,17 @@ export const Config: Schema<Config> = Schema.intersect([
         mainModel: modelField(
             '主 LLM 模型，用于提取记忆、Dream 与用户画像。',
             'chat'
-        ),
-        subModel: modelField('子 LLM 模型，用于召回记忆。', 'chat'),
+        ).label('主模型'),
+        subModel: modelField('子 LLM 模型，用于召回记忆。', 'chat').label('召回模型'),
         embeddingModel: modelField(
             '嵌入模型，用于记忆检索与 Dream。',
             'embeddings'
-        ),
-        rerankModel: modelField('Reranker 模型，用于记忆检索结果重排序。', 'reranker')
+        ).label('嵌入模型'),
+        rerankModel: modelField('Reranker 模型，用于记忆检索结果重排序。', 'reranker').label('重排序模型')
     }).description('模型配置'),
     Schema.object({
         memorySearchToolMaxResults: Schema.number()
+            .label('单次检索条数上限')
             .min(1)
             .max(60)
             .step(1)
@@ -70,6 +72,7 @@ export const Config: Schema<Config> = Schema.intersect([
             )
             .default(DEFAULT_CONFIG.memorySearchToolMaxResults),
         memorySearchMinSimilarity: Schema.number()
+            .label('最低相似度')
             .min(0)
             .max(1)
             .step(0.05)
@@ -103,9 +106,11 @@ export const Config: Schema<Config> = Schema.intersect([
             ])
         )
             .role('checkbox')
+            .label('启用的记忆工具')
             .description('选择向 ChatLuna 注册的记忆工具。')
             .default(DEFAULT_CONFIG.enabledMemoryTools),
         memoryCreateToolMaxMemories: Schema.number()
+            .label('单次创建条数上限')
             .min(1)
             .max(60)
             .step(1)
@@ -116,18 +121,22 @@ export const Config: Schema<Config> = Schema.intersect([
     }).description('工具配置'),
     Schema.object({
         enableUserProfileGeneration: Schema.boolean()
+            .label('提取后更新画像')
             .description('进行记忆提取后，生成、更新相关用户画像。')
             .default(DEFAULT_CONFIG.enableUserProfileGeneration),
         enableDreamUserProfileGeneration: Schema.boolean()
+            .label('Dream 后更新画像')
             .description('进行 Dream 记忆整理后，生成、更新相关用户画像。')
             .default(DEFAULT_CONFIG.enableDreamUserProfileGeneration),
         userProfileMinMemoryCount: Schema.number()
+            .label('生成画像所需记忆数')
             .min(1)
             .max(30)
             .step(1)
             .description('生成或更新单个用户画像所需的最少关联活跃记忆条数。')
             .default(DEFAULT_CONFIG.userProfileMinMemoryCount),
         userProfileMemoryLimit: Schema.number()
+            .label('生成画像时的记忆条数上限')
             .min(5)
             .max(100)
             .step(1)

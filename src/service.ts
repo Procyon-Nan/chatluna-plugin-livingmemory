@@ -1,6 +1,7 @@
 import { Context, Service } from 'cordis'
 import type { Disposable } from 'cordis'
 import type {} from '@cordisjs/plugin-database'
+import type {} from '@cordisjs/plugin-loader'
 import type {} from '@chatluna/tool'
 import { LivingMemoryMutationService } from './service/app/mutation_service.ts'
 import { LivingMemoryMemoryProviders } from './service/app/memory_providers.ts'
@@ -265,6 +266,12 @@ export default class LivingmemoryService extends Service {
             name: 'livingmemory-webui',
             inject: ['chatluna_webui', 'permissions'],
             apply: (ctx: Context) => {
+                ctx.chatluna_webui.state('livingmemory.settingsEntry', {
+                    get: () => {
+                        const entry = this.ctx.fiber.entry
+                        return entry ? { id: entry.id, name: entry.options.name } : null
+                    }
+                })
                 ctx.chatluna_webui.addEntry({
                     baseUrl: import.meta.url,
                     source: '../client/index.ts',

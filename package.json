@@ -72,10 +72,13 @@
     },
     "devDependencies": {
         "@chatluna/permission": "*",
+        "@chatluna/runtime-webui": "*",
         "@chatluna/ui-client": "*",
         "@chatluna/ui-kit": "*",
+        "@chatluna/ui-schema-form": "*",
         "@cordisjs/plugin-database": "^4.1.1",
         "@cordisjs/plugin-database-sqlite": "^5.1.1",
+        "@cordisjs/plugin-loader": "^1.0.0-rc.9",
         "@cordisjs/plugin-timer": "^1.1.4",
         "@cordisjs/unyaml": "2.0.3",
         "@types/node": "24.13.3",

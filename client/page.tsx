@@ -31,6 +31,7 @@ import {
 } from '@chatluna/ui-client/client'
 import type { Translate } from '@chatluna/ui-client/client'
 import { PresetActions } from './preset-actions.tsx'
+import { SettingsPanel } from './settings-panel.tsx'
 import { MemoryEntryEditor } from './memory-entry-editor.tsx'
 import { MemoryDeletionDialog, type DeleteMemoriesTarget } from './memory-deletion-dialog.tsx'
 import type { MemoryListFilter } from '../src/contracts/rpc.ts'
@@ -69,6 +70,7 @@ type Tab =
     | 'snapshots'
     | 'jobs'
     | 'search'
+    | 'settings'
 
 /** 管理页：记忆检索与编辑、任务列表、人设卡片、预设导入导出。 */
 export function LivingMemoryPage() {
@@ -89,6 +91,7 @@ export function LivingMemoryPage() {
     }
 
     function renderPanel() {
+        if (tab === 'settings') return null
         if (active === undefined) return (
             <div className="flex flex-col items-center gap-3">
                 <EmptyState title={t('empty.noPreset')} />
@@ -116,7 +119,7 @@ export function LivingMemoryPage() {
         <div className="flex h-full min-w-0 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
             <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border pb-2">
                 <nav className="flex max-w-full items-center gap-1 overflow-x-auto" aria-label={t('tab.navigation')}>
-                    {(['entries', 'profiles', 'personas', 'snapshots', 'jobs', 'search'] as const).map(key => (
+                    {(['entries', 'profiles', 'personas', 'snapshots', 'jobs', 'search', 'settings'] as const).map(key => (
                         <button key={key} type="button" aria-current={tab === key ? 'page' : undefined}
                             className="shrink-0 border-b-2 border-transparent px-2 py-2 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-ring focus-visible:-outline-offset-2 aria-[current=page]:border-primary aria-[current=page]:font-medium aria-[current=page]:text-foreground"
                             onClick={() => setTab(key)}>
@@ -124,10 +127,10 @@ export function LivingMemoryPage() {
                         </button>
                     ))}
                 </nav>
-                <div className="flex flex-wrap items-center gap-2">
+                {tab !== 'settings' && <div className="flex flex-wrap items-center gap-2">
                     <PresetPicker presets={presets} value={active} onChange={selectPreset} />
                     <PresetActions presetId={active} onClear={setClearTarget} />
-                </div>
+                </div>}
             </header>
             {creating && (
                 <MemoryEntryEditor presetId={active ?? ''} presets={presets}
@@ -149,6 +152,9 @@ export function LivingMemoryPage() {
             )}
             <Warnings warnings={status.data?.warnings ?? []} />
             {renderPanel()}
+            <React.Activity mode={tab === 'settings' ? 'visible' : 'hidden'}>
+                <SettingsPanel />
+            </React.Activity>
         </div>
     )
 }

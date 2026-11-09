@@ -126,3 +126,10 @@ search.empty: No memory matched
 search.scores: 'cosine {cosine} · keywords {keyword} · boosted {boosted}'
 preset.actions: Preset actions
 tab.navigation: Memory management
+tab.settings: Plugin configuration
+settings.scope: Plugin settings apply to all presets.
+settings.save: Save settings
+settings.discard: Discard changes
+settings.saved: Settings saved
+settings.noEntry: This instance was not loaded from a configuration file and cannot be edited here.
+settings.noSchema: The LivingMemory configuration form is unavailable.

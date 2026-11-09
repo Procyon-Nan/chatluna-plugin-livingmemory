@@ -84,7 +84,8 @@ livingmemory/
 │   └── build-workers.mjs       # 用 rolldown 打包 Vector 与语义分组 Worker 产物
 ├── client/
 │   ├── index.ts                # WebUI 客户端入口：注册 `/livingmemory` 路由与语言资源
-│   ├── page.tsx                # 管理页：记忆、画像、人设、快照、任务、召回测试六个面板
+│   ├── page.tsx                # 管理页：记忆、画像、人设、快照、任务、召回测试与插件配置
+│   ├── settings-panel.tsx      # 当前插件实例的配置表单与保存操作
 │   ├── memory-deletion-dialog.tsx # 删除选中记忆及清空预设的确认弹窗
 │   ├── memory-entry-editor.tsx # 手动新建与编辑记忆共用的表单
 │   ├── preset-actions.tsx      # 预设操作菜单、导入确认与 JSON 下载
