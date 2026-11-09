@@ -34,7 +34,7 @@ declare module '@chatluna/ui-client/client' {
         'livingmemory.entries': LivingMemoryEntriesSnapshot
         'livingmemory.speakers': LivingMemorySpeakerView[]
         'livingmemory.jobs': LivingMemoryJobView[]
-        'livingmemory.personas': LivingMemoryPersonaView[]
+        'livingmemory.persona': { persona: LivingMemoryPersonaView | null }
         'livingmemory.profiles': LivingMemoryProfilesSnapshot
         'livingmemory.snapshots': LivingMemorySnapshotsSnapshot
         'livingmemory.status': LivingMemoryStatusSnapshot

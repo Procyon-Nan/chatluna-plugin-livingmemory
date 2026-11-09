@@ -102,7 +102,7 @@ export function LivingMemoryPage() {
             case 'profiles':
                 return <ProfilesPanel presetId={active} />
             case 'personas':
-                return <PersonasPanel />
+                return <PersonaPanel key={active} presetId={active} />
             case 'snapshots':
                 return <SnapshotsPanel presetId={active} />
             case 'jobs':
@@ -923,52 +923,35 @@ function JobRow({ job }: { job: LivingMemoryJobView }) {
     )
 }
 
-function PersonasPanel() {
+function PersonaPanel({ presetId }: { presetId: string }) {
     const t = useT()
-    const personas = useLive('livingmemory.personas')
-    const items = personas.data ?? []
-    const [editing, setEditing] = React.useState<LivingMemoryPersonaView>()
-    if (items.length === 0) return <EmptyState title={t('personas.empty')} />
+    const { data, error } = useLive('livingmemory.persona', { presetId })
+    const [editing, setEditing] = React.useState(false)
+
+    if (error) return <EmptyState title={error} />
+    if (data === undefined) return null
+    const { persona } = data
+    if (persona === null) return <EmptyState title={t('personas.empty')} />
     return (
-        <>
-            <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-                {items.map((persona) => (
-                    <li
-                        key={persona.presetId}
-                        className="flex items-center gap-2 rounded-md border border-border p-3"
-                    >
-                        <span className="font-medium">{persona.presetId}</span>
-                        <Badge variant="outline">{t(`persona.source.${persona.source}`)}</Badge>
-                        {persona.stale && (
-                            <Badge variant="secondary">{t('personas.stale')}</Badge>
-                        )}
-                        <span className="ml-auto text-xs opacity-60">
-                            {formatTime(persona.updatedAt)}
-                        </span>
-                        <Button size="sm" variant="outline" onClick={() => setEditing(persona)}>
-                            {t('common.edit')}
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() =>
-                                void callAction('livingmemory.resetPersona', {
-                                    presetId: persona.presetId
-                                }).catch(report)
-                            }
-                        >
-                            {t('personas.reset')}
-                        </Button>
-                    </li>
-                ))}
-            </ul>
-            {editing !== undefined && (
-                <PersonaDialog
-                    persona={editing}
-                    onClose={() => setEditing(undefined)}
-                />
-            )}
-        </>
+        <article className="space-y-4 rounded-md border border-border p-4">
+            <header className="flex flex-wrap items-center gap-2">
+                <h2 className="font-medium">{presetId}</h2>
+                <Badge variant="outline">{t(`persona.source.${persona.source}`)}</Badge>
+                {persona.stale && <Badge variant="secondary">{t('personas.stale')}</Badge>}
+                <span className="text-xs text-muted-foreground">{formatTime(persona.updatedAt)}</span>
+                <div className="ml-auto flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+                        {t('common.edit')}
+                    </Button>
+                    <Button size="sm" variant="outline"
+                        onClick={() => void callAction('livingmemory.resetPersona', { presetId }).catch(report)}>
+                        {t('personas.reset')}
+                    </Button>
+                </div>
+            </header>
+            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{persona.card}</p>
+            {editing && <PersonaDialog persona={persona} onClose={() => setEditing(false)} />}
+        </article>
     )
 }
 

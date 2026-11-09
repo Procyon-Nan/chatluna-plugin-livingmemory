@@ -14,6 +14,7 @@ import { livingMemoryWebUI } from '../src/service/app/webui.ts'
 import { LivingMemoryAdminService } from '../src/service/app/admin_service.ts'
 import type { LivingMemoryAdminDeps } from '../src/service/app/admin_service.ts'
 import { LivingMemoryMutationService } from '../src/service/app/mutation_service.ts'
+import { LivingMemoryPresetPersonaService } from '../src/service/memory/preset_persona.ts'
 import { createCapturedLogger } from './workflow-test-utils.ts'
 import type { LivingMemoryRepository } from '../src/service/persistence/repository.ts'
 import { DEFAULT_CONFIG } from '../src/service.ts'
@@ -62,10 +63,11 @@ const createWebUI = () => {
     }
 }
 
-const adminOf = (repository: LivingMemoryRepository) =>
+const adminOf = (ctx: Context, repository: LivingMemoryRepository) =>
     new LivingMemoryAdminService({
         config: DEFAULT_CONFIG,
         repository,
+        presetPersona: new LivingMemoryPresetPersonaService(ctx, DEFAULT_CONFIG, repository, createCapturedLogger().logger),
         mutations: new LivingMemoryMutationService(
             repository,
             {
@@ -110,7 +112,7 @@ const withWebUI = async (
                 emit: ui.emit
             } as never,
             {
-                admin: adminOf(repository),
+                admin: adminOf(ctx, repository),
                 repository,
                 logger: { summary: () => {} } as never
             }
@@ -137,6 +139,21 @@ it('lists every preset once in the status snapshot', async () => {
             presets: string[]
         }
         assert.deepEqual(status.presets, ['preset-1'])
+    })
+})
+
+it('reads only the selected preset’s persona and distinguishes an empty card from a missing snapshot', async () => {
+    await withWebUI(async (_ctx, repository, ui) => {
+        for (const presetId of ['A', 'B']) {
+            await repository.upsertPresetPersona({
+                presetId, card: `正文 ${presetId}`, source: 'generated', rawHash: 'hash',
+                totalLines: 1, deletedLines: 0, usedRawFallback: false
+            })
+        }
+        const read = (presetId: string) => ui.read('livingmemory.persona', { presetId })
+        assert.partialDeepStrictEqual(await read('A'), { persona: { presetId: 'A', card: '正文 A' } })
+        assert.partialDeepStrictEqual(await read('B'), { persona: { presetId: 'B', card: '正文 B' } })
+        assert.deepEqual(await read('C'), { persona: null })
     })
 })
 

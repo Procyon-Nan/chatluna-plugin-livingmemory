@@ -87,12 +87,12 @@ job.status.completed: 已完成
 job.status.partial: 部分完成
 job.status.failed: 失败
 
-personas.empty: 还没有生成过预设人设卡片
+personas.empty: 当前预设还没有人设卡片
 personas.stale: 预设已变更
 personas.reset: 重新生成
 personas.hint: 卡片由预设的 system 部分摘录生成；手工保存后不再被自动覆盖。
 
-persona.source.auto: 自动生成
+persona.source.generated: 自动生成
 persona.source.manual: 手工编辑
 
 common.save: 保存

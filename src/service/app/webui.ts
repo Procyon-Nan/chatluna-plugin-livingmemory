@@ -111,10 +111,11 @@ export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
         refreshOn: ['livingmemory/job-change', ...refreshOn]
     })
 
-    ctx.chatluna_webui.state('livingmemory.personas', {
-        get: async (): Promise<LivingMemoryPersonaView[]> => {
-            const cards = await ui.admin.listPresetPersonas()
-            return cards.map(toPersonaView)
+    ctx.chatluna_webui.state('livingmemory.persona', {
+        params: Schema.object({ presetId: Schema.string().required() }),
+        get: async ({ presetId }: { presetId: string }) => {
+            const card = await ui.admin.getPresetPersona(presetId)
+            return { persona: card ? toPersonaView(card) : null }
         },
         refreshOn
     })
@@ -458,7 +459,6 @@ const toJobView = (job: MemoryJobRecord): LivingMemoryJobView => ({
 
 const toPersonaView = (card: PresetPersonaCardInfo): LivingMemoryPersonaView => ({
     presetId: card.presetId,
-    name: card.presetId,
     card: card.card,
     source: card.source,
     stale: card.stale,

@@ -1,4 +1,4 @@
-import type { MemoryEntryRecord, MemoryJobRecord } from './memory.ts'
+import type { MemoryEntryRecord, MemoryJobRecord, PresetPersonaSource } from './memory.ts'
 import type { MemoryListQuery } from './rpc.ts'
 import type { DreamTriggerResult, MemoryServiceStatus } from './workflows.ts'
 
@@ -73,9 +73,8 @@ export interface LivingMemoryJobView {
 
 export interface LivingMemoryPersonaView {
     presetId: string
-    name: string
     card: string
-    source: string
+    source: PresetPersonaSource
     stale: boolean
     updatedAt: number
 }

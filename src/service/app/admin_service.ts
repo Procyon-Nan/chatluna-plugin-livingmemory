@@ -195,8 +195,8 @@ export class LivingMemoryAdminService {
         })
     }
 
-    listPresetPersonas(): Promise<PresetPersonaCardInfo[]> {
-        return this.deps.presetPersona.listCards()
+    getPresetPersona(presetId: string): Promise<PresetPersonaCardInfo | undefined> {
+        return this.deps.presetPersona.getCard(presetId)
     }
 
     async savePresetPersonaCard(presetId: string, card: string) {

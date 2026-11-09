@@ -85,12 +85,12 @@ job.status.completed: Completed
 job.status.partial: Partial
 job.status.failed: Failed
 
-personas.empty: No preset persona cards have been generated
+personas.empty: This preset has no persona card yet
 personas.stale: Preset changed
 personas.reset: Regenerate
 personas.hint: The card is distilled from the preset's system section; once saved by hand it is no longer overwritten automatically.
 
-persona.source.auto: Generated
+persona.source.generated: Generated
 persona.source.manual: Edited by hand
 
 common.save: Save
