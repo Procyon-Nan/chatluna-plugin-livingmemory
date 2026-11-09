@@ -96,6 +96,16 @@ export class LivingMemoryConversationHooks {
             ({ agent, stepNumber }) => this.injectFirstStep(agent, stepNumber),
             { name: 'livingmemory:recall', order: RECALL_STEP_ORDER }
         ))
+        this.disposables.push(this.ctx.agents.request((call, next) => {
+            const running = this.turns.get(call.agent)
+            const turn = running && this.isCurrent(running) ? running.number : undefined
+            const messages = call.request.messages.filter(({ source, form, meta }) => {
+                if (source.kind !== 'plugin' || source.plugin !== SNAPSHOT_PLUGIN || form !== 'notice') return true
+                return turn !== undefined && meta?.turn === turn
+            })
+            if (messages.length === call.request.messages.length) return next()
+            return next({ ...call, request: { ...call.request, messages } })
+        }))
         this.disposables.push(this.ctx.on('chatluna/engine-preset', ({ agent, presetId }) => {
             const key = agent.options.conversationKey
             if (key !== undefined) this.changeScope(key, String(agent.session.id), presetId, false)

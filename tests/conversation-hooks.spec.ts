@@ -5,8 +5,9 @@ import SchemaRegistry from '@chatluna/ui-schema-registry'
 import { routeIdOf } from '@chatluna/satori'
 import { registerRouteSettings, routeSettings } from '../src/routing.ts'
 import type { RouteSettings } from '../src/routing.ts'
-import type { Agent, TurnMiddleware } from '@chatluna/agent'
+import type { Agent, RequestMiddleware, TurnMiddleware } from '@chatluna/agent'
 import { ChatMessage, contentText } from '@chatluna/message'
+import { CallId, ModelId, ProviderId } from '@chatluna/symbol'
 import { absorb } from '@chatluna/chat-observer'
 import { createSpeakerKey } from '../src/service/memory/speaker_identity.ts'
 import { LivingMemoryRecallCoordinator } from '../src/service/workflows/recall/coordinator.ts'
@@ -22,6 +23,7 @@ const settle = async () => {
     await new Promise<void>((resolve) => setImmediate(resolve))
 }
 type Prepare = (input: { agent: Agent; stepNumber: number; messages: readonly ChatMessage[] }) => Promise<{ contribute?: readonly ChatMessage[] } | undefined>
+const model = { provider: ProviderId('test'), model: ModelId('chat') }
 
 function createHarness(config: {
     overheard?: boolean
@@ -38,6 +40,7 @@ function createHarness(config: {
     const cleared: string[] = []
     const profiles: string[][] = []
     let onTurn!: TurnMiddleware
+    let onRequest!: RequestMiddleware
     const order: string[] = []
     let prepare!: Prepare
     let snapshotText = ''
@@ -56,6 +59,7 @@ function createHarness(config: {
         get: (name: string) => name === 'engines' ? { presetOf: (agent: Agent) => agent.options.engine ? presetId : undefined } : undefined,
         agents: {
             turn: (middleware: TurnMiddleware) => { onTurn = middleware; return () => {} },
+            request: (middleware: RequestMiddleware) => { onRequest = middleware; return () => {} },
             prepareStep: (callback: Prepare) => { prepare = callback; return () => {} }
         },
         on: (name: string, listener: (payload: unknown) => unknown) => {
@@ -140,6 +144,16 @@ function createHarness(config: {
         }, async () => ({ reason: 'completed' })),
         prepare: (agent: Agent, messages: ChatMessage[] = [], stepNumber = 1) =>
             prepare({ agent, stepNumber, messages }),
+        request: async (agent: Agent, messages: readonly ChatMessage[]) => {
+            const request = { messages, model: 'test:chat', system: '', config: model, toolSchemas: [] }
+            let dispatched: readonly ChatMessage[] | undefined
+            await onRequest({ agent, request, attempt: 1, signal: new AbortController().signal }, async call => {
+                dispatched = call?.request.messages ?? messages
+                return { kind: 'completed', finish: { kind: 'stop' } }
+            })
+            assert.ok(dispatched)
+            return dispatched
+        },
         send: (ids: number[], turn = 1, originPreset = presetId) => emit('send', {
             chatSent: { own: true, reply: { conversationKey: 'conv-1', sessionId, presetId: originPreset, turn },
                 messageIds: ids.map(id => 'm-' + id) }
@@ -181,6 +195,41 @@ describe('LivingMemoryConversationHooks', () => {
         assert.equal(contentText(first!.contribute![0].content),
             '<memory>\n用户喜欢红茶\n</memory>\n\n<users_profile>\n测试画像\n</users_profile>')
         assert.equal(second, undefined)
+    })
+
+    it('keeps only this turn’s injection in place, including after a tool result', async () => {
+        const h = createHarness()
+        const agent = h.agent()
+        const first = h.user(1)
+        const second = h.user(2)
+        const snapshot = (turn: number) => ChatMessage.notice('chatluna:livingmemory', '沿用同一份快照', { meta: { turn } })
+        const previous = snapshot(1)
+        const reply = ChatMessage.assistant('答复', model)
+        await h.engineTurn(agent, 2, [second])
+        const current = snapshot(2)
+        const notice = ChatMessage.notice('chatluna:character', '本轮通知')
+        const history = Object.freeze([first, previous, reply, second, notice, current])
+        const visible = [first, reply, second, notice, current]
+        assert.deepEqual(await h.request(agent, history), visible)
+
+        const callId = CallId('call-1')
+        const toolCall = ChatMessage.assistant([{ type: 'tool-call', toolCallId: callId, toolName: 'lookup', input: {} }], model)
+        const toolResult = ChatMessage.tool(callId, 'lookup', { type: 'text', value: '查询结果' })
+        assert.deepEqual(await h.request(agent, [...history, toolCall, toolResult]), [...visible, toolCall, toolResult])
+        assert.deepEqual(await h.request(agent, [first, previous]), [first])
+
+        h.switch('preset-2')
+        assert.deepEqual(await h.request(agent, history), [first, reply, second, notice])
+    })
+
+    it('hides all earlier injections when the new turn has no content to inject', async () => {
+        const h = createHarness()
+        const agent = h.agent()
+        const user = ChatMessage.user('<memory>用户输入</memory>')
+        const old = ChatMessage.notice('chatluna:livingmemory', '## 短期记忆\n旧快照')
+        await h.begin(agent, [user])
+        assert.equal(await h.prepare(agent), undefined)
+        assert.deepEqual(await h.request(agent, [old, user]), [user])
     })
 
     it('uses the actual input batch while a later user message is already recorded', async () => {
