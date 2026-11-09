@@ -83,6 +83,19 @@ export function LivingMemoryPage() {
     const [creating, setCreating] = React.useState(false)
     const [clearTarget, setClearTarget] = React.useState<string>()
     const [tab, setTab] = React.useState<Tab>('entries')
+    const panel = React.useRef<HTMLDivElement>(null)
+    const previousTab = React.useRef(tab)
+
+    React.useLayoutEffect(() => {
+        if (previousTab.current === tab) return
+        previousTab.current = tab
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+        const animation = panel.current?.animate(
+            [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }],
+            { duration: 160, easing: 'ease-out' }
+        )
+        return () => animation?.cancel()
+    }, [tab])
 
     const active = selection.presetId ?? presets[0]
 
@@ -151,10 +164,12 @@ export function LivingMemoryPage() {
                     }} />
             )}
             <Warnings warnings={status.data?.warnings ?? []} />
-            {renderPanel()}
-            <React.Activity mode={tab === 'settings' ? 'visible' : 'hidden'}>
-                <SettingsPanel />
-            </React.Activity>
+            <div ref={panel} className="flex min-h-0 min-w-0 flex-1 flex-col">
+                {renderPanel()}
+                <React.Activity mode={tab === 'settings' ? 'visible' : 'hidden'}>
+                    <SettingsPanel />
+                </React.Activity>
+            </div>
         </div>
     )
 }
