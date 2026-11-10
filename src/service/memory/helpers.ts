@@ -1,24 +1,28 @@
 import type { Context } from 'cordis'
 import type {} from '@chatluna/preset'
-import type { RouteSettings } from '../../routing.ts'
+import { isCustomConversation, type RouteSettings } from '../../routing.ts'
 import type { MemoryScope, SnapshotScope } from '../../contracts/memory.ts'
-import type { MemoryTranscriptOrigin } from '../transcript/origin_context.ts'
 import type { ChatHistoryEntry } from '../chat_history.ts'
 
 export interface QueueExtractionOptions {
+    routeId?: string
     windowMessages: number
     enableAutoDream: boolean
     includeOverheard: boolean
-    resolveTranscriptOrigin: (entries: readonly ChatHistoryEntry[]) => Promise<MemoryTranscriptOrigin>
+    formatTranscriptHeader: (entries: readonly ChatHistoryEntry[]) => Promise<string>
 }
 
-/**
- * 作用域唯一键：presetId 与 conversationId 以换行符拼接。
- * 提取缓冲、召回锁与说话人标签缓存均以该键隔离数据。
- */
+/** 消费进度按预设、来源路由（自定义会话）和会话区分；重置时按会话整体清除。 */
 export const scopeKey = (
-    scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
-) => `${scope.presetId}\n${scope.conversationId}`
+    scope: Pick<MemoryScope, 'presetId' | 'conversationId'>, routeId?: string
+) => [scope.presetId, ...(routeId ? [routeId] : []), scope.conversationId].join('\n')
+
+/** 宿主自定义会话可以跨地点复用；其它会话键保留个人和分线归属。 */
+export function memorySourceId(conversationId: string, routeId?: string): string {
+    if (!isCustomConversation(conversationId)) return conversationId
+    if (!routeId) throw new Error('自定义会话缺少本次消息的来源路由。')
+    return routeId
+}
 
 export function snapshotScopeOf(
     { presetId, conversationId }: MemoryScope,

@@ -34,7 +34,6 @@ const cluster = (id: string): DreamBatch => ({
         {
             id,
             presetId: 'preset',
-            sourceLabel: null,
             type: 'fact',
             content: `正文 ${id}`,
             summary: `摘要 ${id}`,

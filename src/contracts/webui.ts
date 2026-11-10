@@ -13,7 +13,7 @@ export interface LivingMemoryEntryView {
     keywords: string[]
     speakerKeys: string[]
     importance: number | null
-    sourceLabel: string | null
+    sourceLabel: string
     createdAt: number
     updatedAt: number
 }

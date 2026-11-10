@@ -1,3 +1,5 @@
+import type { ToolCallContext } from '@chatluna/tool'
+import { memorySourceId } from '../helpers.ts'
 import { isRecord } from '@chatluna/utils/object'
 import type { MemoryScope } from '../../../contracts/memory.ts'
 
@@ -15,6 +17,7 @@ export interface LivingMemoryToolAgent {
         readonly conversationKey?: string | undefined
         readonly location?:
             | {
+                  readonly route?: string | undefined
                   readonly platform?: string | undefined
                   readonly user?: string | undefined
                   readonly guild?: string | undefined
@@ -27,6 +30,18 @@ export interface LivingMemoryToolAgent {
 
 export const agentOfTool = (agent: object | undefined): LivingMemoryToolAgent | undefined =>
     isRecord(agent) && isRecord(agent['options']) ? (agent as unknown as LivingMemoryToolAgent) : undefined
+
+/** 有对话轮次时使用唤醒来源；独立调用使用宿主在本次工具调用上传入的地点。 */
+export type ToolRouteResolver = (
+    agent: LivingMemoryToolAgent | undefined, routeId: string | undefined
+) => { isolated: boolean; routeId?: string | undefined }
+
+export function toolContext(call: ToolCallContext, resolve?: ToolRouteResolver) {
+    const agent = agentOfTool(call.agent)
+    const routeId = call.routeId ?? call.location?.route ?? agent?.options.location?.route
+    const route = resolve?.(agent, routeId) ?? { isolated: false, routeId }
+    return { agent, ...route }
+}
 
 export type LivingMemoryToolPresetIdResolution =
     | { ok: true; presetId: string }
@@ -53,7 +68,8 @@ export type LivingMemoryToolScopeResolution =
  * 从工具调用的 Agent 读取会话作用域；子代理调用一律拒绝。
  */
 export const resolveToolMemoryScope = (
-    agent: LivingMemoryToolAgent | undefined
+    agent: LivingMemoryToolAgent | undefined,
+    routeId?: string
 ): LivingMemoryToolScopeResolution => {
     const presetIdResolution = resolveToolMemoryPresetId(agent)
     if (presetIdResolution.ok === false) {
@@ -69,7 +85,7 @@ export const resolveToolMemoryScope = (
 
     const location = agent?.options.location
     const scope: MemoryScope = {
-        conversationId,
+        conversationId: memorySourceId(conversationId, routeId),
         presetId: presetIdResolution.presetId
     }
     if (location?.platform !== undefined) scope.platform = location.platform

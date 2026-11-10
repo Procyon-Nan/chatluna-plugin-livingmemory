@@ -23,6 +23,8 @@ import { LivingMemoryFactsCommittedError } from '../../vector_index/errors.ts'
 import { resolveSpeakerKeysByLabels } from '../speaker_identity.ts'
 import {
     agentOfTool,
+    type ToolRouteResolver,
+    toolContext,
     describeLivingMemoryToolScopeFailure,
     resolveToolMemoryPresetId,
     resolveToolMemoryScope
@@ -30,7 +32,8 @@ import {
 
 export const createCreateMemoryTool = (
     creation: LivingMemoryCreationProvider,
-    maxMemories: number
+    maxMemories: number,
+    resolveRoute?: ToolRouteResolver
 ): ToolDefinition<{ memories: ExtractedMemoryItem[] }> => {
     const doc = memoryCreateTool(maxMemories)
     return defineTool({
@@ -39,7 +42,8 @@ export const createCreateMemoryTool = (
         args: doc.schema,
         traits: { effect: 'write' },
         async run(input: { memories: ExtractedMemoryItem[] }, call: ToolCallContext) {
-            const resolution = resolveToolMemoryScope(agentOfTool(call.agent))
+            const { agent, routeId } = toolContext(call, resolveRoute)
+            const resolution = resolveToolMemoryScope(agent, routeId)
             if (resolution.ok === false) {
                 throw new Error(describeLivingMemoryToolScopeFailure(resolution.reason))
             }

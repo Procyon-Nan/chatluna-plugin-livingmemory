@@ -32,8 +32,7 @@ export const normalizeEntryRecord = (
     importance: normalizeMemoryImportance(record.importance),
     sourceConversationId: normalizeSourceConversationId(
         record.sourceConversationId
-    ),
-    sourceLabel: normalizeOptionalMemoryText(record.sourceLabel)
+    )
 })
 
 export const normalizeUserProfileRecord = (

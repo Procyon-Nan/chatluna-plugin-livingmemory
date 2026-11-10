@@ -86,7 +86,6 @@ it('deletes an archived entry only after its importance-weighted decay', async (
                 sentiment: null,
                 importance,
                 sourceConversationId: null,
-                sourceLabel: null,
                 sourceOrigins: [],
                 createdAt: new Date(now.getTime() - age),
                 updatedAt: new Date(now.getTime() - age)

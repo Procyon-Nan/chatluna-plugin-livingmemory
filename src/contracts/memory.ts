@@ -35,10 +35,11 @@ export interface LivingMemorySearchResult extends Pick<
   | 'summary'
   | 'sentiment'
   | 'importance'
-  | 'sourceLabel'
   | 'createdAt'
   | 'updatedAt'
-> {}
+> {
+  sourceLabel: string
+}
 
 export interface LivingMemorySearchDetailedResult extends LivingMemorySearchResult {
   cosineScore: number
@@ -91,7 +92,7 @@ export interface MemorySourceOrigin {
 
 export interface LivingMemoryGetMessagesMemory {
   id: string
-  sourceLabel: string | null
+  sourceLabel: string
   sourceOrigins: MemorySourceOrigin[]
 }
 
@@ -115,11 +116,12 @@ export interface MemoryEntryRecord {
   sentiment: string | null
   importance: number | null
   sourceConversationId: string | null
-  sourceLabel: string | null
   sourceOrigins: MemorySourceOrigin[]
   createdAt: Date
   updatedAt: Date
 }
+
+export type MemoryEntryWithSource = MemoryEntryRecord & { sourceLabel: string }
 
 export interface SnapshotScope {
   presetId: string
@@ -321,12 +323,18 @@ export interface LivingMemoryPresetExportV5 extends LivingMemoryPresetExportBase
   entries: LivingMemoryPresetExportEntryV4[]
 }
 
+export interface LivingMemoryPresetExportV6 extends LivingMemoryPresetExportBase {
+  version: 6
+  entries: LivingMemoryPresetExportEntryV3[]
+}
+
 export type LivingMemoryPresetExport =
   | LivingMemoryPresetExportV1
   | LivingMemoryPresetExportV2
   | LivingMemoryPresetExportV3
   | LivingMemoryPresetExportV4
   | LivingMemoryPresetExportV5
+  | LivingMemoryPresetExportV6
 
 export interface LivingMemoryPresetImportSummary {
   entries: number

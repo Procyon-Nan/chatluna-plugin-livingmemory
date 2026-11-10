@@ -1,3 +1,4 @@
+import { isCustomConversation } from '../../../routing.ts'
 import { defineTool, type ToolCallContext, type ToolDefinition } from '@chatluna/tool'
 import type { LivingMemorySearchResult } from '../../../contracts/memory.ts'
 import type { LivingMemorySearchProvider } from '../../../contracts/workflows.ts'
@@ -8,8 +9,8 @@ import {
 } from '../../prompts/memory_entries.ts'
 import { memorySearchTool } from '../../prompts/memory_tools.ts'
 import {
-    agentOfTool,
-    type LivingMemoryToolAgent,
+    toolContext,
+    type ToolRouteResolver,
     describeLivingMemoryToolScopeFailure,
     resolveToolMemoryPresetId,
     resolveToolMemoryScope
@@ -29,7 +30,7 @@ interface SearchArgs {
 export const createSearchMemoryTool = (
     searchProvider: LivingMemorySearchProvider,
     includeMemoryIds: boolean,
-    isConversationIsolated: (agent?: LivingMemoryToolAgent) => boolean = () => false
+    resolveRoute?: ToolRouteResolver
 ): ToolDefinition<SearchArgs> =>
     defineTool({
         name: memorySearchTool.name,
@@ -37,11 +38,14 @@ export const createSearchMemoryTool = (
         args: memorySearchTool.schema,
         traits: { effect: 'read' },
         async run(input: SearchArgs, call: ToolCallContext) {
-            const agent = agentOfTool(call.agent)
+            const { agent, isolated, routeId } = toolContext(call, resolveRoute)
             let presetId: string
             let conversationId: string | undefined
-            if (isConversationIsolated(agent)) {
-                const resolution = resolveToolMemoryScope(agent)
+            if (isCustomConversation(agent?.options.conversationKey) && !routeId) {
+                throw new Error('自定义会话缺少本次消息的来源路由。')
+            }
+            if (isolated) {
+                const resolution = resolveToolMemoryScope(agent, routeId)
                 if (resolution.ok === false) {
                     throw new Error(describeLivingMemoryToolScopeFailure(resolution.reason))
                 }

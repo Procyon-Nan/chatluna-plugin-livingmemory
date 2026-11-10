@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { migrateLegacySources } from '../src/service/persistence/source_migration.ts'
+import { routeIdOf } from '@chatluna/satori'
 import { withLivingMemoryRepository } from './persistence-test-utils.ts'
 import type {
     LivingMemoryPresetExport,
@@ -54,8 +56,8 @@ it('copies preset data without moving source records', async () => {
         })
 
         const exported = await repository.exportPresetData(sourcePresetId)
-        if (exported.version !== 5) {
-            throw new Error('expected version 5 preset export')
+        if (exported.version !== 6) {
+            throw new Error('expected version 6 preset export')
         }
         const sourceProfile = exported.userProfiles[0]
 
@@ -133,7 +135,7 @@ it('copies preset data without moving source records', async () => {
     })
 })
 
-it('exports v5 and imports historical entries with obsolete metadata', async () => {
+it('exports v6 and imports historical entries with obsolete metadata', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
         const presetId = 'preset-import'
         const data = {
@@ -148,7 +150,7 @@ it('exports v5 and imports historical entries with obsolete metadata', async () 
         }
         await repository.importPresetData(presetId, data)
         const exported = await repository.exportPresetData(presetId)
-        assert.equal(exported.version, 5)
+        assert.equal(exported.version, 6)
         assert.equal(exported.entries[0].content, 'memory-1')
         assert.equal(
             Object.hasOwn(exported.entries[0], 'isConsolidated'),
@@ -200,55 +202,65 @@ it('synthesizes registry rows for keys missing from version 3 imports', async ()
     })
 })
 
-it('round-trips memory source labels through version 5 exports', async () => {
-    await withLivingMemoryRepository(async (_ctx, repository) => {
-        const sourcePresetId = 'preset-source-label'
-        const targetPresetId = 'preset-target-label'
-        const sourceLabel = '来源于「测试群」（群聊 ID：10000）的群聊'
-        const [memory] = await repository.appendMemories(
-            { conversationId: 'group:10000', presetId: sourcePresetId },
-            [
-                {
-                    role: 'user',
-                    content: 'group memory',
-                    transcriptLines: ['group memory']
-                }
-            ],
-            [
-                {
-                    type: 'fact',
-                    content: 'group memory',
-                    keywords: ['group'],
-                    summary: 'group summary',
-                    sentiment: 'neutral',
-                    importance: 0.5,
-                    speakerKeys: []
-                }
-            ],
-            sourceLabel
-        )
-        assert.equal(memory.sourceLabel, sourceLabel)
-
-        const exported = await repository.exportPresetData(sourcePresetId)
-        if (exported.version !== 5) {
-            throw new Error('expected version 5 preset export')
+it('maps old and native conversation keys to actual target conversations and ignores file labels', async () => {
+    await withLivingMemoryRepository(async (ctx, repository) => {
+        const route = (platform: string, id: string, direct = false) =>
+            routeIdOf({ platform, selfId: 'bot', isDirect: direct, guildId: direct ? undefined : id,
+                channelId: id, userId: direct ? id : 'speaker' })
+        const qqGroup = route('onebot', '10000')
+        const otherGroup = route('other', '10000')
+        const dm = route('onebot', '20000', true)
+        const personal = qqGroup + ':user:123'
+        const custom = 'custom:' + 'a'.repeat(64)
+        const uuid = '306c5f1e-1e16-46d5-8916-ba25392b39ac'
+        const observedGuild = 'ab.1'
+        const observedRoute = route('onebot', observedGuild)
+        ctx.provide('chat_observer')
+        ctx.set('chat_observer', {
+            channelStats: () => [{ cid: observedGuild, routeId: observedRoute, conversationKey: custom }],
+            channelOf: () => ({ identity: { platform: 'onebot', selfId: 'bot', isDirect: false, guildId: observedGuild } })
+        } as never)
+        await ctx.database.upsert('chatluna_conversations', [
+            { key: qqGroup, peer: 'onebot:bot:guild:10000' },
+            { key: otherGroup, peer: 'other:bot:guild:10000' },
+            { key: dm, peer: 'onebot:bot:user:20000' },
+            { key: personal, peer: 'onebot:bot:guild:10000' },
+            { key: custom, peer: 'onebot:bot:guild:30000' }
+        ])
+        const samples: [string, string | null][] = [
+            ['group:10000', null], ['onebot:guild:10000', qqGroup], ['private:20000', dm],
+            ['group:30000', null], ['group:missing', null], [uuid, null],
+            [qqGroup, qqGroup], [personal, personal], [custom, custom],
+            [`group:${observedGuild}`, observedRoute], [observedRoute, observedRoute]
+        ]
+        const presetId = 'sources'
+        const entries = samples.map(([sourceConversationId], i) => ({
+            ...createExportEntry(String(i), i), sourceConversationId, speakerKeys: [],
+            sourceLabel: '来源于「不可用于匹配的群」（群聊 ID：10000）的群聊'
+        }))
+        await repository.importPresetData(presetId, {
+            version: 5, sourcePresetId: presetId, exportedAt: new Date().toISOString(),
+            entries, presetSpeakers: [], userProfiles: []
+        })
+        const imported = await repository.listEntriesByPreset(presetId)
+        for (const entry of imported) {
+            assert.equal(entry.sourceConversationId, samples[Number(entry.id)][1])
         }
-        assert.equal(exported.entries[0].sourceLabel, sourceLabel)
+        const exported = await repository.exportPresetData(presetId)
+        assert.equal(exported.version, 6)
+        assert.ok(exported.entries.every(entry => !Object.hasOwn(entry, 'sourceLabel')))
 
-        await repository.importPresetData(targetPresetId, exported)
-        assert.equal(
-            (await repository.listEntriesByPreset(targetPresetId))[0]
-                .sourceLabel,
-            sourceLabel
-        )
-
-        const legacy: LivingMemoryPresetExport = { ...exported, version: 3 }
-        await repository.importPresetData(sourcePresetId, legacy)
-        assert.equal(
-            (await repository.listEntriesByPreset(sourcePresetId))[0]
-                .sourceLabel,
-            null
-        )
+        // 模拟旧版已导入的数据；启动升级只改确定的旧键，不碰原生会话。
+        for (const entry of entries) await ctx.database.set('living_memory_entry', { id: entry.id }, {
+            sourceConversationId: entry.sourceConversationId, sourceLabel: entry.sourceLabel
+        })
+        await migrateLegacySources(ctx)
+        await migrateLegacySources(ctx)
+        const indexSources = await repository.listEntryIndexSourcePageByPreset(presetId, null, samples.length)
+        assert.equal(indexSources.length, samples.length)
+        for (const source of indexSources) {
+            assert.equal(source.sourceConversationId, samples[Number(source.id)][1])
+        }
     })
 })
 

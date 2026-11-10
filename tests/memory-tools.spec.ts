@@ -48,7 +48,6 @@ const record = (id: string, type = 'fact'): MemoryEntryRecord =>
         sentiment: null,
         importance: null,
         sourceConversationId: null,
-        sourceLabel: null,
         sourceOrigins: [],
         createdAt: new Date('2026-07-01T00:00:00.000Z'),
         updatedAt: new Date('2026-07-01T00:00:00.000Z')
@@ -137,7 +136,7 @@ it('scopes the search to the conversation when isolation is enabled', async () =
             return []
         }
     }
-    const tool = createSearchMemoryTool(provider, true, () => true)
+    const tool = createSearchMemoryTool(provider, true, (_agent, routeId) => ({ isolated: true, routeId }))
 
     await runTool(
         tool,
@@ -145,12 +144,17 @@ it('scopes the search to the conversation when isolation is enabled', async () =
         { presetId: 'default', conversationKey: 'conversation-1' }
     )
     await runTool(
-        createSearchMemoryTool(provider, true, () => false),
+        createSearchMemoryTool(provider, true),
         { searchTexts: ['我们一起聊过的事情'] },
         { presetId: 'default', conversationKey: 'conversation-1' }
     )
 
-    assert.deepEqual(calls, ['conversation-1', undefined])
+    const custom = { presetId: 'default', conversationKey: 'custom:shared' }
+    await runTool(createSearchMemoryTool(provider, true, () => ({ isolated: true, routeId: 'B' })), { searchTexts: ['回忆'] }, custom)
+    await assert.rejects(runTool(tool, { searchTexts: ['回忆'] }, custom), /来源路由/u)
+    await tool.run!({ searchTexts: ['回忆'] }, { agent: agent(custom), routeId: 'C' } as never)
+    await assert.rejects(runTool(createSearchMemoryTool(provider, true), { searchTexts: ['回忆'] }, custom), /来源路由/u)
+    assert.deepEqual(calls, ['conversation-1', undefined, 'B', 'C'])
 })
 
 it('renders search results with ids only when memory ids are included', async () => {
@@ -164,7 +168,7 @@ it('renders search results with ids only when memory ids are included', async ()
                 summary: '看展览',
                 sentiment: '愉快',
                 importance: 0.8,
-                sourceLabel: '来源于「摸鱼群」（群聊 ID：10001）的群聊',
+                sourceLabel: '「摸鱼群」（群聊 ID：10001）',
                 createdAt: new Date('2026-07-01T00:00:00.000Z'),
                 updatedAt: new Date('2026-07-02T00:00:00.000Z')
             }
@@ -176,7 +180,7 @@ it('renders search results with ids only when memory ids are included', async ()
         'type=fact',
         'updatedAt=2026-07-02T00:00:00.000Z',
         'sentiment=愉快',
-        'source=来源于「摸鱼群」（群聊 ID：10001）的群聊',
+        'source=「摸鱼群」（群聊 ID：10001）',
         'content:',
         '我们在上周一起去看了展览。'
     ].join('\n')
@@ -196,7 +200,7 @@ it('renders source messages as the original transcript of one memory', async () 
             if (memoryId !== 'memory-1') return null
             return {
                 id: 'memory-1',
-                sourceLabel: '来源于「摸鱼群」（群聊 ID：10001）的群聊',
+                sourceLabel: '「摸鱼群」（群聊 ID：10001）',
                 sourceOrigins: [
                     {
                         messages: [
@@ -226,7 +230,7 @@ it('renders source messages as the original transcript of one memory', async () 
         await runTool(tool, { memoryId: 'memory-1' }, { presetId: 'default' }),
         [
             'id=memory-1',
-            'source=来源于「摸鱼群」（群聊 ID：10001）的群聊',
+            'source=「摸鱼群」（群聊 ID：10001）',
             '来源对话 1/2：',
             '[2026-07-01 12:00] Alice说：展览你去看了吗',
             '',

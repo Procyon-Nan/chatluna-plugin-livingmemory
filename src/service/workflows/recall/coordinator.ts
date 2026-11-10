@@ -1,7 +1,7 @@
-import type { RouteSettings } from '../../../routing.ts'
+import { isCustomConversation, type RouteSettings } from '../../../routing.ts'
 import { isModelConfigured } from '../../shared/utils.ts'
 import { SerialTaskQueue } from '../../shared/serial_task_queue.ts'
-import { scopeKey, snapshotScopeOf } from '../../memory/helpers.ts'
+import { memorySourceId, scopeKey, snapshotScopeOf } from '../../memory/helpers.ts'
 import { formatLogScope, type LivingMemoryLogger } from '../../logging/logger.ts'
 import { renderSnapshotText } from '../../memory/snapshot/snapshot_text.ts'
 import { renderLivingMemoryTranscript } from '../../transcript/transcript_renderer.ts'
@@ -54,7 +54,8 @@ export class LivingMemoryRecallCoordinator {
         settings: RecallSettings,
         scope: ChatHistoryScope,
         chatHistory: LivingMemoryTranscriptMessage[],
-        currentPosition: number
+        currentPosition: number,
+        routeId?: string
     ) {
         if (settings.recallIntervalMessages === 0 || !chatHistory.length) return
         if (this.controller.signal.aborted) return
@@ -66,14 +67,16 @@ export class LivingMemoryRecallCoordinator {
             return
         }
 
-        const key = scopeKey(scope)
+        const isolateSource = settings.enableConversationIsolation && isCustomConversation(scope.conversationId)
+        const sourceId = isolateSource ? memorySourceId(scope.conversationId, routeId) : undefined
+        const key = scopeKey(scope, sourceId)
         let window = this.windows.get(key)
         if (!window) {
             window = { pending: false }
             this.windows.set(key, window)
         }
         if (window.anchor !== undefined) {
-            const messagesSinceRecall = (await this.messageLog.after(scope, window.anchor, currentPosition + 1)).length
+            const messagesSinceRecall = (await this.messageLog.after(scope, window.anchor, currentPosition + 1, sourceId)).length
             if (messagesSinceRecall < settings.recallIntervalMessages) {
                 this.logger.diagnosticSummary(() => ({
                     event: '跳过记忆召回',
@@ -102,7 +105,7 @@ export class LivingMemoryRecallCoordinator {
         const task = this.snapshotUpdates.run(snapshotKey, async () => {
             // 等待同一份快照时会话已重置，旧聊天不再启动召回。
             if (this.windows.get(key) !== window) return
-            await this.run(settings, scope, snapshotScope, input, runLogger)
+            await this.run(settings, scope, snapshotScope, input, runLogger, sourceId)
         })
             .catch((error) => {
                 delete window.anchor
@@ -147,7 +150,8 @@ export class LivingMemoryRecallCoordinator {
         scope: MemoryScope,
         snapshotScope: SnapshotScope,
         input: string,
-        logger: LivingMemoryLogger
+        logger: LivingMemoryLogger,
+        sourceId?: string
     ) {
         this.controller.signal.throwIfAborted()
         const startedAt = new Date()
@@ -159,7 +163,7 @@ export class LivingMemoryRecallCoordinator {
                 snapshotText === '' ? [] : snapshotText.split(/\r?\n/)
             const updatedSnapshot = await this.agenticRecall.run(
                 settings,
-                scope,
+                sourceId ? { ...scope, conversationId: sourceId } : scope,
                 input,
                 snapshotLines,
                 async (item) => {

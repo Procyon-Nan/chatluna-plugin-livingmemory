@@ -9,6 +9,7 @@ import { LivingMemoryLogger } from './service/logging/logger.ts'
 import { registerLivingMemoryTools } from './service/memory/tools/index.ts'
 import { defineLivingMemoryTables } from './service/persistence/tables.ts'
 import { LivingMemoryRepository } from './service/persistence/repository.ts'
+import { migrateLegacySources } from './service/persistence/source_migration.ts'
 import { routeSettings } from './routing.ts'
 import { LivingMemoryChatHistory } from './service/chat_history.ts'
 import { LivingMemoryVectorIndexService } from './service/vector_index/service.ts'
@@ -227,10 +228,11 @@ export default class LivingmemoryService extends Service {
         const tools = registerLivingMemoryTools(this.ctx, this.providers, {
             enabled: this.config.enabledMemoryTools,
             createToolMaxMemories: this.config.memoryCreateToolMaxMemories,
-            isConversationIsolated: (agent) => {
-                const current = agent && this.conversationHooks.settingsForTurn(agent)
-                if (current) return current.enableConversationIsolation
-                return routeSettings(this.ctx, agent?.options.conversationKey, agent?.options.location).enableConversationIsolation
+            resolveRoute: (agent, routeId) => {
+                const turn = agent && this.conversationHooks.contextForTurn(agent)
+                if (turn) return { routeId: turn.routeId, isolated: turn.settings.enableConversationIsolation }
+                const settings = routeSettings(this.ctx, agent?.options.conversationKey, agent?.options.location, routeId)
+                return { routeId, isolated: settings.enableConversationIsolation }
             }
         })
         return () => {
@@ -289,6 +291,7 @@ export default class LivingmemoryService extends Service {
      * 先标记上次中断的任务，待工作线程启动后再安排归档清理。
      */
     async start(): Promise<Disposable> {
+        await migrateLegacySources(this.ctx)
         await this.maintenance.recoverInterruptedJobs()
         const disposer = this.register()
         const stopMaintenance = this.maintenance.schedule()

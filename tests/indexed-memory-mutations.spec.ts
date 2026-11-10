@@ -176,8 +176,7 @@ for (const indexFailure of [false, true]) {
                         type: 'fact',
                         speakerKeys: ['alice', 'bob']
                     }
-                ],
-                '来源会话'
+                ]
             )
             const { state, tools, invoke } = await createSession(
                 repository,
@@ -223,7 +222,6 @@ for (const indexFailure of [false, true]) {
                 assert.equal(child.status, 'active')
                 assert.deepEqual(child.sourceOrigins, source.sourceOrigins)
                 assert.equal(child.sourceConversationId, scope.conversationId)
-                assert.equal(child.sourceLabel, source.sourceLabel)
                 assert.equal(state.availableMemoryIds.has(child.id), true)
                 assert.equal(state.targetMemoryIds.has(child.id), false)
             }
@@ -987,7 +985,6 @@ it('returns extracted memories after index failure so extraction can advance onc
                     speakerKeys: []
                 }
             ],
-            'source',
             []
         )
         assert.equal(saved.memories.length, 1)

@@ -9,7 +9,7 @@ import {
     createSplitMemoryTool,
     createUpdateMemoryTool
 } from './memory_tools.ts'
-import type { LivingMemoryToolAgent } from './tool_runtime.ts'
+import type { ToolRouteResolver } from './tool_runtime.ts'
 import { createSearchMemoryTool } from './search_memory_tool.ts'
 import { memoryCreateTool, memoryDeleteTool, memoryGetMessagesTool, memoryMergeTool, memorySearchTool, memorySplitTool, memoryUpdateTool } from '../../prompts/memory_tools.ts'
 
@@ -29,7 +29,7 @@ export type LivingMemoryToolName = (typeof livingMemoryToolNames)[number]
 export interface LivingMemoryToolRegistration {
     enabled: readonly string[]
     createToolMaxMemories: number
-    isConversationIsolated: (agent?: LivingMemoryToolAgent) => boolean
+    resolveRoute: ToolRouteResolver
 }
 
 /**
@@ -43,9 +43,9 @@ export const registerLivingMemoryTools = (
 ) => {
     const enabled = new Set(options.enabled)
     const tools: ToolDefinition<any>[] = [
-        createSearchMemoryTool(providers, true, options.isConversationIsolated),
+        createSearchMemoryTool(providers, true, options.resolveRoute),
         createGetMessagesTool(providers),
-        createCreateMemoryTool(providers, options.createToolMaxMemories),
+        createCreateMemoryTool(providers, options.createToolMaxMemories, options.resolveRoute),
         createUpdateMemoryTool(providers),
         createMergeMemoriesTool(providers),
         createSplitMemoryTool(providers),

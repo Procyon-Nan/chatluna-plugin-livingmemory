@@ -1,6 +1,6 @@
 import type { LivingMemoryExtractor } from './extractor.ts'
 import type { LivingMemoryMessageFormatter } from '../../transcript/message_formatter.ts'
-import { type QueueExtractionOptions, scopeKey } from '../../memory/helpers.ts'
+import { type QueueExtractionOptions, memorySourceId, scopeKey } from '../../memory/helpers.ts'
 import type {
     ExtractionMemoryWriter,
     JobRepository
@@ -10,7 +10,6 @@ import type {
     PresetPersonaResolver
 } from '../../../contracts/memory.ts'
 import { formatLogScope, type LivingMemoryLogger } from '../../logging/logger.ts'
-import type { MemoryTranscriptOrigin } from '../../transcript/origin_context.ts'
 import { toHistoryTranscriptMessages } from '../../chat_history.ts'
 import type { ChatHistoryEntry, ChatHistoryScope, LivingMemoryChatHistory } from '../../chat_history.ts'
 
@@ -232,7 +231,7 @@ export class LivingMemoryExtractionCoordinator {
         if (options.windowMessages === 0) return
         if (this.controller.signal.aborted) return
 
-        const key = scopeKey(scope)
+        const key = scopeKey(scope, options.routeId)
         const state: ExtractionScopeState = this.stateByScope.get(key) ?? {
             scope,
             options,
@@ -385,9 +384,9 @@ export class LivingMemoryExtractionCoordinator {
         firstChunk: boolean
     ): Promise<boolean> {
         if (state.chunk === undefined) {
-            const entries = await this.messageLog.after(scope, state.cursorPosition, state.eligiblePosition + 1)
+            const entries = await this.messageLog.after(scope, state.cursorPosition, state.eligiblePosition + 1, options.routeId)
             this.controller.signal.throwIfAborted()
-            if (this.stateByScope.get(scopeKey(scope)) !== state) return false
+            if (this.stateByScope.get(scopeKey(scope, options.routeId)) !== state) return false
             if ((firstChunk || options.includeOverheard) && entries.length < options.windowMessages) {
                 runLogger.diagnosticSummary(() => ({
                     event: '等待记忆提取',
@@ -404,8 +403,8 @@ export class LivingMemoryExtractionCoordinator {
         const messages = toHistoryTranscriptMessages(batch.scope, chunk)
         try {
             if (messages.length > 0) {
-                const origin = await batch.options.resolveTranscriptOrigin(chunk)
-                const consumed = await this.run(batch.scope, messages, origin, batch.options, runLogger)
+                const header = await batch.options.formatTranscriptHeader(chunk)
+                const consumed = await this.run(batch.scope, messages, header, batch.options, runLogger)
                 if (!consumed) return false
             } else {
                 runLogger.diagnosticSummary(() => ({
@@ -478,13 +477,13 @@ export class LivingMemoryExtractionCoordinator {
     private async run(
         scope: ChatHistoryScope,
         messages: LivingMemoryTranscriptMessage[],
-        origin: MemoryTranscriptOrigin,
+        header: string,
         options: QueueExtractionOptions,
         logger: LivingMemoryLogger
     ) {
         const startedAt = new Date()
         const payload = this.formatter.toExtractionPayload(messages)
-        const input = `${origin.header}\n\n${payload.input}`
+        const input = `${header}\n\n${payload.input}`
 
         logger.diagnosticSummary(() => ({
             event: '开始记忆提取',
@@ -539,10 +538,9 @@ export class LivingMemoryExtractionCoordinator {
             // 的同一预设级队列操作内完成（注册先行、两事务，依据见
             // appendExtractedMemories），否则 Dream 按 key 反查标签时会缺行。
             const saved = await this.memoryWriter.appendExtractedMemories(
-                scope,
+                { ...scope, conversationId: memorySourceId(scope.conversationId, options.routeId) },
                 payload.sourceOriginMessages,
                 extracted,
-                origin.sourceLabel,
                 payload.speakers
             )
             for (const warning of saved.warnings) {

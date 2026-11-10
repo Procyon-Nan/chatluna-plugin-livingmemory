@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import type { MemoryEntryRecord } from '../src/contracts/memory.ts'
+import type { MemoryEntryWithSource } from '../src/contracts/memory.ts'
 import {
     loadMemorySourceMessages,
     type LivingMemoryQueryProjectionRepository
@@ -7,8 +7,8 @@ import {
 
 const createMemory = (
     id: string,
-    overrides: Partial<MemoryEntryRecord> = {}
-): MemoryEntryRecord => ({
+    overrides: Partial<MemoryEntryWithSource> = {}
+): MemoryEntryWithSource => ({
     id,
     presetId: 'preset-1',
     speakerKeys: [],
@@ -20,7 +20,7 @@ const createMemory = (
     sentiment: null,
     importance: 0.5,
     sourceConversationId: 'conversation-1',
-    sourceLabel: null,
+    sourceLabel: 'unknown',
     sourceOrigins: [],
     createdAt: new Date('2026-07-01T00:00:00.000Z'),
     updatedAt: new Date('2026-07-02T00:00:00.000Z'),
@@ -29,7 +29,7 @@ const createMemory = (
 
 it('projects the source messages of one memory without sharing mutable arrays', async () => {
     const memory = createMemory('memory-1', {
-        sourceLabel: '来源于「摸鱼群」（群聊 ID：10001）的群聊',
+        sourceLabel: '「摸鱼群」（群聊 ID：10001）',
         sourceOrigins: [
             {
                 messages: [
@@ -65,7 +65,7 @@ it('projects the source messages of one memory without sharing mutable arrays', 
     assert.deepEqual(requestedMemoryIds, ['memory-1'])
     assert.deepEqual(result, {
         id: 'memory-1',
-        sourceLabel: '来源于「摸鱼群」（群聊 ID：10001）的群聊',
+        sourceLabel: '「摸鱼群」（群聊 ID：10001）',
         sourceOrigins: [{ messages: memory.sourceOrigins[0].messages }]
     })
     assert.notStrictEqual(

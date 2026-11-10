@@ -1,4 +1,4 @@
-import type { RouteSettings } from '../routing.ts'
+import { isCustomConversation, type RouteSettings } from '../routing.ts'
 import type { Context, Disposable } from 'cordis'
 import type { Agent } from '@chatluna/agent'
 import type { ObservedEvent } from '@chatluna/chat-observer'
@@ -8,7 +8,7 @@ import { ChatMessage, type ChatMessageMeta } from '@chatluna/message'
 import type { LivingMemoryTranscriptMessage } from '../contracts/memory.ts'
 import type { LivingMemoryLogger } from './logging/logger.ts'
 import { formatLogScope } from './logging/logger.ts'
-import { resolveTranscriptOrigin } from './transcript/origin_context.ts'
+import { formatTranscriptHeader } from './transcript/header.ts'
 import { toHistoryTranscriptMessages } from './chat_history.ts'
 import type { ChatHistoryEntry, ChatHistoryScope, LivingMemoryChatHistory } from './chat_history.ts'
 import { collectUserProfileSpeakerKeys } from './user_profile.ts'
@@ -39,13 +39,14 @@ interface ConversationState {
 interface Delivery {
     settings: RouteSettings
     pendingMessageIds: Set<string>
-    lastReplyPosition: number
+    lastReply?: { position: number; routeId: string }
     drained: boolean
 }
 
 interface CapturedWindow {
     readonly settings: RouteSettings
     readonly rows: readonly ChatHistoryEntry[]
+    readonly routeId?: string
     readonly position?: number
     readonly presetId?: string
     readonly contextStart: number
@@ -57,6 +58,7 @@ type TurnPreparation =
     | undefined
 
 interface TurnInput {
+    routeId?: string
     state: ConversationState
     settings: RouteSettings
     chatHistory: LivingMemoryTranscriptMessage[]
@@ -135,9 +137,9 @@ export class LivingMemoryConversationHooks {
         }
     }
 
-    settingsForTurn(agent: object) {
-        const running = this.turns.get(agent)
-        if (running && this.isCurrent(running)) return running.settings
+    contextForTurn(agent: object): Pick<TurnInput, 'settings' | 'routeId'> | undefined {
+        const turn = this.turns.get(agent)
+        if (turn && this.isCurrent(turn)) return turn
     }
 
     private isCurrent({ state }: TurnInput) {
@@ -160,16 +162,26 @@ export class LivingMemoryConversationHooks {
 
     private captureWindow(agent: Agent, key: string, trigger: TurnTrigger | undefined, noticePosition?: number): CapturedWindow {
         const contextStart = this.revisions.get(key)?.contextStart ?? -1
-        const position = trigger?.kind === 'chat' ? this.options.history.locateUserPosition(key, trigger, contextStart) : noticePosition
-        const routeId = trigger?.kind === 'chat' ? trigger.routeId : undefined
+        const observed = trigger?.kind === 'chat' ? this.options.history.locateUser(key, trigger, contextStart) : undefined
+        const position = observed?.position ?? noticePosition
+        const routeId = trigger?.kind === 'chat' ? (observed?.routeId ?? trigger.routeId) : agent.options.location?.route
         const noticeSessionId = trigger?.kind === 'notice' ? String(agent.session.id) : undefined
         const settings = this.options.settingsOf(key, agent.options.location, routeId, noticeSessionId)
         const needsHistory = settings.recallIntervalMessages > 0 || settings.enableUserProfileInjection
-        const rows = needsHistory && position !== undefined
-            ? this.options.history.recent({ conversationId: key }, settings.recallHistoryMessages, position, contextStart)
-            : []
+        const custom = isCustomConversation(key)
+        let rows: ChatHistoryEntry[] = []
+        if (needsHistory && position !== undefined) {
+            if (custom && !routeId) {
+                this.options.logger.diagnosticSummary(() => ({
+                    event: '跳过记忆召回', detail: `会话：${key}; 原因：本次唤醒未指定来源路由，无法确定适用的对话规则`
+                }))
+            } else {
+                rows = this.options.history.recent({ conversationId: key }, settings.recallHistoryMessages,
+                    position, contextStart, custom && settings.enableConversationIsolation ? routeId : undefined)
+            }
+        }
         const presetId = this.agentPreset(agent)
-        return { rows, settings, position, presetId, contextStart }
+        return { rows, settings, position, presetId, contextStart, routeId }
     }
 
     private agentPreset(agent: Agent) {
@@ -195,10 +207,10 @@ export class LivingMemoryConversationHooks {
             const scope = this.options.history.scopeOf(key, String(head.sessionId), presetId)
             const state = this.stateOf(scope, boundary)
             const chatHistory = toHistoryTranscriptMessages(state.scope, window.rows)
-            if (position !== undefined && settings.recallIntervalMessages > 0) {
-                await this.options.recall.queue(settings, state.scope, chatHistory, position)
+            if (position !== undefined && settings.recallIntervalMessages > 0 && chatHistory.length > 0) {
+                await this.options.recall.queue(settings, state.scope, chatHistory, position, window.routeId)
             }
-            return { kind: 'ready', input: { state, settings, chatHistory } }
+            return { kind: 'ready', input: { state, settings, chatHistory, routeId: window.routeId } }
         } catch (error) {
             this.options.logger.summary('记忆召回调度失败', key, 'warn', error)
             return undefined
@@ -228,7 +240,6 @@ export class LivingMemoryConversationHooks {
         input.state.deliveries.set(turn, {
             settings: input.settings,
             pendingMessageIds: new Set(),
-            lastReplyPosition: -1,
             drained: false
         })
     }
@@ -300,7 +311,7 @@ export class LivingMemoryConversationHooks {
             if (!presetId) return
             state = this.stateOf(this.options.history.scopeOf(key, sessionId, presetId), position - 1)
         }
-        if (position > state.boundary && settings.extractionIncludeOverheard) await this.queueExtraction(state, settings, position)
+        if (position > state.boundary && settings.extractionIncludeOverheard) await this.queueExtraction(state, settings, position, event.message.routeId)
     }
 
     private async onObservedReply(event: ObservedEvent) {
@@ -311,9 +322,11 @@ export class LivingMemoryConversationHooks {
         for (const [turn, delivery] of state.deliveries) {
             if (!delivery.pendingMessageIds.delete(id)) continue
             const position = this.options.history.locate(key, event.message, state.scope)
-            if (position !== undefined) delivery.lastReplyPosition = Math.max(delivery.lastReplyPosition, position)
+            if (position !== undefined && (!delivery.lastReply || position > delivery.lastReply.position)) {
+                delivery.lastReply = { position, routeId: event.message.routeId }
+            }
             if (delivery.settings.extractionIncludeOverheard && position !== undefined) {
-                await this.queueExtraction(state, delivery.settings, position)
+                await this.queueExtraction(state, delivery.settings, position, event.message.routeId)
             }
             await this.finishDeliveryIfReady(state, turn, delivery)
             return
@@ -340,18 +353,19 @@ export class LivingMemoryConversationHooks {
     private async finishDeliveryIfReady(state: ConversationState, turn: number, delivery: Delivery) {
         if (!delivery.drained || delivery.pendingMessageIds.size > 0) return
         state.deliveries.delete(turn)
-        if (!delivery.settings.extractionIncludeOverheard && delivery.lastReplyPosition > state.boundary) {
-            await this.queueExtraction(state, delivery.settings, delivery.lastReplyPosition)
+        if (!delivery.settings.extractionIncludeOverheard && delivery.lastReply && delivery.lastReply.position > state.boundary) {
+            await this.queueExtraction(state, delivery.settings, delivery.lastReply.position, delivery.lastReply.routeId)
         }
     }
 
-    private async queueExtraction(state: ConversationState, settings: RouteSettings, eligiblePosition: number) {
+    private async queueExtraction(state: ConversationState, settings: RouteSettings, eligiblePosition: number, routeId: string) {
         if (settings.extractionWindowMessages === 0) return
         await this.options.extraction.queue(state.scope, {
+            routeId: isCustomConversation(state.scope.conversationId) ? routeId : undefined,
             includeOverheard: settings.extractionIncludeOverheard,
             windowMessages: settings.extractionWindowMessages,
             enableAutoDream: settings.enableAutoDream,
-            resolveTranscriptOrigin: entries => resolveTranscriptOrigin(this.ctx, entries)
+            formatTranscriptHeader: entries => formatTranscriptHeader(this.ctx, entries)
         }, state.boundary, eligiblePosition)
     }
 
@@ -397,7 +411,8 @@ function* turnInputs(message: ChatMessage): Iterable<TurnTrigger> {
         if (kind === 'notice') {
             if (wake) yield { kind, wake }
         } else if (!sender?.self) {
-            yield { kind: 'chat', id, externalId, routeId: source.routeId, wake }
+            // 外层 source 属于最后一条消息；这里按原消息查 observer 中的路由。
+            yield { kind: 'chat', id, externalId, wake }
         }
     }
 }

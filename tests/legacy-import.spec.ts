@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { withLivingMemoryRepository } from './persistence-test-utils.ts'
 import { LivingMemoryMutationService } from '../src/service/app/mutation_service.ts'
-import type { LivingMemoryPresetExport } from '../src/contracts/memory.ts'
+import type { LivingMemoryPresetExportV5 } from '../src/contracts/memory.ts'
 import { createCapturedLogger } from './workflow-test-utils.ts'
 
 const indexSink = {
@@ -13,7 +13,7 @@ const indexSink = {
     startRebuild: () => {}
 }
 
-const v1Export = (sourcePresetId: string): LivingMemoryPresetExport =>
+const v1Export = (sourcePresetId: string): LivingMemoryPresetExportV5 =>
     ({
         version: 5,
         exportedAt: '2026-11-01T00:00:00.000Z',
@@ -84,7 +84,7 @@ const v1Export = (sourcePresetId: string): LivingMemoryPresetExport =>
                 updatedAt: '2026-10-01T00:00:00.000Z'
             }
         ]
-    }) as LivingMemoryPresetExport
+    })
 
 const mutationsOf = (repository: never) =>
     new LivingMemoryMutationService(
@@ -93,7 +93,7 @@ const mutationsOf = (repository: never) =>
         createCapturedLogger().logger
     )
 
-it('round-trips the memory entries in a v1 preset file', async () => {
+it('preserves v1 memory contents and makes unresolved sources global on import', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
         const mutations = mutationsOf(repository as never)
         const file = v1Export('preset-1')
@@ -105,7 +105,9 @@ it('round-trips the memory entries in a v1 preset file', async () => {
         )
 
         const exported = await repository.exportPresetData('preset-1')
-        assert.deepEqual(exported.entries, file.entries)
+        assert.deepEqual(exported.entries, file.entries.map(({ sourceLabel, ...entry }) => ({
+            ...entry, sourceConversationId: null
+        })))
     })
 })
 

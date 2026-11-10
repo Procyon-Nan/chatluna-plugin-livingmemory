@@ -10,7 +10,8 @@ import {
     LivingMemoryExtractionCoordinator,
     planExtractionChunks
 } from '../src/service/workflows/extraction/coordinator.ts'
-import type { ChatHistoryEntry, ChatHistoryScope } from '../src/service/chat_history.ts'
+import { LivingMemoryChatHistory, type ChatHistoryEntry, type ChatHistoryScope } from '../src/service/chat_history.ts'
+import { FrameworkHistoryFixture, historyMessage } from './chat-history-test-utils.ts'
 import type { LivingMemoryExtractionResult } from '../src/service/workflows/extraction/extractor.ts'
 import {
     createCapturedLogger,
@@ -46,6 +47,7 @@ const createExtractedMemory = (): AttributedMemoryItem => ({
 interface CoordinatorHarnessOptions {
     window?: number
     includeOverheard?: boolean
+    framework?: FrameworkHistoryFixture
     head?: () => Promise<number>
     extract?: () => Promise<LivingMemoryExtractionResult>
     createFailedJob?: ExtractionJobRepository['createFailedJob']
@@ -62,7 +64,6 @@ interface CoordinatorHarness {
         scope: MemoryScope
         sourceOriginMessages: MemorySourceMessage[]
         extracted: AttributedMemoryItem[]
-        sourceLabel?: string | null
         windowSpeakers?: ExtractionPayload['speakers']
     }[]
     getExtractorCalls: () => number
@@ -149,14 +150,12 @@ const createHarness = (
                 entryScope,
                 sourceOriginMessages,
                 extracted,
-                sourceLabel,
                 windowSpeakers
             ) => {
                 appended.push({
                     scope: entryScope,
                     sourceOriginMessages,
                     extracted,
-                    sourceLabel,
                     windowSpeakers
                 })
                 return {
@@ -171,7 +170,7 @@ const createHarness = (
     if (options.head !== undefined) messageLog.head = options.head
 
     const coordinator = new LivingMemoryExtractionCoordinator(
-        messageLog,
+        options.framework ? new LivingMemoryChatHistory(options.framework) : messageLog,
         repository,
         repository,
         formatter,
@@ -238,10 +237,7 @@ const queueExtraction = async (
             includeOverheard: harness.includeOverheard,
             windowMessages: harness.windowMessages,
             enableAutoDream,
-            resolveTranscriptOrigin: async () => ({
-                header: '以下是聊天记录：',
-                sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
-            })
+            formatTranscriptHeader: async () => '以下是聊天记录：'
         },
         initialCursor,
         eligiblePosition
@@ -253,6 +249,40 @@ const queueExtraction = async (
  * 否则本不该发生的提取尚未开始，断言恒成立。
  */
 const settleDrain = () => new Promise((resolve) => setTimeout(resolve, 20))
+
+it('extracts each source independently when two channels use one custom conversation', async () => {
+    const framework = new FrameworkHistoryFixture()
+    const shared = { ...scope, conversationId: 'custom:test' }
+    const h = createHarness({ framework, extract: async () => createExtractionResult({ extracted: [createExtractedMemory()] }) })
+    const queue = (routeId: string, boundary = -1) => h.coordinator.queue(shared, {
+        routeId, windowMessages: 2, includeOverheard: true, enableAutoDream: false,
+        formatTranscriptHeader: async () => '会话记录'
+    }, boundary)
+    const push = (n: number, routeId: string) => framework.messages.push(historyMessage(n, routeId + n, { routeId, cid: 'onebot:' + routeId }))
+    try {
+        push(1, 'A')
+        push(2, 'B')
+        await Promise.all([queue('A'), queue('B')])
+        await settleDrain()
+        assert.equal(h.getExtractorCalls(), 0)
+        push(3, 'A')
+        push(4, 'B')
+        await Promise.all([queue('A'), queue('B')])
+        await waitFor(() => h.appended.length === 2, 'two source-specific memories')
+        const batches = Object.fromEntries(h.appended.map(({ scope, sourceOriginMessages }) => [
+            scope.conversationId, sourceOriginMessages.map(message => message.content)
+        ]))
+        assert.deepEqual(batches, { A: ['A1', 'A3'], B: ['B2', 'B4'] })
+        h.coordinator.clearByConversation(shared.conversationId)
+        const resetAt = 3
+        push(5, 'A')
+        await queue('A', resetAt)
+        await settleDrain()
+        assert.equal(h.getExtractorCalls(), 2)
+    } finally {
+        await h.coordinator.stop()
+    }
+})
 
 describe('planExtractionChunks', () => {
     const log = (roles: ('user' | 'assistant')[]): ChatHistoryEntry[] =>

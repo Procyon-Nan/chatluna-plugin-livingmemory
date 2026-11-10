@@ -97,7 +97,7 @@ const createSearchResult = (id: string): LivingMemorySearchResult => ({
     summary: `summary-${id}`,
     sentiment: '平静',
     importance: 0.8,
-    sourceLabel: null,
+    sourceLabel: 'unknown',
     createdAt: new Date('2026-07-01T00:00:00.000Z'),
     updatedAt: new Date('2026-07-01T00:00:00.000Z')
 })
@@ -209,6 +209,7 @@ it('runs one search then commits the snapshot', async () => {
             'type=fact',
             'updatedAt=2026-07-01T00:00:00.000Z',
             'sentiment=平静',
+            'source=unknown',
             'content:',
             'content-memory-1'
         ].join('\n')

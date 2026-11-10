@@ -103,7 +103,6 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],
         extracted: AttributedMemoryItem[],
-        sourceLabel: string | null,
         windowSpeakers: ExtractionPayload['speakers']
     ) {
         return this.runPresetMutation(scope.presetId, async () => {
@@ -122,8 +121,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             const records = await this.repository.appendMemories(
                 scope,
                 sourceOriginMessages,
-                extracted,
-                sourceLabel
+                extracted
             )
             const warnings = await this.syncCommittedMemoriesToIndex(
                 scope.presetId,

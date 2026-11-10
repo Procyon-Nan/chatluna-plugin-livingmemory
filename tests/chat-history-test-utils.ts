@@ -11,6 +11,8 @@ export const historyMessage = (id: number, text: string, overrides: Partial<Obse
 export class FrameworkHistoryFixture {
     readonly channelOf = (_cid: string) => ({ routeId: 'route', identity: this.identityOfConversation() })
     readonly messages: ObservedMessage[] = []
+    readonly channelStats = () => [...new Set(this.messages.map(message => message.cid))].map(cid => ({ cid, routeId: this.messages.find(message => message.cid === cid)!.routeId, conversationKey: 'custom:test' }))
+    readonly recent = (cid: string, { limit }: { limit?: number } = {}) => this.messages.filter(message => message.cid === cid).slice(limit ? -limit : 0)
     readonly recentOfConversation = (_key: string, limit: number) => this.messages.slice(-limit)
     readonly identityOfConversation = () => ({
         platform: 'onebot', selfId: 'bot-1', isDirect: false,

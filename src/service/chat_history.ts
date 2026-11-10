@@ -1,4 +1,5 @@
-import type { SourcePeer } from './transcript/origin_context.ts'
+import { isCustomConversation } from '../routing.ts'
+import type { SourcePeer } from './memory/conversation_sources.ts'
 import type { ObservedMessage, ChatObserverService } from '@chatluna/chat-observer'
 import type { LivingMemoryTranscriptMessage, MemoryScope } from '../contracts/memory.ts'
 import { createSpeakerKey } from './memory/speaker_identity.ts'
@@ -25,9 +26,13 @@ export interface ChatHistoryEntry {
     source?: SourcePeer | undefined
 }
 
-type HistoryService = Pick<ChatObserverService, 'recentOfConversation' | 'identityOfConversation'> & {
+type HistoryService = Pick<ChatObserverService, 'recentOfConversation' | 'identityOfConversation' | 'recent'> & {
+    channelStats(): readonly Pick<ReturnType<ChatObserverService['statsOf']>, 'conversationKey' | 'cid' | 'routeId'>[]
     channelOf(cid: string): Pick<NonNullable<ReturnType<ChatObserverService['channelOf']>>, 'routeId' | 'identity'> | undefined
 }
+
+type ReadHistory = (limit: number) => readonly ObservedMessage[]
+const historyPageSize = 32
 
 /** 只给宿主缓冲对象标记消费位置与回复归属，不持有聊天正文。 */
 export class LivingMemoryChatHistory {
@@ -38,48 +43,60 @@ export class LivingMemoryChatHistory {
     constructor(private readonly observer: HistoryService) {}
 
     scopeOf(conversationId: string, sessionId: string, presetId: string): ChatHistoryScope {
+        const scope = { conversationId, sessionId, presetId }
+        if (isCustomConversation(conversationId)) return scope
         const identity = this.observer.identityOfConversation(conversationId)
-        return {
-            conversationId,
-            sessionId,
-            presetId,
-            ...(identity === undefined ? {} : {
-                platform: identity.platform,
-                isDirect: identity.isDirect,
-                guildId: identity.guildId,
-                channelId: identity.channelId,
-                userId: identity.userId
-            })
-        }
+        if (!identity) return scope
+        const { platform, isDirect, guildId, channelId, userId } = identity
+        return { ...scope, platform, isDirect, guildId, channelId, userId }
     }
 
-    /** 从尾部按需扩大读取范围；缓冲长度不作为消费进度。 */
-    private *newest(key: string): Generator<ObservedMessage> {
+    /** 每次只拉取查询所需的后缀。跨频道时按消费位置合并同样大小的窗口。 */
+    private *newest(readers: ReadHistory[]): Generator<ObservedMessage> {
+        if (readers.length === 0) return
         let seen = 0
-        for (let limit = 32; ; limit *= 2) {
-            const rows = this.observer.recentOfConversation(key, limit)
+        for (let limit = historyPageSize; ; limit *= 2) {
+            const rows = readers.length === 1 ? readers[0](limit) : readers.flatMap(read => read(limit))
+                .sort((a, b) => this.positions.get(a)! - this.positions.get(b)!).slice(-limit)
             for (let i = rows.length - seen - 1; i >= 0; i--) yield rows[i]
             if (rows.length < limit) return
             seen = rows.length
         }
     }
 
-    lastPosition(key: string): number {
-        const added: ObservedMessage[] = []
-        let last = -1
-        for (const row of this.newest(key)) {
-            const position = this.positions.get(row)
-            if (position !== undefined) {
-                last = position
-                break
+    private *positioned(key: string, routeId?: string): Generator<ObservedMessage> {
+        // recentOfConversation 只返回第一个匹配的频道。自定义会话须从各个官方频道读取。
+        const sources = isCustomConversation(key)
+            ? this.observer.channelStats().filter(channel => channel.conversationKey === key).map(channel => ({
+                route: channel.routeId, read: (limit: number) => this.observer.recent(channel.cid, { limit })
+            }))
+            : [{ route: undefined, read: (limit: number) => this.observer.recentOfConversation(key, limit) }]
+
+        const added: { row: ObservedMessage; time: number }[] = []
+        const selected: ReadHistory[] = []
+        for (const { read, route } of sources) {
+            // 建立位置和读取正文共用同一页，翻到更早的消息时才扩大窗口。
+            const tail = read(historyPageSize)
+            const readPage: ReadHistory = limit => limit === historyPageSize ? tail : read(limit)
+            if (!routeId || !route || route === routeId) selected.push(readPage)
+            let time = Infinity
+            for (const row of this.newest([readPage])) {
+                if (this.positions.has(row)) break
+                // 平台时间可以相同或倒退；同一频道内保持框架缓冲的原始顺序。
+                time = Math.min(time, row.time)
+                added.push({ row, time })
             }
-            added.push(row)
         }
-        for (let i = added.length - 1; i >= 0; i--) {
-            last = this.nextPosition++
-            this.positions.set(added[i], last)
-        }
-        return last
+        added.reverse()
+        if (sources.length > 1) added.sort((a, b) => a.time - b.time)
+        for (const { row } of added) this.positions.set(row, this.nextPosition++)
+
+        yield* this.newest(selected)
+    }
+
+    lastPosition(key: string): number {
+        const last = this.positioned(key).next()
+        return last.done ? -1 : this.positions.get(last.value)!
     }
 
     async head(scope: ChatHistoryScope): Promise<number> {
@@ -88,20 +105,19 @@ export class LivingMemoryChatHistory {
 
     /** observed 通知与读取结果可以是两个对象，以框架消息 ID 对应缓冲记录。 */
     locate(key: string, message: ObservedMessage, replyScope?: ChatHistoryScope): number | undefined {
-        this.lastPosition(key)
-        for (const row of this.newest(key)) {
+        for (const row of this.positioned(key, message.routeId)) {
             if (row.id !== message.id) continue
             if (replyScope !== undefined) this.replies.set(row, replyScope)
             return this.positions.get(row)
         }
     }
 
-    async after(scope: ChatHistoryScope, position: number, before = Infinity): Promise<ChatHistoryEntry[]> {
-        this.lastPosition(scope.conversationId)
+    async after(scope: ChatHistoryScope, position: number, before = Infinity, routeId?: string): Promise<ChatHistoryEntry[]> {
         const entries: ChatHistoryEntry[] = []
-        for (const row of this.newest(scope.conversationId)) {
+        for (const row of this.positioned(scope.conversationId, routeId)) {
             const at = this.positions.get(row)!
             if (at <= position) break
+            if (routeId !== undefined && row.routeId !== routeId) continue
             if (at >= before || row.backfilled || (row.self && this.replies.get(row) !== scope)) continue
             const entry = this.entry(row)
             if (entry !== undefined) entries.push(entry)
@@ -109,14 +125,13 @@ export class LivingMemoryChatHistory {
         return entries.reverse()
     }
 
-    recent(scope: Pick<ChatHistoryScope, 'conversationId'>, count: number, through: number, after = -1): ChatHistoryEntry[] {
+    recent(scope: Pick<ChatHistoryScope, 'conversationId'>, count: number, through: number, after = -1, routeId?: string): ChatHistoryEntry[] {
         if (count <= 0) return []
-        this.lastPosition(scope.conversationId)
         const entries: ChatHistoryEntry[] = []
-        for (const row of this.newest(scope.conversationId)) {
+        for (const row of this.positioned(scope.conversationId, routeId)) {
             const position = this.positions.get(row)!
             if (position <= after) break
-            if (position > through) continue
+            if (position > through || (routeId !== undefined && row.routeId !== routeId)) continue
             const entry = this.entry(row)
             if (entry !== undefined) entries.push(entry)
             if (entries.length === count) break
@@ -124,14 +139,22 @@ export class LivingMemoryChatHistory {
         return entries.reverse()
     }
 
-    locateUserPosition(key: string, message: { id: string; externalId?: string }, after = -1): number | undefined {
-        this.lastPosition(key)
-        for (const row of this.newest(key)) {
-            if (row.id !== message.id && (message.externalId === undefined || row.platformMessageId !== message.externalId)) continue
+    locateUser(key: string, message: { id: string; externalId?: string; routeId?: string }, after = -1) {
+        let candidate: ObservedMessage | undefined
+        let ambiguous = false
+        for (const row of this.positioned(key, message.routeId)) {
             const position = this.positions.get(row)!
-            if (position > after && !row.self && !row.backfilled) return position
-            return
+            if (position <= after) break
+            if (row.self || row.backfilled) continue
+            if (row.id === message.id) return { position, routeId: row.routeId }
+            if (!message.externalId || row.platformMessageId !== message.externalId) continue
+            if (message.routeId && row.routeId !== message.routeId) continue
+            if (message.routeId || !isCustomConversation(key)) return { position, routeId: row.routeId }
+            // 合批只保留内部消息 ID 和平台 ID；平台 ID 在不同频道里可重复。
+            if (candidate) ambiguous = true
+            candidate = row
         }
+        if (candidate && !ambiguous) return { position: this.positions.get(candidate)!, routeId: candidate.routeId }
     }
 
     private entry(row: ObservedMessage): ChatHistoryEntry | undefined {

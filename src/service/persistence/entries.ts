@@ -12,8 +12,7 @@ import type {
 import type { MemoryIndexSourceRecord } from '../../contracts/vector_index.ts'
 import type {
     AttributedMemoryItem,
-    DreamMemoryEntryRecord,
-    RecallRepository
+    DreamMemoryEntryRecord
 } from '../../contracts/workflows.ts'
 import {
     normalizeMemoryImportance,
@@ -48,7 +47,6 @@ const memoryEntryFields: (keyof MemoryEntryRecord)[] = [
     'sentiment',
     'importance',
     'sourceConversationId',
-    'sourceLabel',
     'sourceOrigins',
     'createdAt',
     'updatedAt'
@@ -73,7 +71,6 @@ const dreamEntryFields: (keyof MemoryEntryRecord)[] = [
     'summary',
     'sentiment',
     'importance',
-    'sourceLabel',
     'createdAt',
     'updatedAt'
 ]
@@ -86,14 +83,11 @@ const recallEntryFields: (keyof MemoryEntryRecord)[] = [
     'sentiment',
     'importance',
     'sourceConversationId',
-    'sourceLabel',
     'createdAt',
     'updatedAt'
 ]
 
-export class LivingMemoryEntryRepository
-    implements RecallRepository
-{
+export class LivingMemoryEntryRepository {
     constructor(
         private readonly ctx: Context,
         private readonly transact: LivingMemoryTransact
@@ -290,8 +284,7 @@ export class LivingMemoryEntryRepository
     async appendMemories(
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],
-        extracted: AttributedMemoryItem[],
-        sourceLabel?: string | null
+        extracted: AttributedMemoryItem[]
     ) {
         if (extracted.length === 0) {
             return []
@@ -300,13 +293,11 @@ export class LivingMemoryEntryRepository
         const now = new Date()
         const sourceOrigins =
             createSourceOriginsFromMessages(sourceOriginMessages)
-        const normalizedSourceLabel = normalizeOptionalMemoryText(sourceLabel)
         const records = extracted.map((item) =>
             this.buildMemoryEntry(
                 scope,
                 item,
                 sourceOrigins,
-                normalizedSourceLabel,
                 now,
                 item.speakerKeys
             )
@@ -327,7 +318,6 @@ export class LivingMemoryEntryRepository
             scope,
             input,
             [],
-            null,
             new Date(),
             speakerKeys ?? resolveScopeSpeakerKeys(scope)
         )
@@ -342,7 +332,6 @@ export class LivingMemoryEntryRepository
         scope: MemoryScope,
         fields: MemoryMutationInput,
         sourceOrigins: MemoryEntryRecord['sourceOrigins'],
-        sourceLabel: string | null,
         createdAt: Date,
         speakerKeys: string[]
     ): MemoryEntryRecord {
@@ -361,7 +350,6 @@ export class LivingMemoryEntryRepository
             // 空串表示无会话上下文（WebUI 手工创建），落库归一为 null，
             // 使「全局可见」只依赖 sourceConversationId == null 单一判定。
             sourceConversationId: scope.conversationId.trim() || null,
-            sourceLabel,
             sourceOrigins,
             createdAt,
             updatedAt: createdAt
@@ -462,7 +450,6 @@ export class LivingMemoryEntryRepository
                     },
                     memory,
                     source.sourceOrigins,
-                    source.sourceLabel,
                     now,
                     memory.speakerKeys
                 )
@@ -525,9 +512,6 @@ export class LivingMemoryEntryRepository
                     source.sourceConversationId ===
                     sources[0].sourceConversationId
             )
-            const sameLabel = sources.every(
-                (source) => source.sourceLabel === sources[0].sourceLabel
-            )
             const now = new Date()
             const record = this.buildMemoryEntry(
                 {
@@ -538,7 +522,6 @@ export class LivingMemoryEntryRepository
                 },
                 memory,
                 mergeMemorySourceOrigins(sources),
-                sameConversation && sameLabel ? sources[0].sourceLabel : null,
                 now,
                 memory.speakerKeys
             )

@@ -459,10 +459,8 @@ function MemoryCard({ entry, names, selected, selecting, onSelect, onEdit, onArc
                     </>}
                     <dt className="text-muted-foreground">{t('field.speakers')}</dt>
                     <dd>{speakers || t('entries.noSpeakers')}</dd>
-                    {entry.sourceLabel && <>
-                        <dt className="text-muted-foreground">{t('field.source')} ·</dt>
-                        <dd>{entry.sourceLabel}</dd>
-                    </>}
+                    <dt className="text-muted-foreground">{t('field.source')} ·</dt>
+                    <dd>{entry.sourceLabel}</dd>
                 </dl>
             </div>
             <footer className="row-start-4 flex flex-wrap items-center justify-between gap-2 rounded-b-xl border-t border-border bg-muted/30 px-3 py-1.5">

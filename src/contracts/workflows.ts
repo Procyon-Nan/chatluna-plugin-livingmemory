@@ -4,6 +4,7 @@ import type {
     LivingMemorySearchResult,
     LivingMemoryGetMessagesMemory,
     MemoryEntryRecord,
+    MemoryEntryWithSource,
     MemoryEntryType,
     MemoryJobKind,
     MemoryJobRecord,
@@ -37,7 +38,6 @@ export interface DreamMemoryEntryRecord {
     summary: string | null
     sentiment: string | null
     importance: number | null
-    sourceLabel: string | null
     createdAt: Date
     updatedAt: Date
 }
@@ -229,7 +229,6 @@ export interface ExtractionMemoryWriter {
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],
         extracted: AttributedMemoryItem[],
-        sourceLabel: string | null,
         windowSpeakers: ExtractionPayload['speakers']
     ): Promise<{ memories: MemoryEntryRecord[]; warnings: string[] }>
 }
@@ -239,7 +238,7 @@ export interface UserProfileMemoryRepository {
     getEntriesWithSources(
         presetId: string,
         ids: string[]
-    ): Promise<MemoryEntryRecord[]>
+    ): Promise<MemoryEntryWithSource[]>
     listActiveMemorySpeakerLinks(
         presetId: string,
         speakerKeys: string[]

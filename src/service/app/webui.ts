@@ -9,7 +9,7 @@ import type { LivingMemoryAdminService } from './admin_service.ts'
 import type { LivingMemoryRepository } from '../persistence/repository.ts'
 import type { LivingMemoryLogger } from '../logging/logger.ts'
 import { renderSnapshotText } from '../memory/snapshot/snapshot_text.ts'
-import { formatSource, resolveConversationSources, type SourcePeer } from '../transcript/origin_context.ts'
+import { formatSource, resolveConversationSources, type SourcePeer } from '../memory/conversation_sources.ts'
 import type {
     LivingMemoryEntriesSnapshot,
     LivingMemoryEntryView,
@@ -24,7 +24,7 @@ import type {
 } from '../../contracts/webui.ts'
 import type {
     LivingMemoryPresetExport,
-    MemoryEntryRecord,
+    MemoryEntryWithSource,
     MemoryJobRecord,
     MemorySnapshotRecord,
     PresetPersonaCardInfo,
@@ -428,7 +428,7 @@ export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
     }
 }
 
-const toEntryView = (entry: MemoryEntryRecord): LivingMemoryEntryView => ({
+const toEntryView = (entry: MemoryEntryWithSource): LivingMemoryEntryView => ({
     id: entry.id,
     presetId: entry.presetId,
     type: entry.type,

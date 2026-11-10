@@ -60,9 +60,23 @@ function privateWakeAddress(ctx: Context, sessionId?: string) {
     return { platform, selfId, guildId, channelId, userId, isDirect: true }
 }
 
+/** 上游的自定义会话键不含地点，可能同时连接多个群或私聊。 */
+export const isCustomConversation = (key?: string) => key?.startsWith('custom:') === true
+
 export function routeSettings(
     ctx: Context, key?: string, location?: AgentOptions['location'], routeId?: string, noticeSessionId?: string
 ): RouteSettings {
+    if (isCustomConversation(key)) {
+        const route = routeId ?? location?.route
+        // 同一个 Agent 可以在甲群打开、在乙群收到唤醒。使用本次路由的地点匹配群规则。
+        const channel = route && ctx.chat_observer.channelStats().find(item => item.routeId === route)
+        const identity = channel && ctx.chat_observer.channelOf(channel.cid)?.identity
+        if (identity) {
+            return ctx.routing.resolve(ctx.routing.matchInput({ ...identity, userId: undefined }, route)).get('livingmemory')
+        }
+        const values = ctx.routing.valuesAt({ route }, 'livingmemory')
+        return ROUTE_SCHEMA.parse(values ?? {})
+    }
     // 聊天 Agent 自带群和频道。旁听没有 Agent；私聊通知的地址还需要区分对端。
     if (key !== undefined && (!location || (location.isDirect && !routeId && !location.route))) {
         const address = ctx.chat_observer.identityOfConversation(key) ?? privateWakeAddress(ctx, noticeSessionId)

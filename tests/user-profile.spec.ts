@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import type { Context } from 'cordis'
 import { LivingMemoryLogger } from '../src/service/logging/logger.ts'
 import type {
-    MemoryEntryRecord,
+    MemoryEntryWithSource,
     UserProfileInput,
     UserProfileRecord
 } from '../src/contracts/memory.ts'
@@ -16,7 +16,7 @@ import {
 } from '../src/service/user_profile.ts'
 
 const now = new Date('2026-07-16T00:00:00.000Z')
-const memory: MemoryEntryRecord = {
+const memory: MemoryEntryWithSource = {
     id: 'memory-1',
     presetId: 'preset-1',
     speakerKeys: ['张三'],
@@ -28,7 +28,7 @@ const memory: MemoryEntryRecord = {
     sentiment: '关心',
     importance: 0.7,
     sourceConversationId: 'conversation-1',
-    sourceLabel: null,
+    sourceLabel: 'unknown',
     sourceOrigins: [],
     createdAt: now,
     updatedAt: now

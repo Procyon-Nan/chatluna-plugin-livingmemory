@@ -1,5 +1,4 @@
-import type { UserProfileRecord } from '../../contracts/memory.ts'
-import type { DreamMemoryEntryRecord } from '../../contracts/workflows.ts'
+import type { MemoryEntryWithSource, UserProfileRecord } from '../../contracts/memory.ts'
 import { contextMemoryFields, renderMemoriesForModel } from './memory_entries.ts'
 import {
     escapeXmlText,
@@ -13,7 +12,7 @@ export interface UserProfilePromptInput {
     presetPrompt: string
     group: {
         speakerLabel: string
-        entries: DreamMemoryEntryRecord[]
+        entries: MemoryEntryWithSource[]
         matchedEntryCount: number
         existingProfile?: UserProfileRecord
     }

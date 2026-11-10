@@ -20,7 +20,7 @@ function parseExportFile(text: string): MemoryExportFile | undefined {
     } catch {
         return
     }
-    if (data && [1, 2, 3, 4, 5].includes(data.version) &&
+    if (data && [1, 2, 3, 4, 5, 6].includes(data.version) &&
         typeof data.sourcePresetId === 'string' && data.sourcePresetId.trim() &&
         Array.isArray(data.entries) && Array.isArray(data.userProfiles) && Array.isArray(data.presetSpeakers)) {
         return data

@@ -2,11 +2,11 @@ import { ModelError } from '@chatluna/ai'
 import type { Context } from 'cordis'
 import type {
     LivingMemoryTranscriptMessage,
+    MemoryEntryWithSource,
     PresetPersonaResolver,
     UserProfileRecord
 } from '../contracts/memory.ts'
 import type {
-    DreamMemoryEntryRecord,
     LivingMemoryConfig,
     UserProfileMemoryRepository,
     UserProfileRepository
@@ -42,7 +42,7 @@ export interface UserProfileGenerationResult {
 interface UserProfileGroup {
     speakerKey: string
     speakerLabel: string
-    entries: DreamMemoryEntryRecord[]
+    entries: MemoryEntryWithSource[]
     matchedEntryCount: number
     existingProfile?: UserProfileRecord
 }
@@ -54,8 +54,8 @@ type UserProfileMemoryGroup = Pick<
 
 /** 送入画像的记忆优先级：重要度降序，同重要度取更新更晚者。 */
 const compareEntriesByProfilePriority = (
-    left: DreamMemoryEntryRecord,
-    right: DreamMemoryEntryRecord
+    left: MemoryEntryWithSource,
+    right: MemoryEntryWithSource
 ) =>
     (right.importance ?? 0.5) - (left.importance ?? 0.5) ||
     +right.updatedAt - +left.updatedAt
@@ -276,7 +276,7 @@ export class LivingMemoryUserProfileService {
                 .filter((entry) => entry.status === 'active')
                 .map((entry) => [entry.id, entry] as const)
         )
-        const entriesBySpeakerKey = new Map<string, DreamMemoryEntryRecord[]>()
+        const entriesBySpeakerKey = new Map<string, MemoryEntryWithSource[]>()
         for (const link of links) {
             const entry = activeEntryById.get(link.memoryId)
             if (entry?.speakerKeys.includes(link.speakerKey) !== true) {
@@ -311,7 +311,7 @@ export class LivingMemoryUserProfileService {
             )
     }
 
-    private latestTimestamp(entries: DreamMemoryEntryRecord[]) {
+    private latestTimestamp(entries: MemoryEntryWithSource[]) {
         return Math.max(...entries.map((entry) => +entry.updatedAt))
     }
 

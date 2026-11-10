@@ -210,7 +210,7 @@ export function defineLivingMemoryTables(ctx: Context) {
 
 declare module '@cordisjs/plugin-database' {
   interface Tables {
-    living_memory_entry: import('../../contracts/memory.ts').MemoryEntryRecord
+    living_memory_entry: import('../../contracts/memory.ts').MemoryEntryRecord & { sourceLabel: string | null }
     living_memory_snapshot: import('../../contracts/memory.ts').MemorySnapshotRecord
     living_memory_entry_speaker: import('./types.ts').LivingMemoryEntrySpeakerRecord
     living_memory_job: import('../../contracts/memory.ts').MemoryJobRecord

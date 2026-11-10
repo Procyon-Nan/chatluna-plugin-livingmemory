@@ -17,7 +17,6 @@ import type {
     JobListQuery,
     MemoryListFilter,
     MemoryListQuery,
-    MemoryListResult,
     PageResult,
     SnapshotListQuery,
     UserProfileListQuery
@@ -89,7 +88,7 @@ export class LivingMemoryAdminService {
 
     // ── 记忆 ──────────────────────────────────────────────────────────
 
-    async listMemories(query: MemoryListQuery): Promise<MemoryListResult> {
+    async listMemories(query: MemoryListQuery) {
         const items = await this.deps.repository.listEntriesByPreset(
             query.presetId
         )

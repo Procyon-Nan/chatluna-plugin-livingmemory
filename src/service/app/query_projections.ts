@@ -1,6 +1,6 @@
 import type {
     LivingMemoryGetMessagesMemory,
-    MemoryEntryRecord
+    MemoryEntryWithSource
 } from '../../contracts/memory.ts'
 import { cloneSourceMessage } from '../memory/origins/source_origins.ts'
 
@@ -8,7 +8,7 @@ export interface LivingMemoryQueryProjectionRepository {
     getEntriesWithSources(
         presetId: string,
         ids: string[]
-    ): Promise<MemoryEntryRecord[]>
+    ): Promise<MemoryEntryWithSource[]>
 }
 
 export async function loadMemorySourceMessages(

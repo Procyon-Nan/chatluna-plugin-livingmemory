@@ -10,9 +10,8 @@ type ModelMemoryView = Pick<
     | 'importance'
     | 'keywords'
     | 'summary'
-    | 'sourceLabel'
     | 'content'
->
+> & { sourceLabel?: string | null }
 
 type MemoryModelField = keyof ModelMemoryView | 'speakerLabels'
 
@@ -52,7 +51,7 @@ const formatMemoryField = (
         }
         default: {
             const value = entry[field]
-            if (value === null) return null
+            if (value == null) return null
             const label = field === 'sourceLabel' ? 'source' : field
             return `${label}=${value}`
         }
@@ -95,10 +94,7 @@ export function renderMemoriesForModel(
  * `transcriptLines` 由来源消息序列化时写入并随数据持久化，直接作为模型视图复用。
  */
 export const renderMemorySourceMessagesForModel = (memory: LivingMemoryGetMessagesMemory) => {
-    const header = [`id=${memory.id}`]
-    if (memory.sourceLabel != null) {
-        header.push(`source=${memory.sourceLabel}`)
-    }
+    const header = [`id=${memory.id}`, `source=${memory.sourceLabel}`]
 
     if (memory.sourceOrigins.length === 0) {
         return [...header, '（该记忆没有记录来源消息）'].join('\n')

@@ -3,6 +3,7 @@ import type {
     AgenticMemorySnapshotItem,
     LivingMemoryPresetExport,
     LivingMemoryPresetExportEntry,
+    LivingMemoryPresetExportV6,
     LivingMemoryPresetImportSummary,
     MemoryEntryRecord,
     MemoryJobKind,
@@ -28,7 +29,8 @@ import type {
     UserProfileMemoryRepository,
     UserProfileRepository
 } from '../../contracts/workflows.ts'
-import { formatSource, resolveConversationSources } from '../transcript/origin_context.ts'
+import { formatSource, resolveConversationSources } from '../memory/conversation_sources.ts'
+import { resolveImportedSources } from './source_migration.ts'
 import { LivingMemoryEntryRepository } from './entries.ts'
 import { LivingMemoryJobRepository } from './jobs.ts'
 import {
@@ -139,7 +141,7 @@ export class LivingMemoryRepository
     }
 
     /**
-     * 全部事务的唯一入口。单连接数据库无法并发开启事务，因此所有事务共用一条
+     * 运行期仓储事务的入口。单连接数据库无法并发开启事务，因此这些事务共用一条
      * 串行链；这是驱动限制的变通，不是一致性机制本身——一致性来自事务边界，
      * 上层的预设级串行队列不得因此被移除。
      */
@@ -151,19 +153,12 @@ export class LivingMemoryRepository
         )
     }
 
-    async withSourceLabels<T extends Pick<MemoryEntryRecord, 'sourceConversationId' | 'sourceLabel'>>(entries: T[]): Promise<T[]> {
-        const conversationIds: string[] = []
-        for (const entry of entries) {
-            if (entry.sourceConversationId) conversationIds.push(entry.sourceConversationId)
-        }
-        const sources = await resolveConversationSources(this.ctx, conversationIds)
+    async withSourceLabels<T extends Pick<MemoryEntryRecord, 'sourceConversationId'>>(entries: T[]) {
+        const sources = await resolveConversationSources(this.ctx, entries.map(entry => entry.sourceConversationId))
         return entries.map(entry => {
-            if (!entry.sourceConversationId) return entry
-
-            const source = sources.get(entry.sourceConversationId)
-            if (!source?.name) return entry
-
-            return { ...entry, sourceLabel: formatSource(source) }
+            const source = entry.sourceConversationId ? sources.get(entry.sourceConversationId) : undefined
+            const sourceLabel = source?.name ? formatSource(source) : 'unknown'
+            return { ...entry, sourceLabel }
         })
     }
 
@@ -246,14 +241,12 @@ export class LivingMemoryRepository
     appendMemories(
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],
-        extracted: AttributedMemoryItem[],
-        sourceLabel?: string | null
+        extracted: AttributedMemoryItem[]
     ): Promise<MemoryEntryRecord[]> {
         return this.entries.appendMemories(
             scope,
             sourceOriginMessages,
-            extracted,
-            sourceLabel
+            extracted
         )
     }
 
@@ -451,7 +444,7 @@ export class LivingMemoryRepository
 
     async exportPresetData(
         presetId: string
-    ): Promise<LivingMemoryPresetExport> {
+    ): Promise<LivingMemoryPresetExportV6> {
         const [entries, userProfiles, presetSpeakers] = await Promise.all([
             this.entries.listEntriesByPreset(presetId),
             this.userProfiles.listUserProfilesByPreset(presetId),
@@ -459,10 +452,10 @@ export class LivingMemoryRepository
         ])
 
         return {
-            version: 5,
+            version: 6,
             exportedAt: new Date().toISOString(),
             sourcePresetId: presetId,
-            entries: (await this.withSourceLabels(entries)).map((entry) => ({
+            entries: entries.map((entry) => ({
                 id: entry.id,
                 speakerKeys: [...entry.speakerKeys],
                 type: entry.type,
@@ -473,7 +466,6 @@ export class LivingMemoryRepository
                 sentiment: entry.sentiment,
                 importance: entry.importance,
                 sourceConversationId: entry.sourceConversationId,
-                sourceLabel: entry.sourceLabel,
                 sourceOrigins: entry.sourceOrigins,
                 createdAt: entry.createdAt.toISOString(),
                 updatedAt: entry.updatedAt.toISOString()
@@ -503,7 +495,8 @@ export class LivingMemoryRepository
         targetPresetId: string,
         data: LivingMemoryPresetExport
     ): Promise<LivingMemoryPresetImportSummary> {
-        const rows = this.buildPresetImportRows(targetPresetId, data)
+        const sources = await resolveImportedSources(this.ctx, data.entries.map(entry => entry.sourceConversationId))
+        const rows = this.buildPresetImportRows(targetPresetId, data, sources)
 
         await this.runTransaction(async (database) => {
             await runPresetImportBatches(
@@ -550,7 +543,7 @@ export class LivingMemoryRepository
                     await database.upsert('living_memory_user_profile', batch)
                 }
             )
-            // v≤3 等无 presetSpeakers 节的导出文件：活跃条目携带的键可能没有
+            // 旧导出中的活跃条目可能带有名册尚未收录的键，没有
             // 注册行，Dream 渲染会缺行。为既不在文件也不在库里的键合成注册行；
             // 库中既有行不覆盖——导入按整行 upsert，合成行会抹掉同键的完整身份。
             const knownSpeakerKeys = new Set([
@@ -599,7 +592,8 @@ export class LivingMemoryRepository
 
     private buildPresetImportRows(
         targetPresetId: string,
-        data: LivingMemoryPresetExport
+        data: LivingMemoryPresetExport,
+        sources: ReadonlyMap<string | null, string | null>
     ) {
         const isCrossPresetImport = targetPresetId !== data.sourcePresetId
         const resolveImportId = (
@@ -620,8 +614,7 @@ export class LivingMemoryRepository
         }
         const createEntryRow = (
             entry: LivingMemoryPresetExportEntry,
-            speakerKeys: string[],
-            sourceLabel: string | null
+            speakerKeys: string[]
         ) => {
             return {
                 id: resolveEntryImportId(entry.id),
@@ -634,27 +627,15 @@ export class LivingMemoryRepository
                 summary: entry.summary,
                 sentiment: entry.sentiment,
                 importance: entry.importance,
-                sourceConversationId: entry.sourceConversationId,
-                sourceLabel,
+                sourceConversationId: sources.get(entry.sourceConversationId) ?? null,
                 sourceOrigins: normalizeMemorySourceOrigins(entry.sourceOrigins),
                 createdAt: new Date(entry.createdAt),
                 updatedAt: new Date(entry.updatedAt)
             }
         }
-        let entryRows: MemoryEntryRecord[]
-        if (data.version === 1 || data.version === 2) {
-            entryRows = data.entries.map((entry) =>
-                createEntryRow(entry, [], null)
-            )
-        } else if (data.version === 3) {
-            entryRows = data.entries.map((entry) =>
-                createEntryRow(entry, entry.speakerKeys, null)
-            )
-        } else {
-            entryRows = data.entries.map((entry) =>
-                createEntryRow(entry, entry.speakerKeys, entry.sourceLabel)
-            )
-        }
+        const entryRows = data.version === 1 || data.version === 2
+            ? data.entries.map(entry => createEntryRow(entry, []))
+            : data.entries.map(entry => createEntryRow(entry, entry.speakerKeys))
         const speakerKeys = [
             ...new Set(data.userProfiles.map((profile) => profile.speakerKey))
         ]

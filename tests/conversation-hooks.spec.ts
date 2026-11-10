@@ -175,6 +175,22 @@ function createHarness(config: {
 }
 
 describe('LivingMemoryConversationHooks', () => {
+    it('uses the waking route when two channels sharing a custom key reuse a platform message id', async () => {
+        const h = createHarness({ rules: { enableConversationIsolation: true } })
+        const agent = h.agent()
+        Object.assign(agent.options, { conversationKey: 'custom:test' })
+        h.framework.messages.push(
+            historyMessage(1, '乙群上一条', { cid: 'channel:B', routeId: 'B' }),
+            historyMessage(2, '乙群唤醒', { cid: 'channel:B', routeId: 'B', platformMessageId: 'same' }),
+            historyMessage(3, '甲群稍后的消息', { cid: 'channel:A', routeId: 'A', platformMessageId: 'same' })
+        )
+        await h.begin(agent, [ChatMessage.user('乙群唤醒', {
+            source: { kind: 'user', routeId: 'B' }, meta: { externalId: 'same' }
+        })])
+        assert.equal(h.hooks.contextForTurn(agent)?.routeId, 'B')
+        assert.deepEqual(h.recalls[0].history.map(row => row.contentLines), [['乙群上一条'], ['乙群唤醒']])
+    })
+
     it('injects the selected snapshot even with automatic recall disabled', async () => {
         await withLivingMemoryRepository(async (_ctx, repository) => {
             for (const [conversationId, text] of [[null, '群 A 的更新'], ['conv-1', '本会话']] as const) {
@@ -270,7 +286,7 @@ describe('LivingMemoryConversationHooks', () => {
         const agent = h.agent()
         await h.begin(agent, [h.user(1), ordinary, mention])
         assert.equal(h.recalls[0].position, 1)
-        assert.equal(h.hooks.settingsForTurn(agent)?.enableConversationIsolation, true)
+        assert.equal(h.hooks.contextForTurn(agent)?.settings.enableConversationIsolation, true)
     })
 
     it('locates the original chat in a folded envelope and excludes notices', async () => {
@@ -340,7 +356,7 @@ describe('LivingMemoryConversationHooks', () => {
         harness.switch('preset-1', 'session-2')
         await harness.observed(80, 'new history')
         await harness.engineTurn(oldAgent, 2, 10)
-        assert.equal(harness.hooks.settingsForTurn(oldAgent), undefined, 'a late old agent cannot reclaim the conversation')
+        assert.equal(harness.hooks.contextForTurn(oldAgent), undefined, 'a late old agent cannot reclaim the conversation')
         const agent = harness.agent()
         await harness.begin(agent, 80)
         assert.deepEqual(harness.recalls.at(-1)!.history.map(m => m.contentLines), [['new history']])
@@ -510,7 +526,7 @@ it('freezes Alice’s triggering window on enqueue across folded inputs, buffer 
     await h.engineTurn(a, 1, [batch])
     assert.equal(h.recalls.length, 1)
     assert.equal(h.recalls[0].position, 1)
-    assert.equal(h.hooks.settingsForTurn(a)?.enableConversationIsolation, true)
+    assert.equal(h.hooks.contextForTurn(a)?.settings.enableConversationIsolation, true)
 
     await h.observed(3, 'queued next', { userId: 'alice' })
     const first = await h.request(a, [h.user(3)])
@@ -525,7 +541,7 @@ it('freezes Alice’s triggering window on enqueue across folded inputs, buffer 
     assert.equal(h.recalls.length, 2)
     assert.deepEqual(h.recalls[1].history.map(m => m.contentLines), [['same batch'], ['queued next']])
     h.switch('preset-2')
-    assert.equal(h.hooks.settingsForTurn(a), undefined)
+    assert.equal(h.hooks.contextForTurn(a), undefined)
     const nextInput = h.user(3)
     assert.deepEqual(await h.request(a, [nextInput]), [nextInput])
 })
@@ -551,6 +567,39 @@ const proactive = (reason: string) => ChatMessage.notice('timer', '[wake] ' + re
     meta: { wake: { by: 'timer', reason } }
 })
 
+it('matches a custom wake against the current channel rather than the group that opened the agent', async t => {
+    const ctx = new Context()
+    t.after(() => ctx.fiber.dispose())
+    await ctx.plugin(SchemaRegistry)
+    await ctx.plugin(Routing)
+    registerRouteSettings(ctx)
+    const identity = { platform: 'test', selfId: 'bot', guildId: 'B', channelId: 'B', userId: 'person', isDirect: false }
+    const route = routeIdOf(identity)
+    ctx.provide('chat_observer')
+    ctx.set('chat_observer', {
+        channelStats: () => [{ cid: 'test:B', routeId: route, conversationKey: 'custom:test' }],
+        channelOf: () => ({ routeId: route, identity })
+    } as never)
+    await ctx.routing.save({ id: 'B', filter: { kind: 'scope', field: 'guild', values: ['B'] },
+        values: { livingmemory: { enableConversationIsolation: true } } })
+    const firstGroup = { platform: 'test', selfId: 'bot', guild: 'A', channel: 'A', isDirect: false }
+    assert.equal(routeSettings(ctx, 'custom:test', firstGroup, route).enableConversationIsolation, true)
+})
+
+it('keeps conversation snapshots available on an unaddressed custom wake without starting a recall', async () => {
+    const h = createHarness({ rules: { enableConversationIsolation: true, enableSnapshotInjection: true } })
+    h.setSnapshot('该会话的快照')
+    const agent = h.agent()
+    Object.assign(agent.options, { conversationKey: 'custom:test' })
+    h.framework.messages.push(historyMessage(1, '来自其他群', { cid: 'channel:B', routeId: 'B' }))
+    const wake = proactive('定时提醒')
+    await h.input(agent, wake, 'queued')
+    await h.begin(agent, [wake])
+    assert.equal(h.recalls.length, 0)
+    const [injection] = await h.request(agent)
+    assert.equal(contentText(injection.content), '<memory>\n该会话的快照\n</memory>')
+})
+
 it('uses the target DM rule on the first scheduled wake before any chat is observed', async (t) => {
     const ctx = new Context()
     t.after(() => ctx.fiber.dispose())
@@ -573,7 +622,7 @@ it('uses the target DM rule on the first scheduled wake before any chat is obser
     const timer = proactive('scheduled')
     await h.input(agent, timer, 'queued')
     await h.engineTurn(agent, 1, [timer])
-    const settings = h.hooks.settingsForTurn(agent)
+    const settings = h.hooks.contextForTurn(agent)?.settings
     assert.equal(settings?.enableConversationIsolation, true)
     assert.equal(settings.enableUserProfileInjection, false)
 })
@@ -716,7 +765,7 @@ it('keeps the group settings and leaves the window empty when the trigger was ev
     const batch = absorb(absorb(undefined, foldedChat(1, 'alice', direct), 1), foldedChat(2, 'bob', direct), 2)
     const a = h.agent(1, 'test-engine')
     await h.engineTurn(a, 1, [batch])
-    assert.equal(h.hooks.settingsForTurn(a)?.enableUserProfileInjection, true)
+    assert.equal(h.hooks.contextForTurn(a)?.settings.enableUserProfileInjection, true)
     assert.equal(h.recalls.length, 0)
     await h.request(a)
     assert.deepEqual(h.profiles.flat(), [])

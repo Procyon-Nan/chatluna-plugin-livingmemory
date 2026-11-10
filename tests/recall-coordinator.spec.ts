@@ -78,6 +78,28 @@ const createCoordinator = (options: {
     ), { rules: { recallIntervalMessages: options.recallIntervalMessages ?? 1, snapshotMaxLines: 5, snapshotScope: 'conversation' as const, enableConversationIsolation: false } })
 }
 
+it('isolates custom sources for recall without changing which snapshot the conversation owns', async () => {
+    const seen: string[] = []
+    const snapshots: (string | null)[] = []
+    const shared = { ...scope, conversationId: 'custom:test' }
+    const rules = { recallIntervalMessages: 20, snapshotMaxLines: 5, enableConversationIsolation: true, snapshotScope: 'conversation' as const }
+    const coordinator = new LivingMemoryRecallCoordinator('test/model', { after: async () => [] }, {
+        createFailedJob: createJobStore().createFailedJob,
+        upsertSnapshot: async () => {},
+        getLatestSnapshotByScope: async scope => { snapshots.push(scope.conversationId); return undefined }
+    }, { run: async (_rules, source) => { seen.push(source.conversationId); return null } }, logger)
+    try {
+        await coordinator.queue(rules, shared, chatHistory, 1, 'A')
+        await coordinator.queue(rules, shared, chatHistory, 2, 'B')
+        await waitFor(() => seen.length === 2, 'recall in both sources')
+        assert.deepEqual(seen, ['A', 'B'])
+        assert.deepEqual(snapshots, [shared.conversationId, shared.conversationId])
+        await assert.rejects(coordinator.queue(rules, shared, chatHistory, 3), /来源路由/u)
+    } finally {
+        await coordinator.stop()
+    }
+})
+
 it('edits a shared snapshot in order while retaining the triggering conversation', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
         const bothSaved = Promise.withResolvers<void>()

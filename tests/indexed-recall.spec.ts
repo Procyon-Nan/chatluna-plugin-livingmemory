@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import type { Context } from 'cordis'
-import type { MemoryEntryRecord } from '../src/contracts/memory.ts'
+import type { MemoryEntryWithSource } from '../src/contracts/memory.ts'
 import type {
     MemoryHybridSearchHit,
     MemoryHybridSearchInput,
@@ -9,7 +9,7 @@ import type {
 import { LivingMemorySearchEngine } from '../src/service/workflows/recall/memory_search_engine.ts'
 import { createCapturedLogger, logger } from './workflow-test-utils.ts'
 
-const createEntry = (id: string): MemoryEntryRecord => ({
+const createEntry = (id: string): MemoryEntryWithSource => ({
     id,
     presetId: 'preset-a',
     speakerKeys: [],
@@ -21,13 +21,13 @@ const createEntry = (id: string): MemoryEntryRecord => ({
     sentiment: 'neutral',
     importance: 0.5,
     sourceConversationId: null,
-    sourceLabel: null,
+    sourceLabel: 'unknown',
     sourceOrigins: [],
     createdAt: new Date('2026-08-08T00:00:00.000Z'),
     updatedAt: new Date('2026-08-08T00:00:00.000Z')
 })
 
-const createRepository = (entries: MemoryEntryRecord[]) => ({
+const createRepository = (entries: MemoryEntryWithSource[]) => ({
     getSearchEntriesByPresetAndIds: async (presetId: string, ids: string[]) => {
         assert.equal(presetId, 'preset-a')
         const idSet = new Set(ids)
