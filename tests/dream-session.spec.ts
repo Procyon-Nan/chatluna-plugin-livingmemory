@@ -41,7 +41,7 @@ const cluster = (id: string): DreamBatch => ({
             sentiment: '平静',
             importance: 0.7,
             speakerKeys: [],
-            createdAt: new Date('2026-10-19T00:00:00Z'),
+            sourceConversationId: null,
             updatedAt: new Date('2026-10-19T01:00:00Z')
         }
     ]
@@ -348,7 +348,7 @@ it('compresses only older batches and retains complete current input', async () 
         role: 'assistant',
         content: [{ type: 'text', text: '早期完成' }]
     })
-    const current = buildDreamMemoryBatchPrompt(cluster('current'), [])
+    const current = buildDreamMemoryBatchPrompt(cluster('current').entries.map(entry => ({ ...entry, sourceLabel: '来源 · unknown' })), [])
     history.startBatch(current)
     history.history.messages.push({
         role: 'tool',

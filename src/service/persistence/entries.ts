@@ -10,10 +10,7 @@ import type {
     MemoryUpdatePatch
 } from '../../contracts/memory.ts'
 import type { MemoryIndexSourceRecord } from '../../contracts/vector_index.ts'
-import type {
-    AttributedMemoryItem,
-    DreamMemoryEntryRecord
-} from '../../contracts/workflows.ts'
+import { dreamEntryFields, type AttributedMemoryItem } from '../../contracts/workflows.ts'
 import {
     normalizeMemoryImportance,
     normalizeMemoryKeywords,
@@ -59,19 +56,6 @@ const indexSourceFields: (keyof MemoryEntryRecord)[] = [
     'type',
     'content',
     'keywords',
-    'updatedAt'
-]
-const dreamEntryFields: (keyof MemoryEntryRecord)[] = [
-    'id',
-    'presetId',
-    'speakerKeys',
-    'type',
-    'content',
-    'keywords',
-    'summary',
-    'sentiment',
-    'importance',
-    'createdAt',
     'updatedAt'
 ]
 const recallEntryFields: (keyof MemoryEntryRecord)[] = [
@@ -120,10 +104,8 @@ export class LivingMemoryEntryRepository {
         )
     }
 
-    async listDreamEntriesByPreset(
-        presetId: string
-    ): Promise<DreamMemoryEntryRecord[]> {
-        return await this.database.get(
+    listDreamEntriesByPreset(presetId: string) {
+        return this.database.get(
             'living_memory_entry',
             { presetId, status: 'active' },
             dreamEntryFields

@@ -1,5 +1,5 @@
 import type { MemoryEntryWithSource, UserProfileRecord } from '../../contracts/memory.ts'
-import { contextMemoryFields, renderMemoriesForModel } from './memory_entries.ts'
+import { renderMemoriesForModel } from './memory_entries.ts'
 import {
     escapeXmlText,
     formatXmlBlock,
@@ -71,9 +71,7 @@ export const buildUserProfilePrompts = (
         memoryCountNotice,
         ...formatXmlBlock(
             'memory_entries',
-            renderMemoriesForModel(input.group.entries, {
-                fields: contextMemoryFields
-            })
+            renderMemoriesForModel(input.group.entries)
         ),
         '</user_profile_input>'
     ].join('\n')

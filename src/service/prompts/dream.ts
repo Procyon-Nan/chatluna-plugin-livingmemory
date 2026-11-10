@@ -1,6 +1,5 @@
-import type { DreamBatch } from '../workflows/dream/types.ts'
 import type { PresetSpeakerRecord } from '../../contracts/memory.ts'
-import { dreamMemoryFields, renderMemoriesForModel } from './memory_entries.ts'
+import { renderDreamMemories, type DreamPromptEntry } from './memory_entries.ts'
 import {
     escapeXmlText,
     formatXmlBlock,
@@ -8,17 +7,14 @@ import {
 } from './prompt_format.ts'
 
 export const buildDreamMemoryBatchPrompt = (
-    batch: DreamBatch,
-    speakers: PresetSpeakerRecord[]
+    entries: readonly DreamPromptEntry[],
+    speakers: readonly PresetSpeakerRecord[]
 ) => {
     return [
         '<dream_input>',
         ...formatXmlBlock(
             'memory_entries',
-            renderMemoriesForModel(batch.entries, {
-                fields: dreamMemoryFields,
-                speakers
-            })
+            renderDreamMemories(entries, speakers)
         ),
         '</dream_input>'
     ].join('\n')

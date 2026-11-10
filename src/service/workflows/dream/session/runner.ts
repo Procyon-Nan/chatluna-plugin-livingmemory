@@ -8,6 +8,7 @@ import {
     buildDreamSystemPrompt,
     buildDreamTurnFeedbackPrompt
 } from '../../../prompts/dream.ts'
+import { withSourceLabels } from '../../../memory/conversation_sources.ts'
 import { formatErrorDetails } from '../../../shared/utils.ts'
 import { LivingMemoryToolLoop } from '../../tool_loop.ts'
 import type { LivingMemoryLoopTool } from '../../tool_call.ts'
@@ -88,7 +89,9 @@ export async function runDreamSession(input: DreamSessionRunInput) {
         )
         const batchLogger = logger.with({ batch: batch.id })
         const batchStartedAt = performance.now()
-        const batchPrompt = buildDreamMemoryBatchPrompt(batch, [...speakers])
+        const entries = await withSourceLabels(ctx, batch.entries)
+        signal?.throwIfAborted()
+        const batchPrompt = buildDreamMemoryBatchPrompt(entries, speakers)
         history.startBatch(batchPrompt)
         batchLogger.diagnosticSummary((fields) => ({
             event: 'Dream 批次开始',

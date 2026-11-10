@@ -1,12 +1,7 @@
 import { isCustomConversation } from '../../../routing.ts'
 import { defineTool, type ToolCallContext, type ToolDefinition } from '@chatluna/tool'
-import type { LivingMemorySearchResult } from '../../../contracts/memory.ts'
 import type { LivingMemorySearchProvider } from '../../../contracts/workflows.ts'
-import {
-    contextMemoryFields,
-    renderMemoriesForModel,
-    searchMemoryFields
-} from '../../prompts/memory_entries.ts'
+import { renderMemoriesForModel } from '../../prompts/memory_entries.ts'
 import { memorySearchTool } from '../../prompts/memory_tools.ts'
 import {
     toolContext,
@@ -15,8 +10,6 @@ import {
     resolveToolMemoryPresetId,
     resolveToolMemoryScope
 } from './tool_runtime.ts'
-
-const noMemoryFoundMessage = '没有找到相关记忆。'
 
 interface SearchArgs {
     searchTexts: string[]
@@ -29,7 +22,6 @@ interface SearchArgs {
  */
 export const createSearchMemoryTool = (
     searchProvider: LivingMemorySearchProvider,
-    includeMemoryIds: boolean,
     resolveRoute?: ToolRouteResolver
 ): ToolDefinition<SearchArgs> =>
     defineTool({
@@ -64,15 +56,6 @@ export const createSearchMemoryTool = (
                 { ...input, memoryTypes: ['all'], memoryStatus: 'active' },
                 conversationId
             )
-            return formatResults(results, includeMemoryIds)
+            return results.length ? renderMemoriesForModel(results, true) : '没有找到相关记忆。'
         }
     })
-
-const formatResults = (results: LivingMemorySearchResult[], includeMemoryIds: boolean) => {
-    if (results.length === 0) {
-        return noMemoryFoundMessage
-    }
-    return renderMemoriesForModel(results, {
-        fields: includeMemoryIds ? searchMemoryFields : contextMemoryFields
-    })
-}

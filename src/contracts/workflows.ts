@@ -28,19 +28,21 @@ export interface DreamTriggerResult {
     runningJobId?: string
 }
 
-export interface DreamMemoryEntryRecord {
-    id: string
-    presetId: string
-    speakerKeys: string[]
-    type: MemoryEntryType
-    content: string
-    keywords: string[]
-    summary: string | null
-    sentiment: string | null
-    importance: number | null
-    createdAt: Date
-    updatedAt: Date
-}
+export const dreamEntryFields = [
+    'id',
+    'presetId',
+    'speakerKeys',
+    'type',
+    'content',
+    'keywords',
+    'summary',
+    'sentiment',
+    'importance',
+    'sourceConversationId',
+    'updatedAt'
+] satisfies (keyof MemoryEntryRecord)[]
+
+export type DreamMemoryEntryRecord = Pick<MemoryEntryRecord, (typeof dreamEntryFields)[number]>
 
 export type MemoryConfigWarningCode =
     | 'recall-model-missing'

@@ -1,4 +1,5 @@
 import type { Context } from 'cordis'
+import type { MemorySourceLabel } from '../../contracts/memory.ts'
 
 export interface SourcePeer {
     key: string
@@ -7,7 +8,7 @@ export interface SourcePeer {
     name?: string | undefined
 }
 
-export const formatSource = (peer: SourcePeer) => {
+export const formatConversationPeer = (peer: SourcePeer) => {
     const address = `${peer.kind === 'guild' ? '群聊' : '用户'} ID：${peer.id}`
     return peer.name ? `「${peer.name}」（${address}）` : address
 }
@@ -67,4 +68,13 @@ export async function resolveConversationSources(ctx: Context, conversationIds: 
         sources.set(key, source)
     }
     return sources
+}
+
+export async function withSourceLabels<T extends { sourceConversationId: string | null }>(ctx: Context, entries: readonly T[]) {
+    const sources = await resolveConversationSources(ctx, entries.map(entry => entry.sourceConversationId))
+    return entries.map(entry => {
+        const source = entry.sourceConversationId ? sources.get(entry.sourceConversationId) : undefined
+        const sourceLabel: MemorySourceLabel = `来源 · ${source?.name ? formatConversationPeer(source) : 'unknown'}`
+        return { ...entry, sourceLabel }
+    })
 }

@@ -43,7 +43,7 @@ export const registerLivingMemoryTools = (
 ) => {
     const enabled = new Set(options.enabled)
     const tools: ToolDefinition<any>[] = [
-        createSearchMemoryTool(providers, true, options.resolveRoute),
+        createSearchMemoryTool(providers, options.resolveRoute),
         createGetMessagesTool(providers),
         createCreateMemoryTool(providers, options.createToolMaxMemories, options.resolveRoute),
         createUpdateMemoryTool(providers),

@@ -11,7 +11,7 @@ import type { LivingMemoryConfig } from '../../../contracts/workflows.ts'
 import { formatLogScope, type LivingMemoryLogger } from '../../logging/logger.ts'
 import { MemoryInputError } from '../../memory/errors.ts'
 import { resolveScopeAssistantLabel } from '../../memory/helpers.ts'
-import { contextMemoryFields, renderMemoriesForModel } from '../../prompts/memory_entries.ts'
+import { renderMemoriesForModel } from '../../prompts/memory_entries.ts'
 import {
     memoryPassTool,
     memorySearchTool,
@@ -164,7 +164,7 @@ export const createRecallTools = (options: {
                 })
                 return results.length === 0
                     ? noMemoryFoundMessage
-                    : renderMemoriesForModel(results, { fields: contextMemoryFields })
+                    : renderMemoriesForModel(results)
             }
         },
         {

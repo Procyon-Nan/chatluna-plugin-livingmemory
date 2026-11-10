@@ -1,4 +1,4 @@
-import type { MemoryEntryRecord, MemoryJobRecord, PresetPersonaSource } from './memory.ts'
+import type { MemoryEntryRecord, MemorySourceLabel, MemoryJobRecord, PresetPersonaSource } from './memory.ts'
 import type { MemoryListQuery } from './rpc.ts'
 import type { DreamTriggerResult, MemoryServiceStatus } from './workflows.ts'
 
@@ -13,7 +13,7 @@ export interface LivingMemoryEntryView {
     keywords: string[]
     speakerKeys: string[]
     importance: number | null
-    sourceLabel: string
+    sourceLabel: MemorySourceLabel
     createdAt: number
     updatedAt: number
 }

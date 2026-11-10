@@ -28,7 +28,7 @@ const memory: MemoryEntryWithSource = {
     sentiment: '关心',
     importance: 0.7,
     sourceConversationId: 'conversation-1',
-    sourceLabel: 'unknown',
+    sourceLabel: '来源 · unknown',
     sourceOrigins: [],
     createdAt: now,
     updatedAt: now

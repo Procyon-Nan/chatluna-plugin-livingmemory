@@ -1,6 +1,6 @@
 import type { Context } from 'cordis'
 import type { ChatHistoryEntry } from '../chat_history.ts'
-import { formatSource, knownName, peerName, type SourcePeer } from '../memory/conversation_sources.ts'
+import { formatConversationPeer, knownName, peerName, type SourcePeer } from '../memory/conversation_sources.ts'
 
 export async function formatTranscriptHeader(ctx: Context, entries: readonly ChatHistoryEntry[]): Promise<string> {
     const peers = new Map<string, SourcePeer>()
@@ -13,7 +13,7 @@ export async function formatTranscriptHeader(ctx: Context, entries: readonly Cha
     const labels: string[] = []
     for (const peer of peers.values()) {
         const name = await peerName(ctx, peer, stored.get(peer.key)?.name)
-        labels.push(formatSource({ ...peer, name }))
+        labels.push(formatConversationPeer({ ...peer, name }))
     }
     return `以下是来自${labels.join('、')}的聊天记录：`
 }

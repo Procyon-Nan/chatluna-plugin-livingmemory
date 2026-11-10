@@ -9,7 +9,7 @@ import type { LivingMemoryAdminService } from './admin_service.ts'
 import type { LivingMemoryRepository } from '../persistence/repository.ts'
 import type { LivingMemoryLogger } from '../logging/logger.ts'
 import { renderSnapshotText } from '../memory/snapshot/snapshot_text.ts'
-import { formatSource, resolveConversationSources, type SourcePeer } from '../memory/conversation_sources.ts'
+import { formatConversationPeer, resolveConversationSources, type SourcePeer } from '../memory/conversation_sources.ts'
 import type {
     LivingMemoryEntriesSnapshot,
     LivingMemoryEntryView,
@@ -487,7 +487,7 @@ function toSnapshotView(snapshot: MemorySnapshotRecord, sources: Map<string, Sou
     return {
         id: snapshot.id,
         conversationId: snapshot.conversationId,
-        conversationLabel: source ? formatSource(source) : null,
+        conversationLabel: source ? formatConversationPeer(source) : null,
         content: renderSnapshotText(snapshot.items),
         searchTexts: [...searchTexts],
         searchKeywords: [...searchKeywords],

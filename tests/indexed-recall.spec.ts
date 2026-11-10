@@ -21,7 +21,7 @@ const createEntry = (id: string): MemoryEntryWithSource => ({
     sentiment: 'neutral',
     importance: 0.5,
     sourceConversationId: null,
-    sourceLabel: 'unknown',
+    sourceLabel: '来源 · unknown',
     sourceOrigins: [],
     createdAt: new Date('2026-08-08T00:00:00.000Z'),
     updatedAt: new Date('2026-08-08T00:00:00.000Z')

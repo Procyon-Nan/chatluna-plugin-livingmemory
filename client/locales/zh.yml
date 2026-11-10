@@ -99,7 +99,6 @@ field.status: 状态
 field.sentiment: 情绪
 field.importance: 重要度
 field.speakers: 关联用户
-field.source: 来源
 field.createdAt: 创建
 field.updatedAt: 更新
 field.content: 内容

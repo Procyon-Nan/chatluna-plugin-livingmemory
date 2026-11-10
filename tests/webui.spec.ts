@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import type { Context } from 'cordis'
 import Routing from '@chatluna/routing'
 import { loadMemorySourceMessages } from '../src/service/app/query_projections.ts'
-import { contextMemoryFields, renderMemoriesForModel, renderMemorySourceMessagesForModel } from '../src/service/prompts/memory_entries.ts'
+import { renderMemoriesForModel, renderMemorySourceMessagesForModel } from '../src/service/prompts/memory_entries.ts'
+import { buildDreamMemoryBatchPrompt } from '../src/service/prompts/dream.ts'
 import { formatTranscriptHeader } from '../src/service/transcript/header.ts'
 import { routeIdOf, type RouteIdentity } from '@chatluna/satori'
 import { LivingMemoryChatHistory } from '../src/service/chat_history.ts'
@@ -188,7 +189,7 @@ it('creates the first memory in a preset and reads edited fields back from the l
         }) as LivingMemoryEntriesSnapshot).entries[0]
 
         assert.partialDeepStrictEqual(await read(), {
-            ...memory, id, presetId, sourceLabel: 'unknown'
+            ...memory, id, presetId, sourceLabel: '来源 · unknown'
         })
         await ui.call('livingmemory.update', { id, sentiment: '开心', importance: 0.85 })
         assert.partialDeepStrictEqual(await read(), { ...memory, sentiment: '开心', importance: 0.85 })
@@ -379,8 +380,8 @@ it('resolves source names for the management list and tools without exporting st
         await ctx.database.prepared()
         const presetId = 'preset-1'
         for (const [kind, name, label] of [
-            ['guild', '读书群', '「读书群」（群聊 ID：42）'],
-            ['user', '小林', '「小林」（用户 ID：42）']
+            ['guild', '读书群', '来源 · 「读书群」（群聊 ID：42）'],
+            ['user', '小林', '来源 · 「小林」（用户 ID：42）']
         ] as const) {
             const { conversationId, peer } = await seedConversation(ctx, kind, name)
             const entry = await repository.createMemory({ presetId, conversationId }, { type: 'fact', content: name })
@@ -389,16 +390,20 @@ it('resolves source names for the management list and tools without exporting st
             const page = await ui.read('livingmemory.entries', { presetId }) as LivingMemoryEntriesSnapshot
             assert.equal(page.entries.find(item => item.id === entry.id)?.sourceLabel, label)
             const hits = await repository.getSearchEntriesByPresetAndIds(presetId, [entry.id])
-            assert.ok(renderMemoriesForModel(hits, { fields: contextMemoryFields }).split('\n').includes(`source=${label}`))
+            assert.equal(hits[0].sourceLabel, label)
+            const dreamEntries = await repository.listDreamEntriesByPreset(presetId)
+            const batch = buildDreamMemoryBatchPrompt(await repository.withSourceLabels(dreamEntries), [])
+            assert.ok(batch.split('\n').includes(label))
+            assert.ok(renderMemoriesForModel(hits).split('\n').includes(label))
             const messages = await loadMemorySourceMessages(repository, presetId, entry.id)
-            assert.ok(renderMemorySourceMessagesForModel(messages!).split('\n').includes(`source=${label}`))
+            assert.ok(renderMemorySourceMessagesForModel(messages!).split('\n').includes(label))
             const exportFile = await repository.exportPresetData(presetId)
             const exported = exportFile.entries.find(item => item.id === entry.id)!
             assert.equal(exported.sourceConversationId, conversationId)
             assert.equal(Object.hasOwn(exported, 'sourceLabel'), false)
             await ctx.database.set('chatluna_peers', { key: peer }, { name: '42' })
             await ctx.database.set('living_memory_entry', { id: entry.id }, { sourceLabel: label })
-            assert.equal((await repository.getEntriesWithSources(presetId, [entry.id]))[0].sourceLabel, 'unknown')
+            assert.equal((await repository.getEntriesWithSources(presetId, [entry.id]))[0].sourceLabel, '来源 · unknown')
         }
     })
 })
@@ -444,15 +449,15 @@ it('uses the observed channel for extraction and never labels a shared conversat
             type: 'fact', content: '乙群中的聊天', summary: '摘要', keywords: [], sentiment: '平静', importance: 0.5, speakerKeys: []
         }])
         const page = await ui.read('livingmemory.entries', { presetId: scope.presetId }) as LivingMemoryEntriesSnapshot
-        assert.equal(page.entries[0].sourceLabel, 'unknown')
-        assert.equal((await repository.getSearchEntriesByPresetAndIds(scope.presetId, [entry.id]))[0].sourceLabel, 'unknown')
+        assert.equal(page.entries[0].sourceLabel, '来源 · unknown')
+        assert.equal((await repository.getSearchEntriesByPresetAndIds(scope.presetId, [entry.id]))[0].sourceLabel, '来源 · unknown')
 
         const fromB = await repository.createMemory({ ...scope, conversationId: routeIdOf(actual) }, { type: 'fact', content: '乙群' })
         const exported = await repository.exportPresetData(scope.presetId)
         await repository.importPresetData(scope.presetId, exported)
         const [restored] = await repository.getEntriesWithSources(scope.presetId, [fromB.id])
         assert.equal(restored.sourceConversationId, routeIdOf(actual))
-        assert.equal(restored.sourceLabel, '「乙群」（群聊 ID：B）')
+        assert.equal(restored.sourceLabel, '来源 · 「乙群」（群聊 ID：B）')
 
         // 同一私聊后来只报了用户号，不能盖掉之前消息中的昵称或目录里的昵称。
         channel = latest

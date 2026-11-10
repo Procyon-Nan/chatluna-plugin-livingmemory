@@ -64,7 +64,6 @@ field.status: Status
 field.sentiment: Sentiment
 field.importance: Importance
 field.speakers: Linked users
-field.source: Source
 field.createdAt: Created
 field.updatedAt: Updated
 field.content: Content

@@ -26,6 +26,8 @@ export interface LivingMemorySearchInput {
   memoryStatus?: MemorySearchStatus
 }
 
+export type MemorySourceLabel = `来源 · ${string}`
+
 export interface LivingMemorySearchResult extends Pick<
   MemoryEntryRecord,
   | 'id'
@@ -38,7 +40,7 @@ export interface LivingMemorySearchResult extends Pick<
   | 'createdAt'
   | 'updatedAt'
 > {
-  sourceLabel: string
+  sourceLabel: MemorySourceLabel
 }
 
 export interface LivingMemorySearchDetailedResult extends LivingMemorySearchResult {
@@ -92,7 +94,7 @@ export interface MemorySourceOrigin {
 
 export interface LivingMemoryGetMessagesMemory {
   id: string
-  sourceLabel: string
+  sourceLabel: MemorySourceLabel
   sourceOrigins: MemorySourceOrigin[]
 }
 
@@ -121,7 +123,7 @@ export interface MemoryEntryRecord {
   updatedAt: Date
 }
 
-export type MemoryEntryWithSource = MemoryEntryRecord & { sourceLabel: string }
+export type MemoryEntryWithSource = MemoryEntryRecord & { sourceLabel: MemorySourceLabel }
 
 export interface SnapshotScope {
   presetId: string

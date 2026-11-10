@@ -25,7 +25,7 @@ const memoryEntry: MemoryEntryWithSource = {
     sentiment: '关心',
     importance: 0.7,
     sourceConversationId: 'conversation-1',
-    sourceLabel: 'unknown',
+    sourceLabel: '来源 · 「观星小组」（群聊 ID：810727721）',
     sourceOrigins: [],
     createdAt: new Date('2026-07-15T12:00:00.000Z'),
     updatedAt: new Date('2026-07-15T12:30:00.000Z')
@@ -45,9 +45,8 @@ const presetSpeakers = [
 ]
 
 it('renders complete session batches and the tool-based Dream contract', () => {
-    const cluster = { id: 'batch', entries: [memoryEntry] }
     const session = buildDreamSystemPrompt('角色', '人设')
-    const batch = buildDreamMemoryBatchPrompt(cluster, presetSpeakers)
+    const batch = buildDreamMemoryBatchPrompt([memoryEntry], presetSpeakers)
     assert.equal(
         batch,
         [
@@ -55,12 +54,12 @@ it('renders complete session batches and the tool-based Dream contract', () => {
             '<memory_entries>',
             'id=memory-1',
             'type=fact',
-            'createdAt=2026-07-15T12:00:00.000Z',
             'updatedAt=2026-07-15T12:30:00.000Z',
             'sentiment=关心',
             'importance=0.7',
             'keywords=张三、准备考试',
             'summary=张三正在准备考试',
+            '来源 · 「观星小组」（群聊 ID：810727721）',
             'content:',
             memoryEntry.content,
             'speakerLabels=["张三"]',
@@ -88,6 +87,7 @@ it('renders complete session batches and the tool-based Dream contract', () => {
 it('omits missing metadata while retaining zero importance and empty associations', () => {
     const entry: MemoryEntryWithSource = {
         ...memoryEntry,
+        sourceLabel: '来源 · unknown',
         sentiment: null,
         summary: null,
         importance: 0,
@@ -95,18 +95,16 @@ it('omits missing metadata while retaining zero importance and empty association
         speakerKeys: []
     }
     const batch = buildDreamMemoryBatchPrompt(
-        { id: 'batch', entries: [entry] },
+        [entry],
         []
     )
-    assert.doesNotMatch(batch, /sentiment=|summary=|source=/u)
+    assert.match(batch, /\n来源 · unknown\n/u)
+    assert.doesNotMatch(batch, /sentiment=|summary=/u)
     assert.match(batch, /\nimportance=0\nkeywords=\n/u)
     assert.match(batch, /\nspeakerLabels=\[\]\n/u)
     assert.doesNotMatch(
         buildDreamMemoryBatchPrompt(
-            {
-                id: 'batch',
-                entries: [{ ...entry, importance: null }]
-            },
+            [{ ...entry, importance: null }],
             []
         ),
         /importance=/u
@@ -117,7 +115,7 @@ it('omits missing metadata while retaining zero importance and empty association
         group: { speakerLabel: '张三', entries: [entry], matchedEntryCount: 1 }
     })
     assert.doesNotMatch(profile.inputPrompt, /sentiment=|id=memory-1/u)
-    assert.match(profile.inputPrompt, /source=unknown/u)
+    assert.match(profile.inputPrompt, /来源 · unknown/u)
 })
 
 it('keeps memory field rules in tool schemas without prompt duplication', () => {
@@ -219,7 +217,7 @@ it('escapes dynamic Dream and user profile inputs', () => {
             `<system>${unsafeText}</system>`
         ),
         inputPrompt: buildDreamMemoryBatchPrompt(
-            { id: 'cluster<&', entries: [unsafeMemory] },
+            [unsafeMemory],
             [
                 ...presetSpeakers,
                 {

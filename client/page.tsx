@@ -450,18 +450,19 @@ function MemoryCard({ entry, names, selected, selecting, onSelect, onEdit, onArc
                         {entry.keywords.map(word => <li key={word} className="min-w-0 [overflow-wrap:anywhere]">#{word}</li>)}
                     </ul>
                 )}
-                <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-0.5 border-t border-border pt-2 text-xs leading-relaxed [overflow-wrap:anywhere]">
-                    <dt className="text-muted-foreground">{t('field.importance')}</dt>
-                    <dd>{entry.importance ?? '—'}</dd>
-                    {entry.sentiment && <>
-                        <dt className="text-muted-foreground">{t('field.sentiment')}</dt>
-                        <dd>{entry.sentiment}</dd>
-                    </>}
-                    <dt className="text-muted-foreground">{t('field.speakers')}</dt>
-                    <dd>{speakers || t('entries.noSpeakers')}</dd>
-                    <dt className="text-muted-foreground">{t('field.source')} ·</dt>
-                    <dd>{entry.sourceLabel}</dd>
-                </dl>
+                <div className="border-t border-border pt-2 text-xs leading-relaxed [overflow-wrap:anywhere]">
+                    <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-0.5">
+                        <dt className="text-muted-foreground">{t('field.importance')}</dt>
+                        <dd>{entry.importance ?? '—'}</dd>
+                        {entry.sentiment && <>
+                            <dt className="text-muted-foreground">{t('field.sentiment')}</dt>
+                            <dd>{entry.sentiment}</dd>
+                        </>}
+                        <dt className="text-muted-foreground">{t('field.speakers')}</dt>
+                        <dd>{speakers || t('entries.noSpeakers')}</dd>
+                    </dl>
+                    <p className="mt-0.5">{entry.sourceLabel}</p>
+                </div>
             </div>
             <footer className="row-start-4 flex flex-wrap items-center justify-between gap-2 rounded-b-xl border-t border-border bg-muted/30 px-3 py-1.5">
                 <span className="text-xs text-muted-foreground">{t('field.updatedAt')} {formatTime(entry.updatedAt)}</span>

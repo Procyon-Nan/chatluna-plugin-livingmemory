@@ -22,14 +22,13 @@ import type {
 import type { MemoryIndexSourceRecord } from '../../contracts/vector_index.ts'
 import type {
     AttributedMemoryItem,
-    DreamMemoryEntryRecord,
     JobRepository,
     RecallRepository,
     SnapshotRepository,
     UserProfileMemoryRepository,
     UserProfileRepository
 } from '../../contracts/workflows.ts'
-import { formatSource, resolveConversationSources } from '../memory/conversation_sources.ts'
+import { withSourceLabels } from '../memory/conversation_sources.ts'
 import { resolveImportedSources } from './source_migration.ts'
 import { LivingMemoryEntryRepository } from './entries.ts'
 import { LivingMemoryJobRepository } from './jobs.ts'
@@ -153,13 +152,8 @@ export class LivingMemoryRepository
         )
     }
 
-    async withSourceLabels<T extends Pick<MemoryEntryRecord, 'sourceConversationId'>>(entries: T[]) {
-        const sources = await resolveConversationSources(this.ctx, entries.map(entry => entry.sourceConversationId))
-        return entries.map(entry => {
-            const source = entry.sourceConversationId ? sources.get(entry.sourceConversationId) : undefined
-            const sourceLabel = source?.name ? formatSource(source) : 'unknown'
-            return { ...entry, sourceLabel }
-        })
+    withSourceLabels<T extends Pick<MemoryEntryRecord, 'sourceConversationId'>>(entries: T[]) {
+        return withSourceLabels(this.ctx, entries)
     }
 
     listEntriesByPreset(presetId: string): Promise<MemoryEntryRecord[]> {
@@ -170,9 +164,7 @@ export class LivingMemoryRepository
         return this.entries.listArchivedEntriesBefore(presetId, updatedBefore)
     }
 
-    listDreamEntriesByPreset(
-        presetId: string
-    ): Promise<DreamMemoryEntryRecord[]> {
+    listDreamEntriesByPreset(presetId: string) {
         return this.entries.listDreamEntriesByPreset(presetId)
     }
 

@@ -1,92 +1,31 @@
-import type { LivingMemoryGetMessagesMemory, MemoryEntryRecord, PresetSpeakerRecord } from '../../contracts/memory.ts'
+import type { LivingMemoryGetMessagesMemory, MemoryEntryWithSource, PresetSpeakerRecord } from '../../contracts/memory.ts'
 
-type ModelMemoryView = Pick<
-    MemoryEntryRecord,
-    | 'id'
-    | 'type'
-    | 'createdAt'
-    | 'updatedAt'
-    | 'sentiment'
-    | 'importance'
-    | 'keywords'
-    | 'summary'
-    | 'content'
-> & { sourceLabel?: string | null }
+type ContextEntry = Pick<MemoryEntryWithSource, 'id' | 'type' | 'updatedAt' | 'sentiment' | 'sourceLabel' | 'content'>
+export type DreamPromptEntry = ContextEntry & Pick<MemoryEntryWithSource, 'importance' | 'keywords' | 'summary' | 'speakerKeys'>
 
-type MemoryModelField = keyof ModelMemoryView | 'speakerLabels'
+const entrySeparator = '\n\n---\n\n'
 
-export const dreamMemoryFields = [
-    'id',
-    'type',
-    'createdAt',
-    'updatedAt',
-    'sentiment',
-    'importance',
-    'keywords',
-    'summary',
-    'content',
-    'speakerLabels'
-] as const satisfies readonly MemoryModelField[]
-
-export const contextMemoryFields = ['type', 'updatedAt', 'sentiment', 'sourceLabel', 'content'] as const satisfies readonly MemoryModelField[]
-
-export const searchMemoryFields = ['id', ...contextMemoryFields] as const
-
-const formatMemoryField = (
-    entry: ModelMemoryView & Partial<Pick<MemoryEntryRecord, 'speakerKeys'>>,
-    field: MemoryModelField,
-    speakers?: ReadonlyMap<string, PresetSpeakerRecord>
-): string | null => {
-    switch (field) {
-        case 'createdAt':
-        case 'updatedAt':
-            return `${field}=${entry[field].toISOString()}`
-        case 'keywords':
-            return `keywords=${entry.keywords.join('、')}`
-        case 'content':
-            return `content:\n${entry.content}`
-        case 'speakerLabels': {
-            const labels = entry.speakerKeys!.map((key) => speakers!.get(key)!.speakerLabel)
-            return `speakerLabels=${JSON.stringify(labels)}`
-        }
-        default: {
-            const value = entry[field]
-            if (value == null) return null
-            const label = field === 'sourceLabel' ? 'source' : field
-            return `${label}=${value}`
-        }
-    }
+function renderEntry(entry: ContextEntry, includeId: boolean, details: string[] = []) {
+    const lines = [`type=${entry.type}`, `updatedAt=${entry.updatedAt.toISOString()}`]
+    if (includeId) lines.unshift(`id=${entry.id}`)
+    if (entry.sentiment !== null) lines.push(`sentiment=${entry.sentiment}`)
+    return [...lines, ...details, entry.sourceLabel, 'content:', entry.content].join('\n')
 }
 
-export function renderMemoriesForModel(
-    entries: readonly ModelMemoryView[],
-    options: { fields: readonly (keyof ModelMemoryView)[] }
-): string
-export function renderMemoriesForModel(
-    entries: readonly (ModelMemoryView & Pick<MemoryEntryRecord, 'speakerKeys'>)[],
-    options: {
-        fields: readonly MemoryModelField[]
-        speakers: readonly PresetSpeakerRecord[]
-    }
-): string
-export function renderMemoriesForModel(
-    entries: readonly (ModelMemoryView & Partial<Pick<MemoryEntryRecord, 'speakerKeys'>>)[],
-    options: {
-        fields: readonly MemoryModelField[]
-        speakers?: readonly PresetSpeakerRecord[]
-    }
-): string {
-    const speakers = options.fields.includes('speakerLabels')
-        ? new Map(options.speakers!.map((speaker) => [speaker.speakerKey, speaker]))
-        : undefined
-    return entries
-        .map((entry) => {
-            const lines = options.fields
-                .map((field) => formatMemoryField(entry, field, speakers))
-                .filter((line) => line !== null)
-            return lines.join('\n')
-        })
-        .join('\n\n---\n\n')
+export function renderMemoriesForModel(entries: readonly ContextEntry[], includeIds = false) {
+    return entries.map(entry => renderEntry(entry, includeIds)).join(entrySeparator)
+}
+
+export function renderDreamMemories(entries: readonly DreamPromptEntry[], speakers: readonly PresetSpeakerRecord[]) {
+    const byKey = new Map(speakers.map(speaker => [speaker.speakerKey, speaker]))
+    return entries.map(entry => {
+        const details: string[] = []
+        if (entry.importance !== null) details.push(`importance=${entry.importance}`)
+        details.push(`keywords=${entry.keywords.join('、')}`)
+        if (entry.summary !== null) details.push(`summary=${entry.summary}`)
+        const labels = entry.speakerKeys.map(key => byKey.get(key)!.speakerLabel)
+        return `${renderEntry(entry, true, details)}\nspeakerLabels=${JSON.stringify(labels)}`
+    }).join(entrySeparator)
 }
 
 /**
@@ -94,7 +33,7 @@ export function renderMemoriesForModel(
  * `transcriptLines` 由来源消息序列化时写入并随数据持久化，直接作为模型视图复用。
  */
 export const renderMemorySourceMessagesForModel = (memory: LivingMemoryGetMessagesMemory) => {
-    const header = [`id=${memory.id}`, `source=${memory.sourceLabel}`]
+    const header = [`id=${memory.id}`, memory.sourceLabel]
 
     if (memory.sourceOrigins.length === 0) {
         return [...header, '（该记忆没有记录来源消息）'].join('\n')
