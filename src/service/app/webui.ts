@@ -163,9 +163,14 @@ export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
     ctx.chatluna_webui.state('livingmemory.status', {
         get: async (): Promise<LivingMemoryStatusSnapshot> => ({
             ...ui.admin.status,
-            presets: await ui.admin.listPresetIds()
+            presets: await ui.admin.listPresetIds(),
+            nativeMemoryActive: ctx.get('memory') !== undefined
         }),
         refreshOn
+    })
+
+    ctx.on('internal/service', name => {
+        if (name === 'memory') ctx.chatluna_webui.refresh('livingmemory.status')
     })
 
     // ── 写操作 ────────────────────────────────────────────────────────

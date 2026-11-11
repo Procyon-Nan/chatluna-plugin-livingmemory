@@ -55,6 +55,7 @@ export interface LivingMemorySnapshotsSnapshot {
 }
 
 export interface LivingMemoryStatusSnapshot extends MemoryServiceStatus {
+    nativeMemoryActive: boolean
     presets: string[]
 }
 

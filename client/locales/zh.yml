@@ -1,4 +1,9 @@
 preset.placeholder: 选择预设
+nativeMemory.title: 检测到您已同时启动原生 memory 插件
+nativeMemory.description: LivingMemory 和原生 memory 插件在功能上较为相似，建议仅启用其中一个。
+nativeMemory.risk: 否则可能会带来额外的 token 开销或其他未知问题。
+nativeMemory.close: 本次关闭
+nativeMemory.neverShow: 我知道了，且以后不再提示
 preset.actions: 预设操作
 tab.navigation: 记忆管理
 transfer.export: 导出记忆

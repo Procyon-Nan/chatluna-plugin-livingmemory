@@ -76,6 +76,7 @@
         "@chatluna/ui-client": "*",
         "@chatluna/ui-kit": "*",
         "@chatluna/ui-schema-form": "*",
+        "@chatluna/ui-storage": "*",
         "@cordisjs/plugin-database": "^4.1.1",
         "@cordisjs/plugin-database-sqlite": "^5.1.1",
         "@cordisjs/plugin-loader": "^1.0.0-rc.9",

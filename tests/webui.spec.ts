@@ -32,6 +32,7 @@ const createWebUI = () => {
     const events: string[] = []
 
     const chatluna_webui = {
+        refresh: (key: string) => events.push(key),
         state: (key: string, options: { get: (params: any) => unknown; refreshOn: readonly string[] }) => {
             states.set(key, options.get)
             refresh.set(key, options.refreshOn)
@@ -106,6 +107,8 @@ const withWebUI = async (
         livingMemoryWebUI(
             {
                 effect: ctx.effect.bind(ctx),
+                get: ctx.get.bind(ctx),
+                on: ctx.on.bind(ctx),
                 chatluna_webui: ui.chatluna_webui,
                 permissions: ui.permissions,
                 get database() { return ctx.database },
@@ -140,6 +143,21 @@ it('lists every preset once in the status snapshot', async () => {
             presets: string[]
         }
         assert.deepEqual(status.presets, ['preset-1'])
+    })
+})
+
+it('refreshes the management page when the native memory service starts or stops', async () => {
+    await withWebUI(async (ctx, _repository, ui) => {
+        const status = () => ui.read('livingmemory.status')
+        assert.partialDeepStrictEqual(await status(), { nativeMemoryActive: false })
+        const native = ctx.plugin(scope => { scope.provide('memory', {}) })
+        await native
+        assert.ok(ui.events.includes('livingmemory.status'))
+        assert.partialDeepStrictEqual(await status(), { nativeMemoryActive: true })
+        ui.events.length = 0
+        await native.dispose()
+        assert.ok(ui.events.includes('livingmemory.status'))
+        assert.partialDeepStrictEqual(await status(), { nativeMemoryActive: false })
     })
 })
 

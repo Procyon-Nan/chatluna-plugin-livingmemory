@@ -30,6 +30,7 @@ import {
     useTranslate
 } from '@chatluna/ui-client/client'
 import type { Translate } from '@chatluna/ui-client/client'
+import { useStored } from '@chatluna/ui-storage'
 import { PresetActions } from './preset-actions.tsx'
 import { SettingsPanel } from './settings-panel.tsx'
 import { GuidePanel } from './guide-panel.tsx'
@@ -160,6 +161,7 @@ export function LivingMemoryPage() {
                     }} />
             )}
             <Warnings warnings={status.data?.warnings ?? []} />
+            <NativeMemoryNotice active={status.data?.nativeMemoryActive === true} />
             <div ref={panel} className="flex min-h-0 min-w-0 flex-1 flex-col">
                 {renderPanel()}
                 <React.Activity mode={tab === 'settings' ? 'visible' : 'hidden'}>
@@ -167,6 +169,32 @@ export function LivingMemoryPage() {
                 </React.Activity>
             </div>
         </div>
+    )
+}
+
+function NativeMemoryNotice({ active }: { active: boolean }) {
+    const t = useT()
+    const [dismissed, setDismissed] = React.useState(false)
+    const [neverShow, setNeverShow] = useStored('livingmemory.hideNativeMemoryNotice', value => value === true)
+    if (!active || dismissed || neverShow) return null
+
+    return (
+        <Dialog open onOpenChange={open => { if (!open) setDismissed(true) }}>
+            <DialogContent showCloseButton={false} className="flex flex-col gap-0 p-0 sm:max-w-[31rem]">
+                <div className="px-5 pt-6 pb-5 sm:px-7 sm:pt-7 sm:pb-6">
+                    <DialogTitle className="mb-3 text-xl leading-snug font-semibold text-balance">{t('nativeMemory.title')}</DialogTitle>
+                    <DialogDescription className="text-sm leading-6 text-balance text-popover-foreground">
+                        {t('nativeMemory.description')}
+                        <span className="mt-1 block text-muted-foreground">{t('nativeMemory.risk')}</span>
+                    </DialogDescription>
+                </div>
+                <div className="flex flex-col gap-2 border-t border-border bg-muted/30 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+                    <Button size="lg" variant="ghost" onClick={() => setDismissed(true)}>{t('nativeMemory.close')}</Button>
+                    <Button size="lg" className="bg-neutral-800 text-white hover:bg-neutral-700 active:bg-neutral-600 dark:bg-neutral-200 dark:text-neutral-900 dark:hover:bg-neutral-300 dark:active:bg-neutral-400"
+                        onClick={() => setNeverShow(true)}>{t('nativeMemory.neverShow')}</Button>
+                </div>
+            </DialogContent>
+        </Dialog>
     )
 }
 

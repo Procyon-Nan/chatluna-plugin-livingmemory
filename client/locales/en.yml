@@ -1,4 +1,9 @@
 preset.placeholder: Select a preset
+nativeMemory.title: The built-in memory plugin is also running
+nativeMemory.description: LivingMemory and the built-in memory plugin have similar features. We recommend enabling only one.
+nativeMemory.risk: Running both may use extra tokens or cause unexpected issues.
+nativeMemory.close: Dismiss for now
+nativeMemory.neverShow: Got it, don’t show this again
 transfer.export: Export memories
 transfer.import: Import memories
 transfer.confirmTitle: 'Import into “{target}”?'
