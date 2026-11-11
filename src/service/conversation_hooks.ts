@@ -397,7 +397,8 @@ function* turnInputs(message: ChatMessage): Iterable<TurnTrigger> {
         if (meta?.wake) yield { kind: 'notice', wake: meta.wake }
         return
     }
-    if (message.role !== 'user' || source.kind !== 'user' || form === 'snapshot' || meta?.backfill) return
+    if (message.role !== 'user' || source.kind !== 'user' || form === 'snapshot') return
+    if (meta && 'backfill' in meta && meta.backfill) return
 
     const envelopes = message.content.filter(block => block.type === 'envelope')
     if (!envelopes.length) {
