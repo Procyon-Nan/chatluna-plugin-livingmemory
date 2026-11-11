@@ -8,25 +8,25 @@ import type {} from '@chatluna/chat-observer'
 import type {} from '@chatluna/ui-schema-registry'
 
 export const ROUTE_SCHEMA = Schema.object({
-    extractionWindowMessages: Schema.natural().max(360).default(60).label('自动提取间隔')
-        .description('累计多少条聊天后提取；0 表示关闭。'),
-    extractionIncludeOverheard: Schema.boolean().default(false).label('提取旁听消息')
-        .description('允许单独提取机器人未参与的闲聊。'),
-    enableAutoDream: Schema.boolean().default(true).label('提取后整理新记忆'),
-    recallIntervalMessages: Schema.natural().max(200).default(20).label('自动召回间隔')
-        .description('首次唤醒时有聊天就召回，之后按新增聊天条数判断；0 表示关闭。'),
-    recallHistoryMessages: Schema.natural().min(1).max(200).default(20).label('召回上下文条数')
-        .description('唤醒时读取的最近聊天条数。用户发言触发时包含该条；定时或冷场唤醒时只读已有聊天。'),
+    extractionWindowMessages: Schema.natural().max(360).default(60).label('从聊天中提取记忆的间隔')
+        .description('累计多少条消息后从聊天中提取记忆；0 表示关闭记忆提取。'),
+    extractionIncludeOverheard: Schema.boolean().default(false).label('允许群友闲聊触发记忆提取')
+        .description('开启后，bot 未参与的群友闲聊也会触发记忆提取。'),
+    enableAutoDream: Schema.boolean().default(true).label('是否在提取新记忆后进行 Dream 整理'),
+    recallIntervalMessages: Schema.natural().max(200).default(20).label('记忆自动召回的间隔')
+        .description('累计多少条消息后唤醒 bot 会自动召回记忆；0 表示关闭记忆召回。'),
+    recallHistoryMessages: Schema.natural().min(1).max(200).default(20).label('用于召回记忆的聊天消息数')
+        .description('使用多少条聊天信息作为上下文来召回记忆，建议与记忆自动召回的间隔保持一致。'),
     snapshotScope: Schema.union([
-        Schema.const('conversation').description('会话独立快照'),
-        Schema.const('preset').description('预设共享快照')
-    ]).default('conversation').label('记忆快照范围')
-        .description('开启「隔离会话检索」的会话始终使用独立快照。'),
-    snapshotMaxLines: Schema.natural().min(5).max(50).default(5).label('快照最大行数'),
-    enableConversationIsolation: Schema.boolean().default(false).label('隔离会话检索')
-        .description('自动召回与记忆检索工具只检索当前会话和全局记忆。'),
-    enableSnapshotInjection: Schema.boolean().default(true).label('注入记忆快照'),
-    enableUserProfileInjection: Schema.boolean().default(false).label('注入用户画像')
+        Schema.const('conversation').description('每一个会话拥有独立记忆快照'),
+        Schema.const('preset').description('所有会话共享一个记忆快照')
+    ]).default('conversation').label('记忆快照的使用范围')
+        .description('开启「会话记忆隔离」时所有会话始终拥有一个独立记忆快照。'),
+    snapshotMaxLines: Schema.natural().min(5).max(50).default(5).label('记忆快照的最大行数'),
+    enableConversationIsolation: Schema.boolean().default(false).label('会话记忆隔离')
+        .description('记忆召回与记忆检索工具只检索来源于当前会话的记忆和全局记忆。'),
+    enableSnapshotInjection: Schema.boolean().default(true).label('向 bot 注入记忆快照'),
+    enableUserProfileInjection: Schema.boolean().default(false).label('向 bot 注入用户画像')
 })
 
 export type RouteSettings = InferOutput<typeof ROUTE_SCHEMA>

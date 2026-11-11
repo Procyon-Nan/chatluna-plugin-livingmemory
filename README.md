@@ -24,20 +24,20 @@ yarn build
 
 在 **对话规则 → 能力 → LivingMemory** 设置全局默认值，或为指定群、频道单独配置。私聊可按频道或路由 ID 配置。
 
-如果只想在指定群自动提取记忆，把全局的「自动提取间隔」设为 `0`，再为这些群设置需要的消息条数。
+如果只想在指定群自动提取记忆，把全局的「从聊天中提取记忆的间隔」设为 `0`，再为这些群设置需要的消息条数。
 
-| Key | Type | Default | Description |
+| 配置项 | 配置键 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `enableSnapshotInjection` | boolean | `true` | 开启记忆快照注入 |
-| `enableUserProfileInjection` | boolean | `false` | 注入最近聊天中发言人的已有画像 |
-| `enableConversationIsolation` | boolean | `false` | 只检索当前会话与全局记忆 |
-| `recallIntervalMessages` | number | `20` | 有聊天记录时，首次唤醒即召回；之后在唤醒时按新增聊天条数触发。`0` 关闭自动召回 |
-| `recallHistoryMessages` | number | `20` | 每次唤醒时，用于召回和画像注入的最近聊天条数 |
-| `snapshotScope` | string | `conversation` | 记忆快照范围：会话独立快照（`conversation`）或同一预设内共享（`preset`）。开启隔离会话检索时使用独立快照。 |
-| `snapshotMaxLines` | number | `5` | 记忆快照的最大行数 |
-| `extractionWindowMessages` | number | `60` | 未提取消息达到该条数时提取（0—360）；`0` 关闭 |
-| `enableAutoDream` | boolean | `true` | 提取保存新记忆后自动整理 |
-| `extractionIncludeOverheard` | boolean | `false` | 旁听提取：bot 未参与的闲聊是否计入提取；关闭时只提取对话与其前方一个窗口内的消息 |
+| 从聊天中提取记忆的间隔 | `extractionWindowMessages` | `60` | 按未提取的聊天消息条数计算（0—360）；`0` 关闭自动提取。 |
+| 允许群友闲聊触发记忆提取 | `extractionIncludeOverheard` | `false` | 开启后，群友闲聊达到设定条数就能触发提取；关闭时，等 bot 回复后再检查。 |
+| 是否在提取新记忆后进行 Dream 整理 | `enableAutoDream` | `true` | 自动提取保存新记忆后，由 Dream 检查是否需要整理。 |
+| 记忆自动召回的间隔 | `recallIntervalMessages` | `20` | bot 被唤醒时按新增聊天条数判断是否召回；`0` 关闭自动召回。 |
+| 用于召回记忆的聊天消息数 | `recallHistoryMessages` | `20` | 召回时最多读取多少条最近的聊天消息；画像注入也使用这段聊天记录。 |
+| 记忆快照的使用范围 | `snapshotScope` | `conversation` | 每一个会话拥有独立记忆快照（`conversation`）或所有会话共享一个记忆快照（`preset`）。开启「会话记忆隔离」时使用独立快照。 |
+| 记忆快照的最大行数 | `snapshotMaxLines` | `5` | 可设为 5—50 行。 |
+| 会话记忆隔离 | `enableConversationIsolation` | `false` | 召回和检索工具只查当前会话的记忆和全局记忆。 |
+| 向 bot 注入记忆快照 | `enableSnapshotInjection` | `true` | 在对话中提供已召回的记忆。 |
+| 向 bot 注入用户画像 | `enableUserProfileInjection` | `false` | 在对话中提供最近聊天里发言人的已有画像。 |
 
 ## 插件配置
 
