@@ -123,7 +123,7 @@ it('propagates cancellation without entering correction retries', async () => {
     assert.equal(calls, 1)
 })
 
-it('logs the schema, retry instructions and raw model text before validation', async () => {
+it('omits the generated schema from logs but keeps prompts, retries and raw model text', async () => {
     const captured = createCapturedLogger()
     const raw = '模型说明：\n```json\n{"items":["  trimmed  "]}\n```'
     const { ctx } = createHarness(['malformed reply', raw])
@@ -134,7 +134,10 @@ it('logs the schema, retry instructions and raw model text before validation', a
     assert.deepEqual(result.value, { items: ['trimmed'] })
     const requests = captured.info.filter(line => line.includes('记忆提取模型调用'))
     assert.equal(requests.length, 2)
-    assert.ok(requests[0].includes(JSON.stringify(schemasteryToJsonSchema(schema))))
+    for (const request of requests) {
+        assert.match(request, /========系统提示词========\nsystem\n\n========消息 1 · user========\ninput/u)
+        assert.doesNotMatch(request, /Return ONLY|"properties"/u)
+    }
     assert.match(requests[1], /结构化结果无效/u)
     const responses = captured.info.filter(line => line.includes('记忆提取模型响应'))
     assert.ok(responses[0].includes('malformed reply'))

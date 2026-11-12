@@ -60,7 +60,7 @@ export async function invokeStructuredOutput<T>(
         signal?.throwIfAborted()
         const prompt = correction === undefined ? options.inputPrompt : `${options.inputPrompt}\n\n${correction}`
         try {
-            const log = modelCallLogging(logger, stage, attempt)
+            const log = modelCallLogging(logger, stage, attempt, text => text.replace(system, () => options.systemPrompt))
             const run = options.ctx.chatluna.chat({
                 system,
                 messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],

@@ -1,6 +1,6 @@
-import type { ChatBlock } from '@chatluna/ai'
+import type { ChatSpecMessage, ChatToolCallBlock } from '@chatluna/ai'
 import type { ChatOptions, ChatResult } from '@chatluna/ai-runtime/ops'
-import { formatLogScope, type LivingMemoryLogBlock, type LivingMemoryLogger } from './logger.ts'
+import { formatLogJson, formatLogScope, type LivingMemoryLogBlock, type LivingMemoryLogger } from './logger.ts'
 
 export const modelStageLabels = {
     recall: '召回',
@@ -11,10 +11,16 @@ export const modelStageLabels = {
     'user-profile': '人物画像'
 }
 
-/** 普通文本直接按原有换行显示；混合消息保留每个内容块的类型和顺序。 */
-function logContent(content: readonly ChatBlock[]) {
-    if (content.length === 1 && content[0]?.type === 'text') return content[0].text
-    return content
+const formatCall = (call: ChatToolCallBlock) => `${call.toolName}(${formatLogJson(call.input)})`
+
+export function formatLogMessage({ role, content }: ChatSpecMessage, displayText = (text: string) => text) {
+    const lines: string[] = []
+    for (const block of content) {
+        if (block.type === 'text' && role !== 'assistant') lines.push(displayText(block.text))
+        if (block.type === 'tool-call') lines.push(formatCall(block))
+        if (block.type === 'tool-result' && block.output.type === 'text') lines.push(`${block.toolName} 返回：${block.output.value}`)
+    }
+    return lines.join('\n')
 }
 
 interface ModelCallLog {
@@ -22,18 +28,19 @@ interface ModelCallLog {
     response(result: ChatResult): void
 }
 
-export function modelCallLogging(logger: LivingMemoryLogger, stage: keyof typeof modelStageLabels, step: number): ModelCallLog {
+export function modelCallLogging(
+    logger: LivingMemoryLogger, stage: keyof typeof modelStageLabels, step: number, displayText = (text: string) => text
+): ModelCallLog {
     const label = modelStageLabels[stage]
     const beforeDispatch: ModelCallLog['beforeDispatch'] = (params, resolved) => {
         logger.diagnosticSummary(fields => {
             const blocks: LivingMemoryLogBlock[] = []
-            if (params.system !== undefined) blocks.push({ title: '系统提示词', value: params.system })
+            const system = displayText(params.system ?? '')
+            if (system) blocks.push({ title: '系统提示词', value: system })
             for (const [index, message] of params.messages.entries()) {
-                blocks.push({ title: `消息 ${index + 1} · ${message.role}`, value: logContent(message.content) })
+                const value = formatLogMessage(message, displayText)
+                if (value) blocks.push({ title: `消息 ${index + 1} · ${message.role}`, value })
             }
-            if (params.tools?.length) blocks.push({ title: '可用工具', value: params.tools })
-            if (params.toolChoice !== undefined) blocks.push({ title: '工具选择', value: params.toolChoice })
-            if (params.responseFormat !== undefined) blocks.push({ title: '输出格式', value: params.responseFormat })
             return {
                 event: `${label}模型调用`,
                 detail: `${formatLogScope(fields)}; 模型：${resolved.provider}:${resolved.model}; 调用序号：${step}`,
@@ -42,11 +49,14 @@ export function modelCallLogging(logger: LivingMemoryLogger, stage: keyof typeof
         })
     }
     function response(result: ChatResult) {
-        logger.diagnosticSummary(fields => ({
-            event: `${label}模型响应`,
-            detail: `${formatLogScope(fields)}; 调用序号：${step}; 结束原因：${result.finish.kind}`,
-            blocks: [{ title: '模型输出', value: logContent(result.content) }]
-        }))
+        logger.diagnosticSummary(fields => {
+            const output = stage === 'recall' || stage === 'dream' ? result.toolCalls.map(formatCall).join('\n') : result.text
+            return {
+                event: `${label}模型响应`,
+                detail: `${formatLogScope(fields)}; 调用序号：${step}; 结束原因：${result.finish.kind}`,
+                blocks: output ? [{ title: '模型输出', value: output }] : []
+            }
+        })
     }
     return { beforeDispatch, response }
 }

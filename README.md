@@ -49,7 +49,7 @@ yarn build
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `debug` | boolean | `false` | 记录 LivingMemory 每次调用对话模型时的提示词、消息、可用工具和模型响应 |
+| `debug` | boolean | `false` | 记录 LivingMemory 每次调用对话模型时的提示词、消息和模型响应 |
 
 ### 模型配置
 

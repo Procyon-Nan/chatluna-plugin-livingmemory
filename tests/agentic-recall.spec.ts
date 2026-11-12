@@ -180,9 +180,14 @@ const toolResultText = (message: ChatSpecMessage | undefined) =>
         .join('')
 
 it('runs one search then commits the snapshot', async () => {
+    const search = searchCall('search-1')
     const harness = createHarness({
         responses: [
-            searchCall('search-1'),
+            { ...search, content: [
+                { type: 'reasoning', text: '搜索前的模型思考' },
+                { type: 'text', text: '工具之外的旁白' },
+                ...search.content
+            ] },
             snapshotCall('update', '我记得一段可靠的往事。')
         ],
         search: async () => [createSearchResult('memory-1')]
@@ -202,6 +207,10 @@ it('runs one search then commits the snapshot', async () => {
     assert.ok(input.includes('<chat_history>\n' + chatHistory + '\n</chat_history>'))
     assert.equal(input.split('记忆查询').length - 1, 1)
     assert.equal(harness.invocations.length, 2)
+    assert.match(JSON.stringify(harness.invocations[1]?.messages), /搜索前的模型思考/u)
+    assert.doesNotMatch(harness.debugMessages.join('\n'), /搜索前的模型思考|工具之外的旁白/u)
+    assert.ok(harness.debugMessages.some(message => message.startsWith('事件：召回工具结果;') &&
+        message.includes(memoryUpdateSnapshotTool.name) && message.includes('执行成功')))
     const calls = harness.debugMessages.filter(message => message.startsWith('事件：召回模型调用;'))
     assert.equal(calls.length, 2)
     assert.match(calls[0]!, /框架转换后：/u)

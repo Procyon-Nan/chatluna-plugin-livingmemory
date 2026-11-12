@@ -89,9 +89,13 @@ const normalizeValue = (value: unknown, key: string, seen: WeakSet<object>): unk
     }
 }
 
-function formatBlock({ title, value }: LivingMemoryLogBlock) {
+export function formatLogJson(value: unknown, indent?: number) {
     const normalized = normalizeValue(value, '', new WeakSet())
-    const body = typeof normalized === 'string' ? normalized : JSON.stringify(normalized, null, 2)
+    return JSON.stringify(normalized, null, indent)
+}
+
+function formatBlock({ title, value }: LivingMemoryLogBlock) {
+    const body = typeof value === 'string' ? value : formatLogJson(value, 2)
     return `========${title}========\n${body}`
 }
 

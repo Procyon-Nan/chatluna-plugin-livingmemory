@@ -337,7 +337,9 @@ it('compresses only older batches and retains complete current input', async () 
             chatluna: {
                 chat: async (request: ChatRequest) => {
                     compressionRequests.push(request)
-                    await request.beforeDispatch?.({ messages: request.messages, system: request.system! },
+                    // 框架可将系统提示词折入第一条用户消息。
+                    const content: ChatBlock[] = [{ type: 'text', text: `[system]\n${request.system}` }, ...request.messages[0]!.content]
+                    await request.beforeDispatch?.({ messages: [{ role: 'user', content }] },
                         { provider: ProviderId('test'), model: ModelId('test-model') }, { degradations: [] })
                     return textFold('早期结论与相关 ID')
                 }
@@ -350,7 +352,10 @@ it('compresses only older batches and retains complete current input', async () 
     history.startBatch('早期记忆')
     history.messages.push({
         role: 'assistant',
-        content: [{ type: 'text', text: '早期完成' }]
+        content: [
+            { type: 'reasoning', text: '历史压缩前的模型思考' },
+            toolCall('living_memory_checked_memory', { ids: ['a'] }, 'early-call')
+        ]
     })
     const current = buildDreamMemoryBatchPrompt(cluster('current').entries.map(entry => ({ ...entry, sourceLabel: '来源 · unknown' })), [])
     history.startBatch(current)
@@ -381,8 +386,12 @@ it('compresses only older batches and retains complete current input', async () 
     )
     assert.equal(compressionRequests.length, 1)
     assert.ok(logs.some(message => message.includes('Dream 上下文压缩模型调用') && message.includes('早期记忆')))
+    assert.ok(logs.some(message => message.includes('[system]') && message.includes('你负责压缩')))
     assert.ok(logs.some(message => message.includes('Dream 上下文压缩模型响应') && message.includes('早期结论与相关 ID')))
     const compressionInput = JSON.stringify(compressionRequests[0]!.messages)
+    assert.match(compressionInput, /历史压缩前的模型思考/u)
+    assert.doesNotMatch(logs.join('\n'), /历史压缩前的模型思考/u)
+    assert.ok(logs.some(message => message.includes('living_memory_checked_memory')))
     assert.ok(
         compressionInput.includes('早期记忆'),
         '压缩输入包含更早批次'

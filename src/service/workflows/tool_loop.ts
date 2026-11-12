@@ -113,6 +113,11 @@ export class LivingMemoryToolLoop {
                 this.toolsByName.get(call.toolName),
                 call
             )
+            this.options.logger.diagnosticSummary(fields => ({
+                event: `${modelStageLabels[this.options.stage]}工具结果`,
+                detail: `${formatLogScope(fields)}; 调用序号：${step}; 工具：${call.toolName}`,
+                blocks: [{ title: outcome.ok ? '执行成功' : '执行失败', value: outcome.text }]
+            }))
             signal?.throwIfAborted()
             if (outcome.ok) successfulTools.push(call.toolName)
             this.history.messages.push({

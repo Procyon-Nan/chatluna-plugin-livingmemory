@@ -4,7 +4,7 @@ import type {} from '@chatluna/ai-runtime/ops'
 import type { Context } from 'cordis'
 import { estimateMessageTokens } from '@chatluna/utils'
 import { formatLogScope, type LivingMemoryLogger } from '../../../logging/logger.ts'
-import { modelCallLogging } from '../../../logging/model_calls.ts'
+import { formatLogMessage, modelCallLogging } from '../../../logging/model_calls.ts'
 import { buildDreamHistorySummaryPrompts } from '../../../prompts/dream.ts'
 import { formatXmlBlock } from '../../../prompts/prompt_format.ts'
 import { textBlocks, type LivingMemoryChatHistory } from '../../tool_call.ts'
@@ -88,17 +88,16 @@ export class DreamSessionHistory implements LivingMemoryChatHistory {
                 '当前 Dream 批次已达到 200k，且没有可压缩的更早批次。'
             )
         }
-        const transcript = JSON.stringify(
-            this.messages.slice(0, this.batchStart)
-        )
+        const earlier = this.messages.slice(0, this.batchStart)
         const attempt = ++this.compressions
         this.logger.diagnosticSummary((fields) => ({
             event: 'Dream 上下文压缩开始',
             detail: `${formatLogScope(fields)}; 压缩序号：${attempt}; 压缩前输入量：${tokensBefore} tokens`
         }))
-        const prompt = buildDreamHistorySummaryPrompts(transcript)
+        const prompt = buildDreamHistorySummaryPrompts(JSON.stringify(earlier))
         signal?.throwIfAborted()
-        const log = modelCallLogging(this.logger, 'dream-compression', attempt)
+        const visibleHistory = () => earlier.map(message => formatLogMessage(message)).filter(Boolean).join('\n')
+        const log = modelCallLogging(this.logger, 'dream-compression', attempt, text => text.replace(prompt.inputPrompt, visibleHistory))
         const run = this.ctx.chatluna.chat({
             model: this.model,
             system: prompt.systemPrompt,
