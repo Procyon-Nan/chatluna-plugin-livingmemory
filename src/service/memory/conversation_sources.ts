@@ -1,4 +1,5 @@
 import type { Context } from 'cordis'
+import type { RouteIdentity } from '@chatluna/satori'
 import type { MemorySourceLabel } from '../../contracts/memory.ts'
 
 export interface SourcePeer {
@@ -6,6 +7,12 @@ export interface SourcePeer {
     id: string
     kind: 'guild' | 'user'
     name?: string | undefined
+}
+
+export function sourcePeerOf({ platform, selfId, isDirect, userId, guildId }: RouteIdentity): SourcePeer | undefined {
+    const kind = isDirect ? 'user' : 'guild'
+    const id = isDirect ? userId : guildId
+    if (id) return { kind, id, key: `${platform}:${selfId}:${kind}:${id}` }
 }
 
 export const formatConversationPeer = (peer: SourcePeer) => {
@@ -29,13 +36,12 @@ export function observedSourceRoutes(ctx: Context) {
     const routes = new Map<string, string>()
     const observer = ctx.get('chat_observer')
     if (!observer) return routes
-    for (const { cid, routeId, conversationKey } of observer.channelStats()) {
+    for (const { conversationKey } of observer.channelStats()) {
         if (!conversationKey.startsWith('custom:')) continue
-        const identity = observer.channelOf(cid)?.identity
-        if (!identity) continue
-        const kind = identity.isDirect ? 'user' : 'guild'
-        const id = identity.isDirect ? identity.userId : identity.guildId
-        if (id) routes.set(routeId, `${identity.platform}:${identity.selfId}:${kind}:${id}`)
+        const channel = observer.channelOf(conversationKey)
+        if (!channel) continue
+        const peer = sourcePeerOf(channel.identity)
+        if (peer) routes.set(channel.routeId, peer.key)
     }
     return routes
 }

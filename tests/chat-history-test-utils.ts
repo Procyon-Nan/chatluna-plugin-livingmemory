@@ -1,4 +1,5 @@
 import type { ObservedMessage } from '@chatluna/chat-observer'
+import type { RouteIdentity } from '@chatluna/satori'
 
 export const historyScope = { conversationId: 'conv-1', sessionId: 'session-1', presetId: 'preset-1', platform: 'onebot' }
 
@@ -9,13 +10,21 @@ export const historyMessage = (id: number, text: string, overrides: Partial<Obse
 })
 
 export class FrameworkHistoryFixture {
-    readonly channelOf = (_cid: string) => ({ routeId: 'route', identity: this.identityOfConversation() })
+    constructor(readonly conversationKey = historyScope.conversationId) {}
+
     readonly messages: ObservedMessage[] = []
-    readonly channelStats = () => [...new Set(this.messages.map(message => message.cid))].map(cid => ({ cid, routeId: this.messages.find(message => message.cid === cid)!.routeId, conversationKey: 'custom:test' }))
-    readonly recent = (cid: string, { limit }: { limit?: number } = {}) => this.messages.filter(message => message.cid === cid).slice(limit ? -limit : 0)
-    readonly recentOfConversation = (_key: string, limit: number) => this.messages.slice(-limit)
-    readonly identityOfConversation = () => ({
-        platform: 'onebot', selfId: 'bot-1', isDirect: false,
-        guildId: 'guild-1', channelId: 'channel-1', userId: 'user-1'
-    })
+    channel: { routeId: string; identity: RouteIdentity } = {
+        routeId: 'route',
+        identity: { platform: 'onebot', selfId: 'bot-1', isDirect: false, guildId: 'guild-1', channelId: 'c', userId: 'user-1' }
+    }
+    channelOf(key: string) {
+        if (key === this.conversationKey) return this.channel
+    }
+    channelStats() {
+        const { routeId, identity } = this.channel
+        return [{ cid: `${identity.platform}:${identity.channelId}`, routeId, conversationKey: this.conversationKey }]
+    }
+    recentOfConversation(key: string, limit: number) {
+        return key === this.conversationKey ? this.messages.slice(-limit) : []
+    }
 }

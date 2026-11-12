@@ -217,8 +217,11 @@ it('maps old and native conversation keys to actual target conversations and ign
         const observedRoute = route('onebot', observedGuild)
         ctx.provide('chat_observer')
         ctx.set('chat_observer', {
-            channelStats: () => [{ cid: observedGuild, routeId: observedRoute, conversationKey: custom }],
-            channelOf: () => ({ identity: { platform: 'onebot', selfId: 'bot', isDirect: false, guildId: observedGuild } })
+            channelStats: () => [{ cid: `onebot:${observedGuild}`, routeId: observedRoute, conversationKey: custom }],
+            channelOf: (key: string) => key === custom ? {
+                routeId: observedRoute,
+                identity: { platform: 'onebot', selfId: 'bot', isDirect: false, guildId: observedGuild }
+            } : undefined
         } as never)
         await ctx.database.upsert('chatluna_conversations', [
             { key: qqGroup, peer: 'onebot:bot:guild:10000' },

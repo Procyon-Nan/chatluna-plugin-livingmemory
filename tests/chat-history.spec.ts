@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { LivingMemoryChatHistory, toHistoryTranscriptMessages } from '../src/service/chat_history.ts'
-import { createSpeakerKey } from '../src/service/memory/speaker_identity.ts'
+import { createSpeakerKey, resolveSpeakerKeysByLabels } from '../src/service/memory/speaker_identity.ts'
+import { LivingMemoryMessageFormatter } from '../src/service/transcript/message_formatter.ts'
 import { renderLivingMemoryTranscript } from '../src/service/transcript/transcript_renderer.ts'
 import { FrameworkHistoryFixture, historyMessage, historyScope } from './chat-history-test-utils.ts'
 
@@ -36,19 +37,45 @@ describe('LivingMemoryChatHistory', () => {
         assert.deepEqual((await history.recent(historyScope, 2, position!)).map(row => row.content), ['earlier'])
     })
 
-    it('preserves each channel’s message order and rejects ambiguous platform ids in merged inputs', () => {
-        const observer = new FrameworkHistoryFixture()
+    it('reads the shared buffer in order without mixing routes, speakers or duplicate platform ids', async () => {
+        const observer = new FrameworkHistoryFixture('custom:test')
+        observer.channel = {
+            routeId: 'B', identity: { platform: 'discord', selfId: 'bot-2', isDirect: false, guildId: 'B', channelId: 'B', userId: 'user-1' }
+        }
         observer.messages.push(
-            historyMessage(1, 'A1', { id: 'a:1' as never, time: 20, routeId: 'A', cid: 'group:A', platformMessageId: 'duplicate' }),
-            historyMessage(2, 'A2', { id: 'a:2' as never, time: 10, routeId: 'A', cid: 'group:A' }),
-            historyMessage(3, 'B1', { id: 'b:1' as never, time: 30, routeId: 'B', cid: 'group:B', platformMessageId: 'duplicate' })
+            historyMessage(1, 'A1', { id: 'a:1' as never, time: 20, routeId: 'A', cid: 'onebot:A', platformMessageId: 'duplicate' }),
+            historyMessage(2, 'A2', { id: 'a:2' as never, time: 10, routeId: 'A', cid: 'onebot:A' }),
+            historyMessage(3, 'B1', { id: 'b:1' as never, time: 30, routeId: 'B', cid: 'discord:B', platformMessageId: 'duplicate' })
         )
         const history = new LivingMemoryChatHistory(observer)
-        const shared = { conversationId: 'custom:test' }
+        const shared = { ...historyScope, conversationId: observer.conversationKey }
         assert.equal(history.locateUser(shared.conversationId, { id: 'folded', externalId: 'duplicate' }), undefined)
         assert.equal(history.locateUser(shared.conversationId, { id: 'a:1', externalId: 'duplicate' })?.routeId, 'A')
         assert.deepEqual(history.recent(shared, 2, Infinity, -1, 'A').map(row => row.content), ['A1', 'A2'])
+        const entries = await history.after(shared, -1)
+        assert.deepEqual(entries.map(row => row.source?.id), [undefined, undefined, 'B'])
+        assert.deepEqual(toHistoryTranscriptMessages(shared, entries).map(row => row.speakerKey), [
+            createSpeakerKey('onebot', 'user-1'), createSpeakerKey('onebot', 'user-1'), createSpeakerKey('discord', 'user-1')
+        ])
     })
+
+    for (const direct of [false, true]) {
+        it(`resolves an extracted speaker label to the platform user in a ${direct ? 'private' : 'group'} conversation`, async () => {
+            const observer = new FrameworkHistoryFixture()
+            const cid = direct ? 'onebot:private:42' : 'onebot:group-1'
+            observer.channel.identity = {
+                platform: 'onebot', selfId: 'bot', isDirect: direct, userId: '42',
+                channelId: direct ? 'private:42' : 'group-1', guildId: direct ? undefined : 'group-1'
+            }
+            observer.messages.push(historyMessage(1, '想去看星星', { cid, userId: '42', name: '小林' }))
+            const history = new LivingMemoryChatHistory(observer)
+            const entries = await history.after(historyScope, -1)
+            const messages = toHistoryTranscriptMessages(historyScope, entries)
+            const payload = new LivingMemoryMessageFormatter().toExtractionPayload(messages)
+            assert.deepEqual(resolveSpeakerKeysByLabels(['小林'], payload.speakers), [createSpeakerKey('onebot', '42')])
+            assert.equal(entries[0].source?.id, direct ? '42' : 'group-1')
+        })
+    }
 
     it('uses the observed time and nickname and counts only chat and attributed replies', async () => {
         const observer = new FrameworkHistoryFixture()

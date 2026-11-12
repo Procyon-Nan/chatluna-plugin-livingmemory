@@ -27,6 +27,7 @@ const settle = async () => {
 const model = { provider: ProviderId('test'), model: ModelId('chat') }
 
 function createHarness(config: {
+    conversationKey?: string
     overheard?: boolean
     extractionWindow?: number
     recallInterval?: number
@@ -35,7 +36,7 @@ function createHarness(config: {
     settingsOf?: ConstructorParameters<typeof LivingMemoryConversationHooks>[1]['settingsOf']
     onRecallModel?: (input: string) => void
 } = {}) {
-    const framework = new FrameworkHistoryFixture()
+    const framework = new FrameworkHistoryFixture(config.conversationKey)
     const listeners = new Map<string, ((payload: any) => unknown)[]>()
     const recalls: { scope: ChatHistoryScope; history: LivingMemoryTranscriptMessage[]; position: number }[] = []
     const extractions: { scope: ChatHistoryScope; boundary: number; eligible?: number }[] = []
@@ -110,7 +111,7 @@ function createHarness(config: {
     })
     const dispose = hooks.register()
     const agent = (turn = 1, engine?: string) => ({
-        options: { conversationKey: 'conv-1', presetId, engine },
+        options: { conversationKey: framework.conversationKey, presetId, engine },
         session: { id: sessionId, lastTurn: turn },
         pending: []
     }) as unknown as Agent
@@ -146,13 +147,13 @@ function createHarness(config: {
             return [...messages, ...appended]
         },
         send: (ids: number[], turn = 1, originPreset = presetId) => emit('send', {
-            chatSent: { own: true, reply: { conversationKey: 'conv-1', sessionId, presetId: originPreset, turn },
+            chatSent: { own: true, reply: { conversationKey: framework.conversationKey, sessionId, presetId: originPreset, turn },
                 messageIds: ids.map(id => 'm-' + id) }
         }),
         observed: async (id: number, text: string, overrides: Parameters<typeof historyMessage>[2] = {}) => {
             const message = historyMessage(id, text, overrides)
             framework.messages.push(message)
-            emit('chatluna/observed', { conversationKey: 'conv-1', sessionId, message })
+            emit('chatluna/observed', { conversationKey: framework.conversationKey, sessionId, message })
             await settle()
         },
         turn: async (target: Agent) => { emit('chatluna/agent-turn', { agent: target, reason: 'completed' }); await settle() },
@@ -162,7 +163,7 @@ function createHarness(config: {
             headPresetId = nextPreset
             sessionId = nextSession
             emit('chatluna/conversation-change', {
-                conversationKey: 'conv-1', previous, current: { sessionId, presetId },
+                conversationKey: framework.conversationKey, previous, current: { sessionId, presetId },
                 reason: sessionId === previous.sessionId ? 'preset' : 'reset'
             })
         },
@@ -176,9 +177,8 @@ function createHarness(config: {
 
 describe('LivingMemoryConversationHooks', () => {
     it('uses the waking route when two channels sharing a custom key reuse a platform message id', async () => {
-        const h = createHarness({ rules: { enableConversationIsolation: true } })
+        const h = createHarness({ conversationKey: 'custom:test', rules: { enableConversationIsolation: true } })
         const agent = h.agent()
-        Object.assign(agent.options, { conversationKey: 'custom:test' })
         h.framework.messages.push(
             historyMessage(1, '乙群上一条', { cid: 'channel:B', routeId: 'B' }),
             historyMessage(2, '乙群唤醒', { cid: 'channel:B', routeId: 'B', platformMessageId: 'same' }),
@@ -575,11 +575,10 @@ it('matches a custom wake against the current channel rather than the group that
     registerRouteSettings(ctx)
     const identity = { platform: 'test', selfId: 'bot', guildId: 'B', channelId: 'B', userId: 'person', isDirect: false }
     const route = routeIdOf(identity)
+    const observer = new FrameworkHistoryFixture('custom:test')
+    observer.channel = { routeId: route, identity }
     ctx.provide('chat_observer')
-    ctx.set('chat_observer', {
-        channelStats: () => [{ cid: 'test:B', routeId: route, conversationKey: 'custom:test' }],
-        channelOf: () => ({ routeId: route, identity })
-    } as never)
+    ctx.set('chat_observer', observer as never)
     await ctx.routing.save({ id: 'B', filter: { kind: 'scope', field: 'guild', values: ['B'] },
         values: { livingmemory: { enableConversationIsolation: true } } })
     const firstGroup = { platform: 'test', selfId: 'bot', guild: 'A', channel: 'A', isDirect: false }
@@ -587,10 +586,9 @@ it('matches a custom wake against the current channel rather than the group that
 })
 
 it('keeps conversation snapshots available on an unaddressed custom wake without starting a recall', async () => {
-    const h = createHarness({ rules: { enableConversationIsolation: true, enableSnapshotInjection: true } })
+    const h = createHarness({ conversationKey: 'custom:test', rules: { enableConversationIsolation: true, enableSnapshotInjection: true } })
     h.setSnapshot('该会话的快照')
     const agent = h.agent()
-    Object.assign(agent.options, { conversationKey: 'custom:test' })
     h.framework.messages.push(historyMessage(1, '来自其他群', { cid: 'channel:B', routeId: 'B' }))
     const wake = proactive('定时提醒')
     await h.input(agent, wake, 'queued')

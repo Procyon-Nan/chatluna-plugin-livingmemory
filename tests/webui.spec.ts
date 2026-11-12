@@ -7,7 +7,7 @@ import { buildDreamMemoryBatchPrompt } from '../src/service/prompts/dream.ts'
 import { formatTranscriptHeader } from '../src/service/transcript/header.ts'
 import { routeIdOf, type RouteIdentity } from '@chatluna/satori'
 import { LivingMemoryChatHistory } from '../src/service/chat_history.ts'
-import { historyMessage } from './chat-history-test-utils.ts'
+import { FrameworkHistoryFixture, historyMessage } from './chat-history-test-utils.ts'
 import type { Schema } from '@chatluna/schema'
 import type { LivingMemoryEntriesSnapshot, LivingMemorySnapshotsSnapshot } from '../src/contracts/webui.ts'
 import { withLivingMemoryRepository } from './persistence-test-utils.ts'
@@ -435,33 +435,24 @@ it('uses the observed channel for extraction and never labels a shared conversat
             platform: 'onebot', selfId: 'bot', isDirect, guildId: isDirect ? undefined : id, channelId: id,
             userId: isDirect ? id : 'someone'
         })
-        const first = identity(false, 'A')
         const actual = identity(false, 'B')
         const latest = identity(true, 'C')
+        const framework = new FrameworkHistoryFixture(scope.conversationId)
+        framework.channel = { routeId: routeIdOf(actual), identity: actual }
         ctx.provide('chat_observer')
-        ctx.set('chat_observer', {
-            channelStats: () => [{ cid: 'onebot:B', routeId: routeIdOf(actual), conversationKey: scope.conversationId }],
-            channelOf: () => ({ identity: actual })
-        } as never)
+        ctx.set('chat_observer', framework as never)
         const peerKey = (id: string) => `onebot:bot:guild:${id}`
         await ctx.database.create('chatluna_conversations', { key: scope.conversationId, peer: peerKey('A') })
         for (const [id, name] of [['A', '甲群'], ['B', '乙群']]) {
             await ctx.database.create('chatluna_peers', { key: peerKey(id), platform: 'onebot', selfId: 'bot', kind: 'guild', id, name })
         }
 
-        let channel = actual
-        const rows = [historyMessage(1, '乙群中的聊天', { routeId: routeIdOf(actual), cid: 'onebot:B' })]
-        const history = new LivingMemoryChatHistory({
-            channelStats: () => [{ cid: 'onebot:B', routeId: routeIdOf(actual), conversationKey: scope.conversationId }],
-            recent: () => rows,
-            recentOfConversation: (_key, limit) => rows.slice(-limit),
-            identityOfConversation: () => latest,
-            channelOf: () => ({ identity: channel, routeId: routeIdOf(channel) })
-        })
+        const rows = framework.messages
+        rows.push(historyMessage(1, '乙群中的聊天', { routeId: routeIdOf(actual), cid: 'onebot:B' }))
+        const history = new LivingMemoryChatHistory(framework)
+        history.locate(scope.conversationId, rows[0])
         const batch = await history.after(scope, -1)
-        channel = first
         assert.equal(await formatTranscriptHeader(ctx, batch), '以下是来自「乙群」（群聊 ID：B）的聊天记录：')
-        assert.equal(await formatTranscriptHeader(ctx, await history.after(scope, -1)), '以下是本次会话的聊天记录：')
 
         const [entry] = await repository.appendMemories(scope, [{ role: 'user', content: '乙群中的聊天', transcriptLines: ['乙群中的聊天'] }], [{
             type: 'fact', content: '乙群中的聊天', summary: '摘要', keywords: [], sentiment: '平静', importance: 0.5, speakerKeys: []
@@ -478,12 +469,14 @@ it('uses the observed channel for extraction and never labels a shared conversat
         assert.equal(restored.sourceLabel, '来源 · 「乙群」（群聊 ID：B）')
 
         // 同一私聊后来只报了用户号，不能盖掉之前消息中的昵称或目录里的昵称。
-        channel = latest
+        framework.channel = { routeId: routeIdOf(latest), identity: latest }
         const dm = (i: number, name: string) => historyMessage(i, '私聊', { cid: 'onebot:C', routeId: routeIdOf(latest), userId: 'C', name })
-        rows.splice(0, rows.length, dm(2, '小林'), dm(3, 'C'))
-        assert.equal(await formatTranscriptHeader(ctx, await history.after(scope, -1)), '以下是来自「小林」（用户 ID：C）的聊天记录：')
+        rows.push(dm(2, '小林'), dm(3, 'C'))
+        const dmHistory = () => history.after(scope, -1, Infinity, routeIdOf(latest))
+        assert.equal(await formatTranscriptHeader(ctx, await history.after(scope, -1, Infinity, routeIdOf(actual))), '以下是来自「乙群」（群聊 ID：B）的聊天记录：')
+        assert.equal(await formatTranscriptHeader(ctx, await dmHistory()), '以下是来自「小林」（用户 ID：C）的聊天记录：')
         await ctx.database.create('chatluna_peers', { key: 'onebot:bot:user:C', platform: 'onebot', selfId: 'bot', kind: 'user', id: 'C', name: '联系人小林' })
-        rows.shift()
-        assert.equal(await formatTranscriptHeader(ctx, await history.after(scope, -1)), '以下是来自「联系人小林」（用户 ID：C）的聊天记录：')
+        rows.splice(0, 2)
+        assert.equal(await formatTranscriptHeader(ctx, await dmHistory()), '以下是来自「联系人小林」（用户 ID：C）的聊天记录：')
     })
 })

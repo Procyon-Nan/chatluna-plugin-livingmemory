@@ -66,13 +66,12 @@ export const isCustomConversation = (key?: string) => key?.startsWith('custom:')
 export function routeSettings(
     ctx: Context, key?: string, location?: AgentOptions['location'], routeId?: string, noticeSessionId?: string
 ): RouteSettings {
-    if (isCustomConversation(key)) {
+    if (key !== undefined && isCustomConversation(key)) {
         const route = routeId ?? location?.route
         // 同一个 Agent 可以在甲群打开、在乙群收到唤醒。使用本次路由的地点匹配群规则。
-        const channel = route && ctx.chat_observer.channelStats().find(item => item.routeId === route)
-        const identity = channel && ctx.chat_observer.channelOf(channel.cid)?.identity
-        if (identity) {
-            return ctx.routing.resolve(ctx.routing.matchInput({ ...identity, userId: undefined }, route)).get('livingmemory')
+        const channel = ctx.chat_observer.channelOf(key)
+        if (channel && channel.routeId === route) {
+            return ctx.routing.resolve(ctx.routing.matchInput({ ...channel.identity, userId: undefined }, route)).get('livingmemory')
         }
         const values = ctx.routing.valuesAt({ route }, 'livingmemory')
         return ROUTE_SCHEMA.parse(values ?? {})

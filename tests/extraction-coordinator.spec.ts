@@ -218,9 +218,7 @@ const entry = (role: 'user' | 'assistant', content: string): Omit<ChatHistoryEnt
     name: role === 'assistant' ? 'bot' : '用户A',
     content,
     timestamp: Date.now(),
-    role,
-    backfilled: false,
-    presetId: scope.presetId
+    role
 })
 
 const queueExtraction = async (
@@ -249,8 +247,8 @@ const queueExtraction = async (
 const settleDrain = () => new Promise((resolve) => setTimeout(resolve, 20))
 
 it('extracts each source independently when two channels use one custom conversation', async () => {
-    const framework = new FrameworkHistoryFixture()
     const shared = { ...scope, conversationId: 'custom:test' }
+    const framework = new FrameworkHistoryFixture(shared.conversationId)
     const h = createHarness({ framework, extract: async () => createExtractionResult({ extracted: [createExtractedMemory()] }) })
     const queue = (routeId: string, boundary = -1) => h.coordinator.queue(shared, {
         routeId, windowMessages: 2, includeOverheard: true, enableAutoDream: false,
@@ -292,8 +290,7 @@ describe('planExtractionChunks', () => {
             name: role,
             content: `${role}-${index}`,
             timestamp: 1_000,
-            role,
-            backfilled: false
+            role
         }))
 
     it('closes segments at the last assistant of each run and leaves the unclosed tail', () => {
@@ -784,13 +781,11 @@ describe('LivingMemoryExtractionCoordinator', () => {
             {
                 messageId: 'q2',
                 platform: 'onebot',
-                presetId: scope.presetId,
                 userId: 'user-2',
                 name: '用户B',
                 content: 'q2',
                 timestamp: Date.now(),
-                role: 'user',
-                backfilled: false
+                role: 'user'
             },
             entry('assistant', 'a2')
         ])

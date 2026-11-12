@@ -49,7 +49,7 @@ const createCoordinator = (options: {
                 const positions = options.positions?.() ?? Array.from({ length: 120 }, (_, index) => index + 1)
                 return positions.filter((position) => position > after && position < before).map((position) => ({
                     position, messageId: String(position), platform: 'onebot', content: 'chat',
-                    timestamp: 1_000, role: 'user' as const, backfilled: false
+                    timestamp: 1_000, role: 'user' as const
                 }))
             }
         },
