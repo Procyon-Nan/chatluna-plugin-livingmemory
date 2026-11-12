@@ -134,6 +134,8 @@ tab.navigation: Memory management
 tab.settings: Plugin configuration
 tab.guide: Plugin guide
 guide.start: Getting started
+guide.intro: Choose your models and conversations, then try a search with one memory. The following sections explain when the bot saves and recalls memories, how to use profiles, and how Dream organizes existing memories.
+guide.contents: On this page
 guide.models.title: Choose your models
 guide.models.text: Under Plugin configuration → Model configuration, choose a main model that supports tool calls. It extracts and organizes memories and updates user profiles and persona cards. The recall model decides whether to look up memories. The embedding model converts memories and queries into vectors so the plugin can compare their meanings. An optional reranker reorders the candidate memories by their relevance to the query. Select Save settings to apply these choices to all presets in this plugin instance.
 guide.openSettings: Open plugin configuration
@@ -141,7 +143,10 @@ guide.rules.title: Choose which conversations use automatic extraction
 guide.rules.text: Open Conversation rules → Capabilities → LivingMemory and set the extraction interval. The default is 60 chat messages. To enable automatic extraction in just one group, set the global interval to 0 and that group’s interval to 60.
 guide.check.title: Try a search with one memory
 guide.check.text: Under Memories, select New memory, choose a preset, and save “I drink my coffee without sugar.” Under Recall test for the same preset, search for “How do I like my coffee?” to see the matches. The test leaves snapshots unchanged. Under Snapshots you can read the snapshot from an actual chat. Expand Recall details to see the search terms and matching memories.
-guide.questions: Common settings
+guide.timing: When extraction and recall run
+guide.buffer.title: Check the chat buffer before raising an interval
+guide.buffer.text: In ChatLuna, open Plugins → Conversation and routing → @chatluna/chat-observer and adjust the buffer limit. Each channel keeps its latest 200 messages by default. Extraction and recall can only count chats still in that buffer. For example, a 300-message extraction interval can never be reached with a 200-message buffer. Even with a shorter interval, messages evicted between checks cannot be read later.
+guide.context: Snapshots and user profiles
 guide.interval.title: How does the recall interval differ from the history length?
 guide.interval.text: The interval tells the bot how many new messages to wait for between recalls when it wakes. Set it to 0 to disable automatic recall. The history length sets how many recent messages the bot reads for each recall. Both default to 20 messages.
 guide.overheard.title: When can chat between group members trigger extraction?
@@ -150,7 +155,7 @@ guide.sharing.title: Can two groups using the same preset share a snapshot?
 guide.sharing.text: Each conversation has its own snapshot by default. To share one between two groups using the same preset, select preset sharing in both groups’ conversation rules. The groups share recall results; each still reads its own chat history and tracks its own recall interval. A group with conversation isolation enabled always uses its own snapshot and searches only its own and global memories within the preset.
 guide.profiles.title: How do I use existing user profiles in a chat?
 guide.profiles.text: By default, profiles are updated after extraction or Dream, and each person needs at least three linked active memories. You can change these settings under Plugin configuration. To use existing profiles during a chat, enable profile injection in the conversation rule (off by default). The bot receives profiles for users who spoke in the recent messages covered by the recall history length.
-guide.dream.title: How Dream organizes memories
+guide.dream: How Dream organizes memories
 guide.dream.intro: Dream uses the main model to compare memories and decide which to keep, update, merge, split, or archive. For example, “I take my coffee without sugar” and “I like unsweetened coffee” can become a single preference. Choose a main model with a context window of at least 200k tokens for Dream.
 guide.dream.auto.title: Automatic runs start with newly extracted memories
 guide.dream.auto.text: Conversation rules enable Dream after extraction by default. For each newly saved memory, Dream looks for related active memories already in the same preset and reviews them together. If it finds no related older memory, the new entry stays as it is.
