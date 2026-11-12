@@ -113,7 +113,6 @@ export class LivingMemoryDreamService {
                     seeds as never,
                     this.repository as never,
                     this.search,
-                    logger,
                     signal
                 )
                 state.batches = plan.batches

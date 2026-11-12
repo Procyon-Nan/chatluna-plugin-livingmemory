@@ -1,6 +1,5 @@
 import type { LivingMemoryRepository } from '../../persistence/repository.ts'
 import type { LivingMemorySearchEngine } from '../recall/memory_search_engine.ts'
-import type { LivingMemoryLogger } from '../../logging/logger.ts'
 import type { DreamBatch } from './types.ts'
 import type { MemoryEntryRecord } from '../../../contracts/memory.ts'
 
@@ -10,7 +9,6 @@ export async function buildPostExtractionDreamBatches(
     seeds: MemoryEntryRecord[],
     repository: Pick<LivingMemoryRepository, 'getEntriesByPresetAndIds'>,
     search: Pick<LivingMemorySearchEngine, 'searchMemoriesDetailed'>,
-    logger: LivingMemoryLogger,
     signal?: AbortSignal
 ) {
     const seedById = new Map(seeds.map((entry) => [entry.id, entry]))
@@ -35,20 +33,6 @@ export async function buildPostExtractionDreamBatches(
             memoryIds
         )
         signal?.throwIfAborted()
-        logger.diagnosticSummary(() => ({
-            event: '提取后 Dream 近邻检索完成',
-            detail: `预设：${presetId}; 新记忆：${id}; 近邻：${hits.length} 条`,
-            blocks: [
-                {
-                    title: '近邻结果',
-                    value: hits.map((hit) => ({
-                        id: hit.id,
-                        cosineScore: hit.cosineScore,
-                        rerankScore: hit.rerankScore
-                    }))
-                }
-            ]
-        }))
         if (hits.length === 0) {
             untouchedSeedIds.push(id)
             continue

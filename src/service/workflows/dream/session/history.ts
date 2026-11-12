@@ -4,7 +4,7 @@ import type {} from '@chatluna/ai-runtime/ops'
 import type { Context } from 'cordis'
 import { estimateMessageTokens } from '@chatluna/utils'
 import { formatLogScope, type LivingMemoryLogger } from '../../../logging/logger.ts'
-import { formatLogMessage, modelCallLogging } from '../../../logging/model_calls.ts'
+import { logMessageParts, ModelCallLogs } from '../../../logging/model_calls.ts'
 import { buildDreamHistorySummaryPrompts } from '../../../prompts/dream.ts'
 import { formatXmlBlock } from '../../../prompts/prompt_format.ts'
 import { textBlocks, type LivingMemoryChatHistory } from '../../tool_call.ts'
@@ -24,6 +24,7 @@ export class DreamSessionHistory implements LivingMemoryChatHistory {
     private batchStart = 0
     private inputTokens: number | undefined
     private compressions = 0
+    private readonly compressionLog: ModelCallLogs
 
     constructor(
         private readonly ctx: Context,
@@ -33,6 +34,7 @@ export class DreamSessionHistory implements LivingMemoryChatHistory {
     ) {
         // 系统词通过 chat.system 单独发送，计入预算一次。
         this.systemTokens = estimateMessageTokens({ content: textBlocks(systemPrompt) })
+        this.compressionLog = new ModelCallLogs(logger, 'dream-compression')
     }
 
     /** 记录上一轮模型上报的输入量；缺失或无效时保留上一次有效值。 */
@@ -96,19 +98,18 @@ export class DreamSessionHistory implements LivingMemoryChatHistory {
         }))
         const prompt = buildDreamHistorySummaryPrompts(JSON.stringify(earlier))
         signal?.throwIfAborted()
-        const visibleHistory = () => earlier.map(message => formatLogMessage(message)).filter(Boolean).join('\n')
-        const log = modelCallLogging(this.logger, 'dream-compression', attempt, text => text.replace(prompt.inputPrompt, visibleHistory))
+        const visibleHistory = () => earlier.flatMap(message => logMessageParts(message)).join('\n')
         const run = this.ctx.chatluna.chat({
             model: this.model,
             system: prompt.systemPrompt,
             messages: [
                 { role: 'user', content: textBlocks(prompt.inputPrompt) }
             ],
-            beforeDispatch: log.beforeDispatch
+            beforeDispatch: this.compressionLog.beforeDispatch(attempt, { displayText: text => text.replace(prompt.inputPrompt, visibleHistory) })
         })
         using cancellation = signal && addAbortListener(signal, () => run.abort(signal.reason))
         const fold = await run
-        log.response(fold)
+        this.compressionLog.response(attempt, fold)
         signal?.throwIfAborted()
         const summary = fold.text.trim()
         if (!summary) {

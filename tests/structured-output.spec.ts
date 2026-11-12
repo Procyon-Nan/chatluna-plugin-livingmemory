@@ -183,6 +183,24 @@ it('logs the submitted tool arguments without reasoning, narration or tool defin
     assert.doesNotMatch(log, /内部思考|模型多余旁白|Return ONLY|"properties"/u)
 })
 
+it('logs each new correction even when its wording repeats, and resets between workflows', async () => {
+    const captured = createCapturedLogger()
+    const { ctx, prompts } = createHarness([{ items: 'wrong' }, { items: 'wrong' }, { items: ['corrected'] }, { items: [] }])
+    const options = { ctx, tool, systemPrompt: '固定系统词', inputPrompt: '原始聊天', logging: { ...logging, logger: captured.logger } }
+    await invokeStructuredOutput(options)
+    await invokeStructuredOutput(options)
+    const requests = captured.info.filter(line => line.startsWith('事件：记忆提取模型调用;'))
+    assert.equal(requests.length, 4)
+    assert.match(requests[0]!, /固定系统词[\s\S]*原始聊天/u)
+    for (const i of [1, 2]) {
+        assert.match(requests[i]!, /提交失败/u)
+        assert.doesNotMatch(requests[i]!, /固定系统词|原始聊天| · assistant========/u)
+        assert.equal(prompts[i]!.system, options.systemPrompt)
+        assert.equal(prompts[i]!.prompt, options.inputPrompt)
+    }
+    assert.match(requests[3]!, /固定系统词[\s\S]*原始聊天/u)
+})
+
 it('passes the configured model through to the call', async () => {
     const harness = createHarness([{ items: ['alpha'] }])
     const resolved = await invokeStructuredOutput({

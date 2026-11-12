@@ -51,8 +51,7 @@ it('excludes the whole extraction and skips a seed with no neighbors', async () 
                       ]
                     : []
             }
-        },
-        logger
+        }
     )
     assert.deepEqual(
         plan.batches.map((batch) => batch.entries.map((entry) => entry.id)),

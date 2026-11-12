@@ -56,6 +56,19 @@ export async function runDreamSession(input: DreamSessionRunInput) {
         input.presetPrompt
     )
     const history = new DreamSessionHistory(ctx, model, systemPrompt, logger)
+    const loop = new LivingMemoryToolLoop({
+        ctx,
+        model,
+        system: systemPrompt,
+        tools,
+        logger,
+        stage: 'dream',
+        multipleToolCalls: 'sequential',
+        history,
+        prepareMessages: () => history.prepareMessages(maxTokenLimit, signal),
+        onModelCall: fold => history.recordUsage(fold.usage),
+        ...(signal === undefined ? {} : { signal })
+    })
 
     while (advanceDreamBatch(state) !== undefined) {
         signal?.throwIfAborted()
@@ -82,30 +95,16 @@ export async function runDreamSession(input: DreamSessionRunInput) {
             state,
             batch.entries.flatMap((entry) => entry.speakerKeys)
         )
-        const batchLogger = logger.with({ batch: batch.id })
         const batchStartedAt = performance.now()
         const entries = await withSourceLabels(ctx, batch.entries)
         signal?.throwIfAborted()
         const batchPrompt = buildDreamMemoryBatchPrompt(entries, speakers)
         history.startBatch(batchPrompt)
-        batchLogger.diagnosticSummary((fields) => ({
+        logger.diagnosticSummary((fields) => ({
             event: 'Dream 批次开始',
             detail: `${formatLogScope(fields)}; 批次：${batch.id}; 总批次：${state.batches.length}; 记忆：${batch.entries.length} 条`
         }))
 
-        const loop = new LivingMemoryToolLoop({
-            ctx,
-            model,
-            system: systemPrompt,
-            tools,
-            logger: batchLogger,
-            stage: 'dream',
-            multipleToolCalls: 'sequential',
-            history,
-            prepareMessages: () => history.prepareMessages(maxTokenLimit, signal),
-            onModelCall: fold => history.recordUsage(fold.usage),
-            ...(signal === undefined ? {} : { signal })
-        })
         let ineffectiveRounds = 0
         for (let round = 1; round <= maxBatchRounds; round++) {
             signal?.throwIfAborted()
@@ -117,7 +116,7 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                 effective = successfulTools.length > 0
             } catch (error) {
                 signal?.throwIfAborted()
-                batchLogger.diagnosticSummary((fields) => ({
+                logger.diagnosticSummary((fields) => ({
                     event: 'Dream 本轮处理失败',
                     detail: `${formatLogScope(fields)}; 批次：${batch.id}; 轮次：${round}; 原因：${formatErrorDetails(error)}`
                 }))
@@ -127,12 +126,12 @@ export async function runDreamSession(input: DreamSessionRunInput) {
 
             const pendingAfter = pendingDreamMemoryIds(state)
             ineffectiveRounds = effective ? 0 : ineffectiveRounds + 1
-            batchLogger.diagnosticSummary((fields) => ({
+            logger.diagnosticSummary((fields) => ({
                 event: 'Dream 本轮处理完成',
                 detail: `${formatLogScope(fields)}; 批次：${batch.id}; 轮次：${round}; 已处理：${batch.entries.length - pendingAfter.length}/${batch.entries.length} 条; 连续无有效操作：${ineffectiveRounds} 轮`
             }))
             if (pendingAfter.length === 0) {
-                batchLogger.summary(
+                logger.summary(
                     'Dream 批次完成',
                     `${formatLogScope({ presetId: input.presetId })}; 批次：${batch.id}; 处理记忆：${batch.entries.length} 条; 轮次：${round}; 耗时：${((performance.now() - batchStartedAt) / 1000).toFixed(3)} 秒`
                 )

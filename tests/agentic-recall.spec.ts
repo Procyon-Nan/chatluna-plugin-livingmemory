@@ -215,6 +215,7 @@ it('runs one search then commits the snapshot', async () => {
     assert.equal(calls.length, 2)
     assert.match(calls[0]!, /框架转换后：/u)
     assert.doesNotMatch(calls[0]!, /content-memory-1/u)
+    assert.doesNotMatch(calls[1]!, /框架转换后：|<chat_history>| · assistant========/u)
     assert.match(calls[1]!, /content-memory-1/u)
     assert.ok(harness.debugMessages.some(message => message.startsWith('事件：召回模型响应;') && message.includes(memorySearchTool.name)))
     assert.equal(harness.invocations[0]?.model, config.subModel)

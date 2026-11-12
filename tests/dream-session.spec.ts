@@ -145,6 +145,8 @@ const createRun = (options: {
         chatluna: {
             chat: async (request: ChatRequest) => {
                 requests.push(request)
+                await request.beforeDispatch?.({ system: request.system, messages: request.messages },
+                    { provider: ProviderId('test'), model: ModelId('test-model') }, { degradations: [] })
                 return options.respond(request, requests.length)
             }
         }
@@ -262,6 +264,12 @@ it('keeps successful work, retries ineffective rounds and moves on after three c
     await run.run()
 
     assert.equal(run.requests.length, 8)
+    const requests = run.logs.filter(line => line.startsWith('事件：Dream模型调用;'))
+    assert.equal(requests.filter(line => line.includes('========系统提示词========')).length, 1)
+    assert.match(requests[1]!, /正文 b/u)
+    assert.doesNotMatch(requests[1]!, /正文 a/u)
+    assert.match(requests[2]!, /request failed/u)
+    assert.match(requests[5]!, /request failed/u)
     const failures = run.logs.filter((log) => log.includes('Dream 本轮处理失败'))
     assert.equal(failures.length, 2)
     for (const failure of failures) assert.match(failure, /request failed/u)
@@ -339,8 +347,11 @@ it('compresses only older batches and retains complete current input', async () 
                     compressionRequests.push(request)
                     // 框架可将系统提示词折入第一条用户消息。
                     const content: ChatBlock[] = [{ type: 'text', text: `[system]\n${request.system}` }, ...request.messages[0]!.content]
-                    await request.beforeDispatch?.({ messages: [{ role: 'user', content }] },
-                        { provider: ProviderId('test'), model: ModelId('test-model') }, { degradations: [] })
+                    const model = { provider: ProviderId('test'), model: ModelId('test-model') }
+                    const folded = { messages: [{ role: 'user' as const, content }] }
+                    await request.beforeDispatch?.(folded, model, { degradations: ['system-to-user'] })
+                    await request.beforeDispatch?.({ system: request.system, messages: request.messages }, model, { degradations: [] })
+                    await request.beforeDispatch?.(folded, model, { degradations: ['system-to-user'] })
                     return textFold('早期结论与相关 ID')
                 }
             }
@@ -386,7 +397,10 @@ it('compresses only older batches and retains complete current input', async () 
     )
     assert.equal(compressionRequests.length, 1)
     assert.ok(logs.some(message => message.includes('Dream 上下文压缩模型调用') && message.includes('早期记忆')))
-    assert.ok(logs.some(message => message.includes('[system]') && message.includes('你负责压缩')))
+    const dispatches = logs.filter(message => message.startsWith('事件：Dream 上下文压缩模型调用;'))
+    assert.equal(dispatches.length, 3)
+    assert.match(dispatches[0]!, /你负责压缩/u)
+    for (const retry of dispatches.slice(1)) assert.doesNotMatch(retry, /========|早期记忆|你负责压缩/u)
     assert.ok(logs.some(message => message.includes('Dream 上下文压缩模型响应') && message.includes('早期结论与相关 ID')))
     const compressionInput = JSON.stringify(compressionRequests[0]!.messages)
     assert.match(compressionInput, /历史压缩前的模型思考/u)

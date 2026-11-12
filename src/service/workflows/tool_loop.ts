@@ -5,7 +5,7 @@ import type { JsonSchemaNode } from '@chatluna/message'
 import { schemasteryToJsonSchemaNode } from '@chatluna/schema'
 import { formatErrorDetails } from '../shared/utils.ts'
 import { formatLogScope, type LivingMemoryLogger } from '../logging/logger.ts'
-import { modelCallLogging, modelStageLabels } from '../logging/model_calls.ts'
+import { ModelCallLogs, modelStageLabels } from '../logging/model_calls.ts'
 import {
     runLivingMemoryToolCall,
     textBlocks,
@@ -42,10 +42,12 @@ const multipleToolCallsMessage =
 /** 维护内部工作流的模型和工具历史，由调用方决定按单轮推进还是等待收尾工具。 */
 export class LivingMemoryToolLoop {
     private readonly history: LivingMemoryChatHistory
+    private readonly log: ModelCallLogs
     private readonly specs: { name: string; description: string; parameters: JsonSchemaNode }[]
     private readonly toolsByName: Map<string, LivingMemoryLoopTool>
 
     constructor(private readonly options: LivingMemoryToolLoopOptions) {
+        this.log = new ModelCallLogs(options.logger, options.stage)
         this.history = 'history' in options ? options.history : {
             messages: [{ role: 'user', content: textBlocks(options.input) }]
         }
@@ -140,16 +142,15 @@ export class LivingMemoryToolLoop {
         step: number
     ): Promise<ChatResult> {
         const { ctx, model, logger } = this.options
-        const log = modelCallLogging(logger, this.options.stage, step)
         try {
             const fold = await ctx.chatluna.chat({
                 model,
                 system: this.options.system,
                 messages: [...messages],
                 toolSpecs: this.specs,
-                beforeDispatch: log.beforeDispatch
+                beforeDispatch: this.log.beforeDispatch(step)
             })
-            log.response(fold)
+            this.log.response(step, fold)
             return fold
         } catch (error) {
             logger.diagnosticSummary((fields) => ({

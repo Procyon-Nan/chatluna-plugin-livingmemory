@@ -7,7 +7,7 @@ import type { ChatResult } from '@chatluna/ai-runtime/ops'
 import type {} from '@chatluna/core'
 import type { LivingMemoryToolDoc } from '../prompts/memory_tools.ts'
 import { formatLogScope, type LivingMemoryLogger } from '../logging/logger.ts'
-import { modelCallLogging, modelStageLabels } from '../logging/model_calls.ts'
+import { ModelCallLogs, modelStageLabels } from '../logging/model_calls.ts'
 import { textBlocks } from './tool_call.ts'
 
 const structuredOutputMaxModelCalls = 3
@@ -59,13 +59,14 @@ export async function invokeStructuredOutput<T>(
     const toolSpecs = [{ name: tool.name, description: tool.description, parameters: schemasteryToJsonSchemaNode(tool.schema) }]
     const input: ChatSpecMessage = { role: 'user', content: textBlocks(options.inputPrompt) }
     let messages = [input]
+    const log = new ModelCallLogs(logger, stage)
     for (let attempt = 1; ; attempt++) {
         signal?.throwIfAborted()
-        const log = modelCallLogging(logger, stage, attempt)
         const run = options.ctx.chatluna.chat({
             system: options.systemPrompt, messages, toolSpecs, toolChoice: 'required',
             ...(options.model === undefined ? {} : { model: options.model }),
-            beforeDispatch: log.beforeDispatch
+            // 每次重试都保留首条输入，并以本次的纠正反馈替换上一轮反馈。
+            beforeDispatch: log.beforeDispatch(attempt, { newMessagesFrom: 1 })
         })
         using cancellation = signal && addAbortListener(signal, () => run.abort(signal.reason))
         let fold: ChatResult
@@ -75,7 +76,7 @@ export async function invokeStructuredOutput<T>(
             signal?.throwIfAborted()
         }
         if (fold.finish.kind === 'error' || fold.finish.kind === 'aborted') throw new ModelError(fold.finish.failure)
-        log.response(fold)
+        log.response(attempt, fold)
         const submission = readSubmission(options, fold.toolCalls)
         if (submission.parseError === null) return submission
         logger.diagnosticSummary((fields) => ({
