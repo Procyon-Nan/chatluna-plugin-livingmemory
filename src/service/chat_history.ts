@@ -4,21 +4,20 @@ import type { ObservedMessage, ChatObserverService } from '@chatluna/chat-observ
 import type { LivingMemoryTranscriptMessage, MemoryScope } from '../contracts/memory.ts'
 import { createSpeakerKey } from './memory/speaker_identity.ts'
 import { resolveScopeAssistantLabel } from './memory/helpers.ts'
-import { blocksToLogText } from './transcript/element_text.ts'
+import { hasTranscriptText, observedMessageText } from './transcript/element_text.ts'
 import { createLivingMemoryTranscriptMessageResult } from './transcript/transcript_message.ts'
 
 export interface ChatHistoryScope extends MemoryScope {
     sessionId: string
 }
 
-/** 框架聊天记录的文本投影；position 是历史位置，不代表聊天条数。 */
-export interface ChatHistoryEntry {
+/** 保留原始消息块，待本轮预设确定后再转写。 */
+export interface ChatHistoryEntry extends Pick<ObservedMessage, 'content' | 'quote'> {
     position: number
     messageId: string
     platform: string
     userId?: string
     name?: string
-    content: string
     timestamp: number
     role: 'user' | 'assistant'
     source?: SourcePeer | undefined
@@ -152,14 +151,13 @@ export class LivingMemoryChatHistory {
     private entry(row: ObservedMessage): ChatHistoryEntry | undefined {
         const { position, source, replyScope } = this.metadata.get(row)!
         if (row.self && !replyScope) return
-        const content = blocksToLogText(row.content)
-        if (!content) return
+        if (!hasTranscriptText(row)) return
         // Satori 的 cid 为 platform:channelId，来自这条消息本身。
         const platform = row.cid.split(':', 1)[0]
         return {
             position, messageId: row.id,
             source, platform, userId: row.userId, name: row.name ?? row.nickname,
-            timestamp: row.time, role: row.self ? 'assistant' : 'user', content
+            timestamp: row.time, role: row.self ? 'assistant' : 'user', content: row.content, quote: row.quote
         }
     }
 }
@@ -168,16 +166,16 @@ export function toHistoryTranscriptMessages(
     scope: MemoryScope,
     entries: readonly ChatHistoryEntry[]
 ): LivingMemoryTranscriptMessage[] {
+    const assistantLabel = resolveScopeAssistantLabel(scope)
     return entries.map((entry) => {
         const assistant = entry.role === 'assistant'
-        const label = assistant ? resolveScopeAssistantLabel(scope) : '未知用户'
         const result = createLivingMemoryTranscriptMessageResult({
             role: entry.role,
             speakerKey: !assistant && entry.userId !== undefined
                 ? createSpeakerKey(entry.platform, entry.userId)
                 : undefined,
-            speakerLabel: entry.name?.trim() || (assistant ? label : entry.userId || label),
-            content: entry.content,
+            speakerLabel: entry.name?.trim() || (assistant ? assistantLabel : entry.userId || '未知用户'),
+            content: observedMessageText(entry, assistantLabel),
             createdAt: entry.timestamp,
             stripSpeakerPrefix: false
         })

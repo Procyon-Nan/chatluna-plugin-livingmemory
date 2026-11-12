@@ -12,7 +12,7 @@ import { formatTranscriptHeader } from './transcript/header.ts'
 import { toHistoryTranscriptMessages } from './chat_history.ts'
 import type { ChatHistoryEntry, ChatHistoryScope, LivingMemoryChatHistory } from './chat_history.ts'
 import { collectUserProfileSpeakerKeys } from './user_profile.ts'
-import { snapshotScopeOf } from './memory/helpers.ts'
+import { resolvePresetAssistantLabel, snapshotScopeOf } from './memory/helpers.ts'
 import { renderSnapshotText } from './memory/snapshot/snapshot_text.ts'
 import type { LivingMemoryRecallCoordinator } from './workflows/recall/coordinator.ts'
 import type { LivingMemoryExtractionCoordinator } from './workflows/extraction/coordinator.ts'
@@ -204,8 +204,7 @@ export class LivingMemoryConversationHooks {
 
             const { settings, position } = window
             const boundary = position === undefined ? this.options.history.lastPosition(key) : position - 1
-            const scope = this.options.history.scopeOf(key, String(head.sessionId), presetId)
-            const state = this.stateOf(scope, boundary)
+            const state = this.stateOf(key, String(head.sessionId), presetId, boundary)
             const chatHistory = toHistoryTranscriptMessages(state.scope, window.rows)
             if (position !== undefined && settings.recallIntervalMessages > 0 && chatHistory.length > 0) {
                 await this.options.recall.queue(settings, state.scope, chatHistory, position, window.routeId)
@@ -271,7 +270,7 @@ export class LivingMemoryConversationHooks {
         if (!sessionChanged && existing?.scope.sessionId === sessionId && existing.scope.presetId === presetId) return
         const boundary = this.options.history.lastPosition(key)
         this.reset(key, sessionChanged ? boundary : this.revisions.get(key)?.contextStart)
-        if (presetId !== undefined) this.stateOf(this.options.history.scopeOf(key, sessionId, presetId), boundary)
+        if (presetId !== undefined) this.stateOf(key, sessionId, presetId, boundary)
     }
 
     reset(conversationId: string, contextStart = this.revisions.get(conversationId)?.contextStart ?? -1) {
@@ -281,10 +280,13 @@ export class LivingMemoryConversationHooks {
         this.options.extraction.clearByConversation(conversationId)
     }
 
-    private stateOf(scope: ChatHistoryScope, boundary: number): ConversationState {
-        const existing = this.conversations.get(scope.conversationId)
-        if (existing?.scope.sessionId === scope.sessionId && existing.scope.presetId === scope.presetId) {
+    private stateOf(key: string, sessionId: string, presetId: string, boundary: number): ConversationState {
+        const scope = this.options.history.scopeOf(key, sessionId, presetId)
+        scope.presetLabel = resolvePresetAssistantLabel(this.ctx, presetId)
+        const existing = this.conversations.get(key)
+        if (existing?.scope.sessionId === sessionId && existing.scope.presetId === presetId) {
             if (existing.scope.platform === undefined) Object.assign(existing.scope, scope)
+            else existing.scope.presetLabel = scope.presetLabel
             return existing
         }
         if (existing !== undefined) this.reset(scope.conversationId)
@@ -309,7 +311,7 @@ export class LivingMemoryConversationHooks {
             const livePreset = agent?.session.id === current.sessionId ? this.agentPreset(agent) : undefined
             const presetId = livePreset ?? current.presetId
             if (!presetId) return
-            state = this.stateOf(this.options.history.scopeOf(key, sessionId, presetId), position - 1)
+            state = this.stateOf(key, sessionId, presetId, position - 1)
         }
         if (position > state.boundary && settings.extractionIncludeOverheard) await this.queueExtraction(state, settings, position, event.message.routeId)
     }

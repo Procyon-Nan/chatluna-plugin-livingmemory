@@ -216,7 +216,7 @@ const entry = (role: 'user' | 'assistant', content: string): Omit<ChatHistoryEnt
     platform: 'onebot',
     userId: role === 'assistant' ? 'bot-self' : 'user-1',
     name: role === 'assistant' ? 'bot' : '用户A',
-    content,
+    content: [{ type: 'text', text: content }],
     timestamp: Date.now(),
     role
 })
@@ -282,16 +282,7 @@ it('extracts each source independently when two channels use one custom conversa
 
 describe('planExtractionChunks', () => {
     const log = (roles: ('user' | 'assistant')[]): ChatHistoryEntry[] =>
-        roles.map((role, index) => ({
-            position: index + 1,
-            messageId: `message-${index}`,
-            platform: 'onebot',
-            userId: role === 'assistant' ? 'bot' : 'user',
-            name: role,
-            content: `${role}-${index}`,
-            timestamp: 1_000,
-            role
-        }))
+        roles.map((role, index) => ({ ...entry(role, `${role}-${index}`), position: index + 1 }))
 
     it('closes segments at the last assistant of each run and leaves the unclosed tail', () => {
         // u u a a u a u（末尾无 assistant 收尾）
@@ -338,12 +329,12 @@ describe('planExtractionChunks', () => {
             false
         )
         assert.deepEqual(chunks.map((chunk) => chunk.length), [2, 4])
-        assert.deepEqual(chunks[0].map((e) => e.content), [
+        assert.deepEqual(chunks[0].map((e) => e.messageId), [
             'assistant-0',
             'assistant-1'
         ])
-        assert.equal(chunks[1][0].content, 'user-4')
-        assert.ok(!chunks.flat().map((e) => e.content).includes('user-2'))
+        assert.equal(chunks[1][0].messageId, 'user-4')
+        assert.ok(!chunks.flat().map((e) => e.messageId).includes('user-2'))
     })
 
     it('merges the exchange containing the window cut into one fuzzy chunk', () => {
@@ -353,7 +344,7 @@ describe('planExtractionChunks', () => {
             false
         )
         assert.deepEqual(chunks.map((chunk) => chunk.length), [4])
-        assert.deepEqual(chunks[0].map((e) => e.content), [
+        assert.deepEqual(chunks[0].map((e) => e.messageId), [
             'user-0',
             'assistant-1',
             'user-2',
@@ -368,7 +359,7 @@ describe('planExtractionChunks', () => {
         // 段长 51、交流 2 条：核心＝交流＋窗口＝32，其余闲聊丢弃
         assert.equal(chunks.length, 1)
         assert.equal(chunks[0].length, 32)
-        assert.equal(chunks[0][0].content, 'user-19')
+        assert.equal(chunks[0][0].messageId, 'user-19')
         assert.equal(chunks[0][31].role, 'assistant')
     })
 
@@ -381,7 +372,7 @@ describe('planExtractionChunks', () => {
         const chunks = planExtractionChunks(log(roles), 30, false)
         assert.equal(chunks.length, 1)
         assert.equal(chunks[0].length, 71)
-        assert.equal(chunks[0][0].content, 'user-10')
+        assert.equal(chunks[0][0].messageId, 'user-10')
         assert.equal(chunks[0][70].role, 'assistant')
     })
 
@@ -401,15 +392,15 @@ describe('planExtractionChunks', () => {
         roles.push('assistant')
         const chunks = planExtractionChunks(log(roles), 6, false)
         assert.deepEqual(chunks.map((chunk) => chunk.length), [2, 8])
-        assert.deepEqual(chunks[0].map((e) => e.content), [
+        assert.deepEqual(chunks[0].map((e) => e.messageId), [
             'user-10',
             'assistant-11'
         ])
-        assert.equal(chunks[1][0].content, 'user-22')
-        assert.ok(chunks[1].map((e) => e.content).includes('user-24'))
-        assert.equal(chunks[1][7].content, 'assistant-29')
-        assert.ok(!chunks.flat().map((e) => e.content).includes('user-0'))
-        assert.ok(!chunks.flat().map((e) => e.content).includes('user-12'))
+        assert.equal(chunks[1][0].messageId, 'user-22')
+        assert.ok(chunks[1].map((e) => e.messageId).includes('user-24'))
+        assert.equal(chunks[1][7].messageId, 'assistant-29')
+        assert.ok(!chunks.flat().map((e) => e.messageId).includes('user-0'))
+        assert.ok(!chunks.flat().map((e) => e.messageId).includes('user-12'))
     })
 
     it('keeps a segment within the absorb budget whole in overheard mode', () => {
@@ -476,8 +467,8 @@ describe('planExtractionChunks', () => {
             true
         )
         assert.deepEqual(chunks.map((chunk) => chunk.length), [6])
-        assert.equal(chunks[0][0].content, 'user-0')
-        assert.equal(chunks[0][5].content, 'assistant-5')
+        assert.equal(chunks[0][0].messageId, 'user-0')
+        assert.equal(chunks[0][5].messageId, 'assistant-5')
     })
 })
 
@@ -778,15 +769,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
         await new Promise((resolve) => setTimeout(resolve, 25))
 
         harness.messageLog.append(scope.conversationId, [
-            {
-                messageId: 'q2',
-                platform: 'onebot',
-                userId: 'user-2',
-                name: '用户B',
-                content: 'q2',
-                timestamp: Date.now(),
-                role: 'user'
-            },
+            { ...entry('user', 'q2'), userId: 'user-2', name: '用户B' },
             entry('assistant', 'a2')
         ])
         await queueExtraction(harness)

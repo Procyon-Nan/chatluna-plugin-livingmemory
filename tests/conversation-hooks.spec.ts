@@ -63,6 +63,7 @@ function createHarness(config: {
             listeners.set(name, entries)
             return () => listeners.set(name, entries.filter((entry) => entry !== listener))
         },
+        presets: { get: () => ({ name: '所长' }) },
         conversations: {
             current: async () => { scopeLookups++; await currentGate; return { sessionId, presetId: headPresetId } },
             live: () => liveAgent && { agent: liveAgent }
@@ -176,6 +177,14 @@ function createHarness(config: {
 }
 
 describe('LivingMemoryConversationHooks', () => {
+    it('uses the active preset display name for a bot mention in the waking chat', async () => {
+        const h = createHarness()
+        h.framework.messages.push(historyMessage(1, '@self 想我什么呀'))
+        await h.begin(h.agent(), 1)
+        assert.equal(h.recalls[0].scope.presetId, 'preset-1')
+        assert.deepEqual(h.recalls[0].history[0].contentLines, ['@所长 想我什么呀'])
+    })
+
     it('uses the waking route when two channels sharing a custom key reuse a platform message id', async () => {
         const h = createHarness({ conversationKey: 'custom:test', rules: { enableConversationIsolation: true } })
         const agent = h.agent()

@@ -14,7 +14,7 @@ describe('LivingMemoryChatHistory', () => {
         const cursor = await history.head(historyScope)
         observer.messages.splice(0, 2)
         observer.messages.push(historyMessage(250, 'new', { time: 123 }), historyMessage(251, 'newer', { time: 123 }))
-        assert.deepEqual((await history.after(historyScope, cursor)).map(x => x.content), ['new', 'newer'])
+        assert.deepEqual((await history.after(historyScope, cursor)).map(x => x.messageId), ['route:m-250', 'route:m-251'])
         assert.equal(history.locateUser(historyScope.conversationId, { id: 'route:m-0' }), undefined)
     })
 
@@ -24,8 +24,8 @@ describe('LivingMemoryChatHistory', () => {
         const history = new LivingMemoryChatHistory(observer)
         const position = history.locateUser(historyScope.conversationId, { id: 'input', externalId: 'm-2' })?.position
         assert.equal(position, 1)
-        assert.deepEqual((await history.recent(historyScope, 2, position!)).map(x => x.content), ['earlier', 'trigger'])
-        assert.deepEqual((await history.recent(historyScope, 1, position!)).map(x => x.content), ['trigger'])
+        assert.deepEqual((await history.recent(historyScope, 2, position!)).map(x => x.messageId), ['route:m-1', 'route:m-2'])
+        assert.deepEqual((await history.recent(historyScope, 1, position!)).map(x => x.messageId), ['route:m-2'])
     })
 
     it('bounds the window at a real input even when that row has no transcript text', async () => {
@@ -34,7 +34,50 @@ describe('LivingMemoryChatHistory', () => {
         const history = new LivingMemoryChatHistory(observer)
         const position = history.locateUser(historyScope.conversationId, { id: 'route:m-2' })?.position
         assert.equal(position, 1)
-        assert.deepEqual((await history.recent(historyScope, 2, position!)).map(row => row.content), ['earlier'])
+        assert.deepEqual((await history.recent(historyScope, 2, position!)).map(row => row.messageId), ['route:m-1'])
+    })
+
+    it('renders bot mentions with the active preset name in recall, extraction and stored source text', async () => {
+        const scope = { ...historyScope, presetLabel: '所长' }
+        const observer = new FrameworkHistoryFixture()
+        observer.messages.push(historyMessage(1, '@self 想我什么呀？看@123@self@someone，还有@self在吗？别改 @selfish 和 me@self.example 和 https://example.org?q=@self。'))
+        const history = new LivingMemoryChatHistory(observer)
+        const recall = toHistoryTranscriptMessages(scope, history.recent(scope, 1, Infinity))
+        const extracted = toHistoryTranscriptMessages(scope, await history.after(scope, -1))
+        const payload = new LivingMemoryMessageFormatter().toExtractionPayload(extracted)
+        const expected = '@所长 想我什么呀？看@123@所长@someone，还有@所长在吗？别改 @selfish 和 me@self.example 和 https://example.org?q=@self。'
+        assert.deepEqual(recall[0]!.contentLines, [expected])
+        assert.equal(payload.input, renderLivingMemoryTranscript(recall))
+        assert.deepEqual(payload.sourceOriginMessages[0]!.contentLines, [expected])
+    })
+
+    it('keeps a reply and its quote as one attributed message, including quote-only replies', async () => {
+        const observer = new FrameworkHistoryFixture()
+        const quote = { user: 'other-user', name: '@self', content: [{ type: 'text' as const, text: '引用原文 @self' }] }
+        observer.messages.push(historyMessage(1, '我收到了', { quote }), historyMessage(2, '', { content: [], quote }))
+        const history = new LivingMemoryChatHistory(observer)
+        const entries = await history.after(historyScope, -1)
+        assert.deepEqual(entries.map(row => row.messageId), ['route:m-1', 'route:m-2'])
+        assert.deepEqual(history.recent(historyScope, 2, Infinity), entries)
+        const payload = new LivingMemoryMessageFormatter().toExtractionPayload(toHistoryTranscriptMessages(historyScope, entries))
+        assert.deepEqual(payload.speakers.map(speaker => speaker.speakerLabel), ['用户A'])
+        for (const source of payload.sourceOriginMessages) {
+            assert.equal(source.speakerLabel, '用户A')
+            assert.match(source.content, /引用 @self：引用原文 @preset-1/u)
+            assert.deepEqual(source.content.match(/引用原文/gu), ['引用原文'])
+        }
+        assert.match(payload.sourceOriginMessages[0]!.content, /我收到了/u)
+    })
+
+    it('renders the available media description and keeps a plain placeholder when there is none', () => {
+        const observer = new FrameworkHistoryFixture()
+        const image = { type: 'file' as const, mediaType: 'image/png', data: { type: 'url' as const, url: 'https://example.org/image' } }
+        observer.messages.push(historyMessage(1, '', { content: [{ ...image, filename: '@self', alt: '牌子写着 @self' }] }),
+            historyMessage(2, '', { content: [image] }))
+        const history = new LivingMemoryChatHistory(observer)
+        const [described, undescribed] = toHistoryTranscriptMessages(historyScope, history.recent(historyScope, 2, Infinity))
+        assert.deepEqual(described!.contentLines, ['[图片:@self：牌子写着 @self]'])
+        assert.deepEqual(undescribed!.contentLines, ['[图片]'])
     })
 
     it('reads the shared buffer in order without mixing routes, speakers or duplicate platform ids', async () => {
@@ -51,7 +94,7 @@ describe('LivingMemoryChatHistory', () => {
         const shared = { ...historyScope, conversationId: observer.conversationKey }
         assert.equal(history.locateUser(shared.conversationId, { id: 'folded', externalId: 'duplicate' }), undefined)
         assert.equal(history.locateUser(shared.conversationId, { id: 'a:1', externalId: 'duplicate' })?.routeId, 'A')
-        assert.deepEqual(history.recent(shared, 2, Infinity, -1, 'A').map(row => row.content), ['A1', 'A2'])
+        assert.deepEqual(history.recent(shared, 2, Infinity, -1, 'A').map(row => row.messageId), ['a:1', 'a:2'])
         const entries = await history.after(shared, -1)
         assert.deepEqual(entries.map(row => row.source?.id), [undefined, undefined, 'B'])
         assert.deepEqual(toHistoryTranscriptMessages(shared, entries).map(row => row.speakerKey), [
@@ -86,7 +129,7 @@ describe('LivingMemoryChatHistory', () => {
         const history = new LivingMemoryChatHistory(observer)
         history.locate(historyScope.conversationId, { ...answer }, historyScope)
         const entries = await history.after(historyScope, -1)
-        assert.deepEqual(entries.map(x => x.content), ['正文', '答复'])
+        assert.deepEqual(entries.map(x => x.messageId), ['route:m-1', 'route:m-5'])
         const transcript = toHistoryTranscriptMessages(historyScope, entries)
         assert.equal(renderLivingMemoryTranscript(transcript.slice(0, 1)), '[2026-11-06 12:34] 昵称：正文')
         assert.equal(transcript[0].speakerKey, createSpeakerKey('onebot', 'user-1'))
