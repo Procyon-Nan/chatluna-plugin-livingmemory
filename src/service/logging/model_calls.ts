@@ -11,7 +11,7 @@ export const modelStageLabels = {
     'user-profile': '人物画像'
 }
 
-const formatCall = (call: ChatToolCallBlock) => `${call.toolName}(${formatLogJson(call.input)})`
+const formatCall = (call: ChatToolCallBlock) => `${call.toolName}\n${formatLogJson(call.input, 2)}`
 
 export function formatLogMessage({ role, content }: ChatSpecMessage, displayText = (text: string) => text) {
     const lines: string[] = []

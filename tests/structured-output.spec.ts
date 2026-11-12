@@ -179,7 +179,7 @@ it('logs the submitted tool arguments without reasoning, narration or tool defin
     assert.deepEqual(result.value, { items: ['trimmed'] })
     const log = captured.info.join('\n')
     assert.match(log, /========系统提示词========\nsystem\n\n========消息 1 · user========\ninput/u)
-    assert.match(log, /submit_result\(\{"items":\["  trimmed  "\]\}\)/u)
+    assert.ok(log.includes('submit_result\n' + JSON.stringify({ items: ['  trimmed  '] }, null, 2)))
     assert.doesNotMatch(log, /内部思考|模型多余旁白|Return ONLY|"properties"/u)
 })
 
