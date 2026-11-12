@@ -1,5 +1,7 @@
 import type { ChatOptions } from '@chatluna/ai-runtime/ops'
-import { ModelId, ProviderId } from '@chatluna/symbol'
+import assert from 'node:assert/strict'
+import { CallId, ModelId, ProviderId } from '@chatluna/symbol'
+import type { ChatBlock, ChatToolCallBlock } from '@chatluna/ai'
 import type { JobRepository } from '../src/contracts/workflows.ts'
 import type {
     AgenticMemorySnapshotItem,
@@ -16,21 +18,35 @@ export const logger = new LivingMemoryLogger(
     () => true
 )
 
-export function createStructuredChat(nextResponse: () => unknown) {
-    const calls: { prompt: string; system: string; model?: string }[] = []
-    const chat = async ({ system, messages, model, beforeDispatch }: ChatOptions) => {
+export function createResultToolChat(toolName: string, nextResponse: () => unknown) {
+    const calls: (ChatOptions & { prompt: string; system: string })[] = []
+    const chat = async (request: ChatOptions) => {
+        const { system, messages, model, beforeDispatch, toolSpecs, toolChoice } = request
+        assert.deepEqual(toolSpecs?.map(spec => spec.name), [toolName])
+        assert.equal(toolChoice, 'required')
         const input = messages[0]?.content[0]
         if (input?.type !== 'text') throw new Error('expected a text prompt')
-        calls.push({ system: system ?? '', prompt: input.text, ...(model && { model }) })
-        await beforeDispatch?.({ messages, ...(system && { system }) },
+        calls.push({ ...request, system: system ?? '', prompt: input.text })
+        await beforeDispatch?.({ messages, tools: toolSpecs, toolChoice, ...(system && { system }) },
             { provider: ProviderId('test'), model: ModelId(model ?? 'default') }, { degradations: [] })
         const response = await nextResponse()
         if (response === undefined) throw new Error('missing fake model response')
         if (response instanceof Error) throw response
-        const text = typeof response === 'string' ? response : JSON.stringify(response)
-        return { text, content: [{ type: 'text', text }], finish: { kind: 'stop' } }
+        if (typeof response === 'string') {
+            return { text: response, toolCalls: [], content: [{ type: 'text', text: response }], finish: { kind: 'stop' } }
+        }
+        const content: ChatBlock[] = Array.isArray(response) ? response : [{
+            type: 'tool-call', toolCallId: CallId(`call-${calls.length}`), toolName, input: response as ChatToolCallBlock['input']
+        }]
+        const toolCalls = content.filter(block => block.type === 'tool-call')
+        const text = content.filter(block => block.type === 'text').map(block => block.text).join('')
+        return { text, toolCalls, content, finish: { kind: toolCalls.length ? 'tool-calls' : 'stop' } }
     }
     return { chat, calls }
+}
+
+export function toolFeedback({ messages }: ChatOptions) {
+    return messages.flatMap(message => message.content).filter(block => block.type === 'tool-result')
 }
 
 export const createCapturedLogger = (debugEnabled = true) => {

@@ -52,7 +52,7 @@ export const Config: Schema<Config> = Schema.intersect([
     }).description('基础配置'),
     Schema.object({
         mainModel: modelField(
-            '主 LLM 模型，用于提取记忆、Dream 与用户画像。',
+            '选择支持工具调用的模型，用于提取记忆、整理记忆、更新人物画像和人设卡。',
             'chat'
         ).label('主模型'),
         subModel: modelField('子 LLM 模型，用于召回记忆。', 'chat').label('召回模型'),

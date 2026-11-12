@@ -135,7 +135,7 @@ tab.settings: Plugin configuration
 tab.guide: Plugin guide
 guide.start: Getting started
 guide.models.title: Choose your models
-guide.models.text: Under Plugin configuration → Model configuration, choose your models. The main model extracts and organizes memories and generates profiles. The recall model decides whether to look up memories. The embedding model converts memories and queries into vectors so the plugin can compare their meanings. An optional reranker reorders the candidate memories by their relevance to the query. Select Save settings to apply these choices to all presets in this plugin instance.
+guide.models.text: Under Plugin configuration → Model configuration, choose a main model that supports tool calls. It extracts and organizes memories and updates user profiles and persona cards. The recall model decides whether to look up memories. The embedding model converts memories and queries into vectors so the plugin can compare their meanings. An optional reranker reorders the candidate memories by their relevance to the query. Select Save settings to apply these choices to all presets in this plugin instance.
 guide.openSettings: Open plugin configuration
 guide.rules.title: Choose which conversations use automatic extraction
 guide.rules.text: Open Conversation rules → Capabilities → LivingMemory and set the extraction interval. The default is 60 chat messages. To enable automatic extraction in just one group, set the global interval to 0 and that group’s interval to 60.

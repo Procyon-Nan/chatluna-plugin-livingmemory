@@ -353,7 +353,7 @@ export class LivingMemoryUserProfileService {
             structuredResult = await invokeStructuredOutput({
                 ctx: this.ctx,
                 model: this.config.mainModel,
-                schema: userProfileResultTool.schema,
+                tool: userProfileResultTool,
                 ...prompts,
                 signal,
                 validateResult: ({ action, content }) => {

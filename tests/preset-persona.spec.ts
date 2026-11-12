@@ -8,7 +8,7 @@ import {
     hashPresetText,
     splitLines
 } from '../src/service/memory/preset_persona.ts'
-import { createCapturedLogger, createStructuredChat } from './workflow-test-utils.ts'
+import { createCapturedLogger, createResultToolChat } from './workflow-test-utils.ts'
 
 const presetText = [
     '你是所长，一个年轻可爱的女孩子。',
@@ -71,7 +71,7 @@ const createHarness = (
         Object.entries(options.presetTexts ?? {})
     )
     const pending = [...responses]
-    const { chat, calls: invocations } = createStructuredChat(async () => {
+    const { chat, calls: invocations } = createResultToolChat('living_memory_persona_card_result', async () => {
         await options.modelGate?.wait()
         return pending.shift()
     })
@@ -204,9 +204,7 @@ it('retries with a correction when line numbers fall out of range', async () => 
 it('falls back to the raw text when every response is invalid', async () => {
 
     const harness = createHarness([
-        'plain text one',
-        'plain text two',
-        'plain text three',
+        ...Array(3).fill(JSON.stringify(deleteLines([2, 3]))),
         modelFailure('request failed')
     ])
 

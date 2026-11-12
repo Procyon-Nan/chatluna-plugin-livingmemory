@@ -1,18 +1,20 @@
 import { addAbortListener } from 'node:events'
-import { schemasteryToJsonSchema, type Schema } from '@chatluna/schema'
+import { schemasteryToJsonSchemaNode } from '@chatluna/schema'
+import { isRecord } from '@chatluna/utils/object'
 import type { Context } from 'cordis'
-import { ProtocolError } from '@chatluna/ai'
-import { extractJsonValue } from '@chatluna/ai-runtime/ops'
+import { ModelError, type ChatSpecMessage, type ChatToolCallBlock } from '@chatluna/ai'
+import type { ChatResult } from '@chatluna/ai-runtime/ops'
 import type {} from '@chatluna/core'
-import { formatErrorDetails } from '../shared/utils.ts'
+import type { LivingMemoryToolDoc } from '../prompts/memory_tools.ts'
 import { formatLogScope, type LivingMemoryLogger } from '../logging/logger.ts'
 import { modelCallLogging, modelStageLabels } from '../logging/model_calls.ts'
+import { textBlocks } from './tool_call.ts'
 
 const structuredOutputMaxModelCalls = 3
 
 interface StructuredOutputOptions<T> {
     ctx: Context
-    schema: Schema<any, T>
+    tool: LivingMemoryToolDoc<T>
     systemPrompt: string
     inputPrompt: string
     model?: string
@@ -25,88 +27,85 @@ interface StructuredOutputOptions<T> {
 }
 
 type StructuredOutputResult<T> =
-    | { value: T; output: string; parseError: null }
-    | { value: null; output: string; parseError: string }
+    | { value: T; parseError: null }
+    | { value: null; parseError: string }
 
-function parseStructuredResponse<T>(schema: Schema<any, T>, text: string): T {
-    const json = extractJsonValue(text)
-    if (json === undefined) {
-        throw new ProtocolError({ message: 'extract: model output did not contain a JSON value' })
+function readSubmission<T>(
+    { tool, validateResult, stringifiedArrayField }: StructuredOutputOptions<T>,
+    calls: readonly ChatToolCallBlock[]
+): StructuredOutputResult<T> {
+    if (calls.length !== 1) return { value: null, parseError: `应调用 ${tool.name} 一次，实际收到 ${calls.length} 个工具调用` }
+    const call = calls[0]!
+    if (call.toolName !== tool.name) return { value: null, parseError: `调用了 ${call.toolName}，应调用 ${tool.name}` }
+    const parsed = tool.schema.safeParse(call.input)
+    if (parsed.success) {
+        const error = validateResult?.(parsed.data)
+        return error === undefined ? { value: parsed.data, parseError: null } : { value: null, parseError: error }
     }
-    const parsed = schema.safeParse(json)
-    if (parsed.success) return parsed.data
+    if (stringifiedArrayField && isRecord(call.input) && typeof call.input[stringifiedArrayField] === 'string') {
+        return { value: null, parseError: `参数 ${stringifiedArrayField} 要传数组；空数组用 []，不要写成字符串 "[]"` }
+    }
     const reason = parsed.error instanceof Error ? parsed.error.message : String(parsed.error)
-    throw new ProtocolError({ message: `extract: model output failed schema validation: ${reason}` })
+    return { value: null, parseError: `${tool.name} 参数无效：${reason}` }
 }
 
 /**
- * 调用结构化输出。取消信号在每次调用前检查，取消不进入修正重试。
- * 模型自身错误原样抛出——只有解析与校验失败才会带着修正提示重试。
+ * 每次只接受一个指定工具提交的结果。提交不合格时将原因反馈给模型；调用错误和取消直接退出。
  */
 export async function invokeStructuredOutput<T>(
     options: StructuredOutputOptions<T>
 ): Promise<StructuredOutputResult<T>> {
-    const outputs: string[] = []
-    const { logging: { logger, stage }, signal } = options
-    let correction: string | undefined
-    let lastError = 'structured output failed'
-    const system = [
-        options.systemPrompt,
-        'Return ONLY a JSON value that validates against the following JSON Schema:',
-        JSON.stringify(schemasteryToJsonSchema(options.schema))
-    ].filter(Boolean).join('\n\n')
-
-    for (let attempt = 1; attempt <= structuredOutputMaxModelCalls; attempt++) {
+    const { logging: { logger, stage }, signal, tool } = options
+    const toolSpecs = [{ name: tool.name, description: tool.description, parameters: schemasteryToJsonSchemaNode(tool.schema) }]
+    const input: ChatSpecMessage = { role: 'user', content: textBlocks(options.inputPrompt) }
+    let messages = [input]
+    for (let attempt = 1; ; attempt++) {
         signal?.throwIfAborted()
-        const prompt = correction === undefined ? options.inputPrompt : `${options.inputPrompt}\n\n${correction}`
+        const log = modelCallLogging(logger, stage, attempt)
+        const run = options.ctx.chatluna.chat({
+            system: options.systemPrompt, messages, toolSpecs, toolChoice: 'required',
+            ...(options.model === undefined ? {} : { model: options.model }),
+            beforeDispatch: log.beforeDispatch
+        })
+        using cancellation = signal && addAbortListener(signal, () => run.abort(signal.reason))
+        let fold: ChatResult
         try {
-            const log = modelCallLogging(logger, stage, attempt, text => text.replace(system, () => options.systemPrompt))
-            const run = options.ctx.chatluna.chat({
-                system,
-                messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
-                ...(options.model === undefined ? {} : { model: options.model }),
-                beforeDispatch: log.beforeDispatch
-            })
-            using cancellation = signal && addAbortListener(signal, () => run.abort(signal.reason))
-            const fold = await run
+            fold = await run
+        } finally {
             signal?.throwIfAborted()
-            log.response(fold)
-            const value = parseStructuredResponse(options.schema, fold.text)
-            outputs.push(`[attempt ${attempt}]\n${JSON.stringify(value, null, 2)}`)
-            const validationError = options.validateResult?.(value)
-            if (validationError === undefined) {
-                return { value, output: outputs.join('\n\n'), parseError: null }
-            }
-            lastError = validationError
-        } catch (error) {
-            signal?.throwIfAborted()
-            if (!(error instanceof ProtocolError)) throw error
-            lastError = formatErrorDetails(error)
-            outputs.push(`[attempt ${attempt}]\n${lastError}`)
         }
+        if (fold.finish.kind === 'error' || fold.finish.kind === 'aborted') throw new ModelError(fold.finish.failure)
+        log.response(fold)
+        const submission = readSubmission(options, fold.toolCalls)
+        if (submission.parseError === null) return submission
         logger.diagnosticSummary((fields) => ({
             event: `${modelStageLabels[stage]}结果解析失败`,
             detail: [
                 formatLogScope(fields),
                 `调用序号：${attempt}`,
-                `原因：${lastError}`
+                `原因：${submission.parseError}`
             ]
                 .filter(Boolean)
                 .join('; ')
         }))
-        correction = formatCorrection(lastError, options.stringifiedArrayField)
+        if (attempt === structuredOutputMaxModelCalls) return submission
+        const correction = `提交失败：${submission.parseError}。请调用 ${tool.name} 一次，通过工具参数提交结果。`
+        if (fold.toolCalls.length === 0) {
+            messages = [input, { role: 'user', content: textBlocks(correction) }]
+            continue
+        }
+        messages = [
+            input,
+            { role: 'assistant', content: fold.content },
+            {
+                role: 'tool',
+                content: fold.toolCalls.map(call => ({
+                    type: 'tool-result',
+                    toolCallId: call.toolCallId,
+                    toolName: call.toolName,
+                    output: { type: 'text', value: correction }
+                }))
+            }
+        ]
     }
-
-    return { value: null, output: outputs.join('\n\n'), parseError: lastError }
-}
-
-const formatCorrection = (error: string, stringifiedArrayField?: string) => {
-    const instructions = [`结构化结果无效：${error}。`, '必须只输出符合 schema 的 JSON，并完整修正所有字段。']
-    if (stringifiedArrayField != null) {
-        instructions.push(
-            `${stringifiedArrayField} 必须直接传 JSON 数组：正确 {"${stringifiedArrayField}":[]}；错误 {"${stringifiedArrayField}":"[]"}。`
-        )
-    }
-    instructions.push('不要在 JSON 之外输出解释性文本。')
-    return instructions.join(' ')
 }

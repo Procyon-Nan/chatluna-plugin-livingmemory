@@ -7,7 +7,6 @@ import { MemoryInputError } from '../../memory/errors.ts'
 import { isModelConfigured } from '../../shared/utils.ts'
 import { extractionResultTool } from '../../prompts/memory_tools.ts'
 import { buildExtractionPrompts } from '../../prompts/extraction.ts'
-import type { PromptMessages } from '../../prompts/prompt_format.ts'
 import { normalizeMemoryKeywords } from '../../memory/entry_fields.ts'
 import { invokeStructuredOutput } from '../structured_output.ts'
 import { resolveScopeAssistantLabel } from '../../memory/helpers.ts'
@@ -20,8 +19,6 @@ export type LivingMemoryExtractionSkipReason =
 
 export interface LivingMemoryExtractionResult {
     extracted: AttributedMemoryItem[]
-    prompt: PromptMessages | null
-    output: string | null
     skippedReason: LivingMemoryExtractionSkipReason | null
     // 结果工具调用或参数无法通过 Schema 校验时的原因。为 null 表示成功，
     // 包括模型通过工具提交空 memories 数组并说明原因。
@@ -54,8 +51,6 @@ export class LivingMemoryExtractor {
         if (!isModelConfigured(this.mainModel)) {
             return {
                 extracted: [],
-                prompt: null,
-                output: null,
                 skippedReason: 'model-not-configured',
                 parseError: null
             }
@@ -64,20 +59,20 @@ export class LivingMemoryExtractor {
         if (!(await this.isModelAvailable())) {
             return {
                 extracted: [],
-                prompt: null,
-                output: null,
                 skippedReason: 'model-unavailable',
                 parseError: null
             }
         }
 
-        const prompt = this.buildPrompt(input, context)
         const result = await invokeStructuredOutput({
             ctx: this.ctx,
             model: this.mainModel,
-            schema: extractionResultTool.schema,
-            systemPrompt: prompt.systemPrompt,
-            inputPrompt: prompt.inputPrompt,
+            tool: extractionResultTool,
+            ...buildExtractionPrompts({
+                chatHistory: input,
+                assistantLabel: resolveScopeAssistantLabel(context),
+                presetPrompt: context.presetPrompt
+            }),
             ...(signal === undefined ? {} : { signal }),
             validateResult: ({ memories }) => {
                 try {
@@ -113,8 +108,6 @@ export class LivingMemoryExtractor {
 
         return {
             extracted,
-            prompt,
-            output: result.output,
             skippedReason: null,
             parseError: result.parseError
         }
@@ -128,15 +121,5 @@ export class LivingMemoryExtractor {
             if (error instanceof NoModelError) return false
             throw error
         }
-    }
-
-    private buildPrompt(input: string, context: LivingMemoryExtractionContext) {
-        const assistantLabel = resolveScopeAssistantLabel(context)
-
-        return buildExtractionPrompts({
-            chatHistory: input,
-            assistantLabel,
-            presetPrompt: context.presetPrompt
-        })
     }
 }

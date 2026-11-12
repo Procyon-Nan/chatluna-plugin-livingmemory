@@ -27,8 +27,6 @@ const createExtractionResult = (
     overrides: Partial<LivingMemoryExtractionResult> = {}
 ): LivingMemoryExtractionResult => ({
     extracted: [],
-    prompt: null,
-    output: null,
     skippedReason: null,
     parseError: null,
     ...overrides

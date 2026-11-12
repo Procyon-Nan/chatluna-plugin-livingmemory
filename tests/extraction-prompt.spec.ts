@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import type { Context } from 'cordis'
 import { MAX_MEMORY_KEYWORDS } from '../src/service/memory/entry_fields.ts'
 import { LivingMemoryExtractor } from '../src/service/workflows/extraction/extractor.ts'
-import { createStructuredChat, logger } from './workflow-test-utils.ts'
+import { createResultToolChat, logger, toolFeedback } from './workflow-test-utils.ts'
 
 const completeMemory = {
     type: 'fact',
@@ -25,7 +25,7 @@ const createExtraction = (
     scope: Partial<typeof context> = {}
 ) => {
     const pending = [...responses]
-    const { chat, calls } = createStructuredChat(() => pending.shift())
+    const { chat, calls } = createResultToolChat('living_memory_extraction_result', () => pending.shift())
     const ctx = {
         ai: { chat: () => ({ bind: async () => ({}) }) },
         chatluna: { chat }
@@ -93,9 +93,10 @@ it('rejects a stringified memories array and asks the model to send an array', a
             speakerKeys: ['speaker-key']
         }
     ])
-    // 纠正提示要求直接传 JSON 数组，而不是接受字符串。
-    assert.match(extraction.calls[1]!.prompt, /memories 必须直接传 JSON 数组/u)
-    assert.match(extraction.calls[1]!.prompt, /错误 \{"memories":"\[\]"\}/u)
+    const [feedback] = toolFeedback(extraction.calls[1]!)
+    assert.equal(feedback!.output.type, 'text')
+    assert.match(feedback!.output.value, /调用 living_memory_extraction_result 一次/u)
+    assert.match(feedback!.output.value, /参数 memories 要传数组/u)
 })
 
 it('drops the batch after three stringified attempts', async () => {
@@ -122,6 +123,20 @@ it('accepts a memories array that is already an array', async () => {
     assert.equal(extraction.calls.length, 1)
     assert.equal(result.parseError, null)
     assert.equal(result.extracted.length, 1)
+})
+
+it('rejects an unknown speaker in tool arguments and writes only the corrected attribution', async () => {
+    const extraction = createExtraction([
+        { memories: [{ ...completeMemory, speakerLabels: ['李四'] }], reason: '准备考试。' },
+        { memories: [completeMemory], reason: '准备考试。' }
+    ])
+    const result = await extraction.extract()
+    assert.equal(result.parseError, null)
+    assert.deepEqual(result.extracted.map(memory => memory.speakerKeys), [['speaker-key']])
+    const [feedback] = toolFeedback(extraction.calls[1]!)
+    assert.equal(feedback!.output.type, 'text')
+    assert.match(feedback!.output.value, /unknown speaker label: 李四/u)
+    assert.doesNotMatch(feedback!.output.value, /要传数组/u)
 })
 
 it('rejects the whole extraction output when a required field is missing', async () => {

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createStructuredChat } from './workflow-test-utils.ts'
+import { createResultToolChat } from './workflow-test-utils.ts'
 import type { Context } from 'cordis'
 import { LivingMemoryLogger } from '../src/service/logging/logger.ts'
 import type {
@@ -94,7 +94,7 @@ const createHarness = (
         deleteUserProfile: async () => {}
     }
     let pending: unknown[] = []
-    const { chat, calls: invocations } = createStructuredChat(() => pending.shift())
+    const { chat, calls: invocations } = createResultToolChat('living_memory_user_profile_result', () => pending.shift())
 
     const ctx = {
         ai: { chat: () => ({ bind: async () => ({}) }) },
@@ -277,6 +277,15 @@ it('records the reviewed input when the model chooses keep', async () => {
     ])
     assert.match(result.detail, /保持原样：1 人/u)
     assert.match(result.detail, /失败：0 人/u)
+})
+
+it('does not overwrite or mark a profile reviewed from a JSON text reply', async () => {
+    const harness = createHarness({ existingSourceMemoryIds: ['memory-old'] })
+    const { result } = await harness.run(Array(3).fill(JSON.stringify(createProfileCall('无效的新画像'))))
+    assert.equal(result.generated, 0)
+    assert.match(result.detail, /失败：1 人/u)
+    assert.equal(harness.savedProfiles.length, 0)
+    assert.equal(harness.reviewedProfiles.length, 0)
 })
 
 it('rejects keep without an existing profile and retries for an update', async () => {

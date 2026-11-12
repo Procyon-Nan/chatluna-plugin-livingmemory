@@ -55,7 +55,7 @@ yarn build
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `mainModel` | string | `无` | 主 LLM：提取记忆、Dream、用户画像 |
+| `mainModel` | string | `无` | 主模型：提取记忆、运行 Dream、更新人物画像和人设卡。需支持工具调用 |
 | `subModel` | string | `无` | 子 LLM：召回记忆 |
 | `embeddingModel` | string | `无` | 嵌入模型：将记忆和查询文本转换为向量，用于检索与 Dream |
 | `rerankModel` | string | `无` | 重排序模型（可选）：按候选记忆与查询的相关性重新排序 |

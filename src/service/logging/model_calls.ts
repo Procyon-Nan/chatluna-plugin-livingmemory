@@ -50,7 +50,7 @@ export function modelCallLogging(
     }
     function response(result: ChatResult) {
         logger.diagnosticSummary(fields => {
-            const output = stage === 'recall' || stage === 'dream' ? result.toolCalls.map(formatCall).join('\n') : result.text
+            const output = stage === 'dream-compression' ? result.text : result.toolCalls.map(formatCall).join('\n')
             return {
                 event: `${label}模型响应`,
                 detail: `${formatLogScope(fields)}; 调用序号：${step}; 结束原因：${result.finish.kind}`,

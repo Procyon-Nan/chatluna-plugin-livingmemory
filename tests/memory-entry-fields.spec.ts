@@ -11,7 +11,7 @@ import {
 import { LivingMemoryRepository } from '../src/service/persistence/repository.ts'
 import { LivingMemoryExtractor } from '../src/service/workflows/extraction/extractor.ts'
 import { withLivingMemoryRepository } from './persistence-test-utils.ts'
-import { createStructuredChat, logger } from './workflow-test-utils.ts'
+import { createResultToolChat, logger } from './workflow-test-utils.ts'
 
 const keywordInput = () => [
     '  alpha  ',
@@ -68,7 +68,7 @@ it('applies shared field rules to extracted memories', async () => {
     }
     const ctx = {
         ai: { chat: () => ({ bind: async () => ({}) }) },
-        chatluna: createStructuredChat(() => raw)
+        chatluna: createResultToolChat('living_memory_extraction_result', () => raw)
     } as unknown as Context
     const extractor = new LivingMemoryExtractor(ctx, 'test-model')
 

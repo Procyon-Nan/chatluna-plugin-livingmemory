@@ -277,7 +277,7 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
             structuredResult = await invokeStructuredOutput({
                 ctx: this.ctx,
                 model: this.config.mainModel,
-                schema: personaCardResultTool.schema,
+                tool: personaCardResultTool,
                 ...buildPersonaCardPrompts({ lines }),
                 validateResult: ({ deletedLineNumbers }) => {
                     const invalid = deletedLineNumbers.filter(
