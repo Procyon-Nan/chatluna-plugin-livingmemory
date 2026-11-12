@@ -20,7 +20,9 @@ export const memoryPassTool: LivingMemoryToolDoc = {
     name: 'living_memory_pass',
     description:
         '记忆快照更新跳过工具，当你认为旧快照已经足够应付未来聊天话题，不需要更新时，使用此工具。',
-    schema: Schema.object({})
+    schema: Schema.object({
+        reason: requiredText('本次无需更新记忆快照的简短原因。')
+    })
 }
 
 export const memoryUpdateSnapshotTool: LivingMemoryToolDoc = {

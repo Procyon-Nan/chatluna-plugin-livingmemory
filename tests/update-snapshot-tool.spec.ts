@@ -21,7 +21,7 @@ const snapshotTools = (lines: string[], maxLines = 5) => {
     return {
         saved,
         update: (input: unknown) => execute(memoryUpdateSnapshotTool.name, input),
-        pass: () => execute(memoryPassTool.name, {})
+        pass: () => execute(memoryPassTool.name, { reason: '当前快照已包含相关记忆。' })
     }
 }
 

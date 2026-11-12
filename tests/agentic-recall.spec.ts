@@ -69,7 +69,7 @@ const snapshotCall = (id: string, text: string) =>
         operations: [{ type: 'append', text }]
     })
 
-const passCall = (id = 'pass') => call(id, memoryPassTool.name, {})
+const passCall = () => call('pass', memoryPassTool.name, { reason: '没有需要补充的记忆。' })
 
 const multipleCalls = (calls: [string, unknown][]): Fold => {
     const blocks = calls.map(
@@ -221,7 +221,6 @@ it('runs one search then commits the snapshot', async () => {
     assert.ok(harness.debugMessages.some(message => message.startsWith('事件：召回模型响应;') && message.includes(memorySearchTool.name)))
     assert.equal(harness.invocations[0]?.model, config.subModel)
     assert.equal(harness.invocations[0]?.toolChoice, 'required')
-    assert.match(String(harness.invocations[0]?.system), /每次只调用一个工具/u)
     assert.match(String(harness.invocations[0]?.system), /你是助手&lt;&amp;/u)
     assert.equal(
         toolResultText(toolMessages(harness.invocations[1])[0]),
@@ -421,6 +420,18 @@ it('passes after a search returns no memories', async () => {
         toolResultText(toolMessages(harness.invocations[1])[0]),
         '没有找到相关记忆。'
     )
+})
+
+it('asks for a missing or blank pass reason before concluding recall', async () => {
+    for (const input of [{}, { reason: '   ' }]) {
+        const harness = createHarness({
+            responses: [call('invalid', memoryPassTool.name, input), passCall()]
+        })
+
+        assert.equal(await harness.run(), null)
+        assert.match(toolResultText(toolMessages(harness.invocations[1])[0]), /参数不合法/u)
+        assert.deepEqual(harness.saved, [])
+    }
 })
 
 it('deduplicates a memory returned by repeated searches', async () => {
