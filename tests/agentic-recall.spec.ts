@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import type { Context } from 'cordis'
-import type { ChatOptions as ChatInvocation } from '@chatluna/ai-runtime/ops'
+import type { ChatOptions as ChatInvocation, ChatResult } from '@chatluna/ai-runtime/ops'
 import { ModelId, ProviderId } from '@chatluna/symbol'
 import type { ChatBlock, ChatSpecMessage, ChatToolCallBlock } from '@chatluna/message'
 import { deepFreeze } from '@chatluna/utils/kit'
@@ -19,6 +19,7 @@ import { LivingMemoryAgenticRecallExecutor } from '../src/service/workflows/reca
 import type { LivingMemorySearchEngine } from '../src/service/workflows/recall/memory_search_engine.ts'
 
 interface Fold {
+    finish?: ChatResult['finish']
     content: readonly ChatBlock[]
     text: string
     toolCalls: readonly ChatToolCallBlock[]
@@ -122,7 +123,7 @@ const createHarness = (options: HarnessOptions) => {
                 const next = responses.shift()
                 if (next === undefined) throw new Error('missing fake response')
                 if (next instanceof Error) throw next
-                return { ...next, finish: { kind: next.toolCalls.length ? 'tool-calls' : 'stop' } }
+                return { ...next, finish: next.finish ?? { kind: next.toolCalls.length ? 'tool-calls' : 'stop' } }
             }
         }
     } as unknown as Context
@@ -219,6 +220,8 @@ it('runs one search then commits the snapshot', async () => {
     assert.match(calls[1]!, /content-memory-1/u)
     assert.ok(harness.debugMessages.some(message => message.startsWith('事件：召回模型响应;') && message.includes(memorySearchTool.name)))
     assert.equal(harness.invocations[0]?.model, config.subModel)
+    assert.equal(harness.invocations[0]?.toolChoice, 'required')
+    assert.match(String(harness.invocations[0]?.system), /每次只调用一个工具/u)
     assert.match(String(harness.invocations[0]?.system), /你是助手&lt;&amp;/u)
     assert.equal(
         toolResultText(toolMessages(harness.invocations[1])[0]),
@@ -254,10 +257,10 @@ it('rejects stringified arrays and allows a corrected search', async () => {
     )
 })
 
-it('passes without updating after invalid search input', async () => {
+it('can pass after a blank search term is rejected', async () => {
     const harness = createHarness({
         responses: [
-            searchCall('invalid-1', { searchTexts: '["记忆"]' }),
+            searchCall('invalid-1', { searchTexts: ['   '] }),
             passCall()
         ]
     })
@@ -347,6 +350,20 @@ it('propagates hard search service failures', async () => {
     })
 
     await assert.rejects(harness.run(), /database unavailable/u)
+})
+
+it('propagates failed or aborted model results without executing partial calls or retrying', async () => {
+    for (const kind of ['error', 'aborted'] as const) {
+        const harness = createHarness({
+            responses: [{
+                ...snapshotCall('partial', '未完成的快照'),
+                finish: { kind, failure: { code: kind === 'error' ? 'TRANSPORT' : 'ABORTED', message: '模型请求未完成', retryable: false } }
+            }]
+        })
+        await assert.rejects(harness.run(), /模型请求未完成/u)
+        assert.equal(harness.invocations.length, 1)
+        assert.deepEqual(harness.saved, [])
+    }
 })
 
 it('fails after six invalid tool calls without updating a recall result', async () => {

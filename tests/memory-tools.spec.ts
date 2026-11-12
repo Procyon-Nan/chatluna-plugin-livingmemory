@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
-import { Schema } from '@chatluna/schema'
-import { schemasteryToJsonSchemaNode } from '@chatluna/schema'
+import { Schema, schemasteryToJsonSchemaNode } from '@chatluna/schema'
 import type {
     LivingMemoryArchiveProvider,
     LivingMemoryCreationProvider,
@@ -26,7 +25,8 @@ import {
     resolveToolMemoryScope,
     type LivingMemoryToolAgent
 } from '../src/service/memory/tools/tool_runtime.ts'
-import { memoryFieldDocs, requiredText } from '../src/service/prompts/schema.ts'
+import { memoryMergeTool, memoryUpdateTool } from '../src/service/prompts/memory_tools.ts'
+import { requiredText } from '../src/service/prompts/schema.ts'
 import {
     LivingMemoryFactsCommittedError,
     LivingMemoryVectorIndexError
@@ -386,13 +386,15 @@ it('reports a missing memory when deleting', async () => {
     )
 })
 
-it('keeps field constraints in the tool schema even though descriptions are dropped', () => {
+it('sends memory field constraints and descriptions in the model-facing parameters', () => {
     const tool = createCreateMemoryTool(
         { listPresetSpeakers: async () => [], createMemory: async () => record('m') },
         3
     )
     const json = schemasteryToJsonSchemaNode(tool.args) as {
-        properties: { memories: { minItems?: number; maxItems?: number; items: { required: string[] } } }
+        properties: { memories: { minItems: number; maxItems: number; items: {
+            required: string[]; properties: Record<string, { description: string }>
+        } } }
     }
 
     assert.equal(json.properties.memories.minItems, 1)
@@ -406,16 +408,21 @@ it('keeps field constraints in the tool schema even though descriptions are drop
         'sentiment',
         'importance'
     ])
+    for (const field of json.properties.memories.items.required) {
+        const doc = json.properties.memories.items.properties[field]?.description
+        assert.ok(doc, `missing parameter description: ${field}`)
+        assert.ok(!tool.description?.includes(doc), `duplicate parameter description: ${field}`)
+    }
 })
 
-it('carries the field documentation in the tool description', () => {
-    const tool = createCreateMemoryTool(
-        { listPresetSpeakers: async () => [], createMemory: async () => record('m') },
-        2
-    )
-
-    for (const doc of Object.values(memoryFieldDocs)) {
-        assert.ok(tool.description?.includes(doc), `missing field doc: ${doc}`)
+it('requires replacement memory in update and merge tool parameters', () => {
+    for (const [tool, ids] of [
+        [memoryUpdateTool, { memoryId: 'a' }],
+        [memoryMergeTool, { sourceMemoryIds: ['a', 'b'] }]
+    ] as const) {
+        const params = schemasteryToJsonSchemaNode(tool.schema)
+        assert.deepEqual(params.required, [...Object.keys(ids), 'memory'])
+        assert.equal(tool.schema.safeParse(ids).success, false)
     }
 })
 

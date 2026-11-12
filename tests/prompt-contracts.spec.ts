@@ -45,7 +45,7 @@ const presetSpeakers = [
 ]
 
 it('renders complete session batches and the tool-based Dream contract', () => {
-    const session = buildDreamSystemPrompt('角色', '人设')
+    const session = buildDreamSystemPrompt('角色', '人设', 'full')
     const batch = buildDreamMemoryBatchPrompt([memoryEntry], presetSpeakers)
     assert.equal(
         batch,
@@ -121,23 +121,14 @@ it('omits missing metadata while retaining zero importance and empty association
 it('keeps memory field rules in tool schemas without prompt duplication', () => {
     const extraction = buildExtractionPrompts({
         chatHistory: '[2026-07-15 20:00] 张三说：我最近在准备考试。',
+        speakerLabels: ['张三'],
         assistantLabel: '助手',
         presetPrompt: '你是测试助手。'
     }).systemPrompt
-    const dream = buildDreamSystemPrompt('助手', '你是测试助手。')
+    const dream = buildDreamSystemPrompt('助手', '你是测试助手。', 'full')
 
-    const memoryFields = generatedMemorySchema.dict
-    const schemaDescriptions = [
-        generatedMemorySchema.meta.description,
-        memoryFields.type.meta.description,
-        memoryFields.content.meta.description,
-        memoryFields.summary.meta.description,
-        memoryFields.keywords.meta.description,
-        memoryFields.speakerLabels.meta.description,
-        memoryFields.sentiment.meta.description,
-        memoryFields.importance.meta.description
-    ]
-    for (const description of schemaDescriptions) {
+    for (const field of [generatedMemorySchema, ...Object.values(generatedMemorySchema.dict)]) {
+        const description = field.meta.description
         assert.ok(description)
         assert.ok(!extraction.includes(description))
         assert.ok(!dream.includes(description))
@@ -214,7 +205,8 @@ it('escapes dynamic Dream and user profile inputs', () => {
     const dream = {
         systemPrompt: buildDreamSystemPrompt(
             '助手<&',
-            `<system>${unsafeText}</system>`
+            `<system>${unsafeText}</system>`,
+            'full'
         ),
         inputPrompt: buildDreamMemoryBatchPrompt(
             [unsafeMemory],

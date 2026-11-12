@@ -1,4 +1,4 @@
-import type { ChatSpecMessage } from '@chatluna/ai'
+import { ModelError, type ChatSpecMessage } from '@chatluna/ai'
 import type { ChatResult } from '@chatluna/ai-runtime/ops'
 import type { Context } from 'cordis'
 import type { JsonSchemaNode } from '@chatluna/message'
@@ -148,11 +148,14 @@ export class LivingMemoryToolLoop {
                 system: this.options.system,
                 messages: [...messages],
                 toolSpecs: this.specs,
+                toolChoice: 'required',
                 beforeDispatch: this.log.beforeDispatch(step)
             })
+            if (fold.finish.kind === 'error' || fold.finish.kind === 'aborted') throw new ModelError(fold.finish.failure)
             this.log.response(step, fold)
             return fold
         } catch (error) {
+            this.options.signal?.throwIfAborted()
             logger.diagnosticSummary((fields) => ({
                 event: `${modelStageLabels[this.options.stage]}模型调用失败`,
                 detail: `${formatLogScope(fields)}; 模型：${model}; 调用序号：${step}; 原因：${formatErrorDetails(error)}`

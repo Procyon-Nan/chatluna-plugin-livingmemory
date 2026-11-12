@@ -26,6 +26,7 @@ interface ChatRequest {
 }
 
 interface ChatFold {
+    finish: { kind: 'tool-calls' | 'stop' }
     content: readonly ChatBlock[]
     text: string
     toolCalls: readonly ChatToolCallBlock[]
@@ -38,10 +39,11 @@ const toolCallFold = (name: string, input: unknown): ChatFold => {
         toolName: name,
         input: input as never
     }
-    return { content: [block], text: '', toolCalls: [block] }
+    return { finish: { kind: 'tool-calls' }, content: [block], text: '', toolCalls: [block] }
 }
 
 const textFold = (text: string): ChatFold => ({
+    finish: { kind: 'stop' },
     content: [{ type: 'text', text }],
     text,
     toolCalls: []

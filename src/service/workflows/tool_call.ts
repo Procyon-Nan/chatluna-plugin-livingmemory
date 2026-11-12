@@ -1,7 +1,6 @@
 import type { ChatBlock, ChatToolCallBlock } from '@chatluna/message'
 import type { ChatSpecMessage } from '@chatluna/ai'
 import type { Schema } from '@chatluna/schema'
-import { isSchemaValidationError } from '@chatluna/schema'
 import { MemoryInputError } from '../memory/errors.ts'
 import { formatErrorDetails } from '../shared/utils.ts'
 
@@ -46,18 +45,15 @@ export const runLivingMemoryToolCall = async (
     if (tool === undefined) {
         return { ok: false, text: unknownToolMessage(call.toolName) }
     }
-    let args: unknown
-    try {
-        args = tool.args(call.input)
-    } catch (error) {
-        if (!isSchemaValidationError(error)) throw error
+    const args = tool.args.safeParse(call.input)
+    if (!args.success) {
         return {
             ok: false,
-            text: invalidToolArgsMessage(call.toolName, formatErrorDetails(error))
+            text: invalidToolArgsMessage(call.toolName, formatErrorDetails(args.error))
         }
     }
     try {
-        const value = await tool.run(args)
+        const value = await tool.run(args.data)
         return { ok: true, text: renderToolOutput(value) }
     } catch (error) {
         if (!(error instanceof MemoryInputError)) throw error

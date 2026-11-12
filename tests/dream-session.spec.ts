@@ -15,7 +15,7 @@ import {
     getDreamCoverage,
     recordDreamOperation
 } from '../src/service/workflows/dream/session/state.ts'
-import type { DreamBatch } from '../src/service/workflows/dream/types.ts'
+import type { DreamBatch, DreamRunInput } from '../src/service/workflows/dream/types.ts'
 import type { LivingMemoryLoopTool } from '../src/service/workflows/tool_call.ts'
 
 interface ChatFold {
@@ -106,12 +106,13 @@ const check = (memoryIds: string[], id: string) =>
  */
 const createRun = (options: {
     respond: (request: ChatRequest, index: number) => ChatFold
+    mode?: DreamRunInput['mode']
     batches?: (string | string[])[]
     maxTokenLimit?: number
 }) => {
     const requests: ChatRequest[] = []
     const batches = options.batches ?? ['a', 'b']
-    const state = createDreamSessionState(batches.flatMap((batch) => batch))
+    const state = createDreamSessionState(batches.flatMap((batch) => batch), options.mode)
     state.batches = batches.map((batch, index) => {
         if (typeof batch === 'string') return cluster(batch)
         return {
@@ -209,7 +210,8 @@ it('drives the dream conversation with stable prefixes and paired tools', async 
         processedCount: 2,
         unprocessedMemoryIds: []
     })
-    assert.ok(run.requests[0]!.system)
+    assert.equal(run.requests[0]!.toolChoice, 'required')
+    assert.match(run.requests[0]!.system!, /可以跨批整理/u)
     assert.equal(run.requests[1]!.system, run.requests[0]!.system)
     // 第二轮在首轮历史之上追加：system 与批次输入保持同一前缀。
     assert.deepEqual(
@@ -499,12 +501,14 @@ it('rejects oversized input instead of letting the host drop current batch messa
     )
 })
 
-it('returns coverage for a singleton post-extraction group without model calls', async () => {
+it('limits the post-extraction prompt to the current group and reports partial coverage', async () => {
     const run = createRun({
+        mode: 'post-extraction',
         batches: [['a', 'b']],
-        respond: () => callFold(check(['a'], 'a'))
+        respond: (_request, index) => index === 1 ? callFold(check(['a'], 'a')) : textFold('完成')
     })
     await run.run()
+    assert.match(run.requests[0]!.system!, /只能操作当前批次的记忆 ID，以及本批工具返回的新 ID/u)
     assert.equal(getDreamCoverage(run.state).processedCount, 1)
     assert.deepEqual(
         getDreamCoverage(run.state).unprocessedMemoryIds,

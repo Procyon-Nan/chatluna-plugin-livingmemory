@@ -70,6 +70,7 @@ export class LivingMemoryExtractor {
             tool: extractionResultTool,
             ...buildExtractionPrompts({
                 chatHistory: input,
+                speakerLabels: context.speakers.map(speaker => speaker.speakerLabel),
                 assistantLabel: resolveScopeAssistantLabel(context),
                 presetPrompt: context.presetPrompt
             }),
