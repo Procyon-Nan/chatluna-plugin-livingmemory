@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import { ProtocolError } from '@chatluna/ai'
-import { Schema } from '@chatluna/schema'
+import { createCapturedLogger, createStructuredChat, logger } from './workflow-test-utils.ts'
+import { Schema, schemasteryToJsonSchema } from '@chatluna/schema'
 import { invokeStructuredOutput } from '../src/service/workflows/structured_output.ts'
 import type { Context } from 'cordis'
 
@@ -9,28 +9,17 @@ const schema = Schema.object({
     note: Schema.transform(Schema.string(), (value) => value.trim()).optional()
 })
 
-const parseFailure = (message: string) => new ProtocolError({ message })
+const logging = { logger, stage: 'memory-extraction' } as const
 
-/** 按顺序返回预设响应：值表示成功，Error 表示调用失败。 */
-const createHarness = (responses: (unknown | Error)[]) => {
+const createHarness = (responses: unknown[]) => {
     const pending = [...responses]
-    const prompts: { prompt: string; system: string; model?: string }[] = []
-    const ctx = {
-        chatluna: {
-            extract: async (_schema: unknown, options: { prompt: string; system?: string; model?: string }) => {
-                prompts.push({ prompt: options.prompt, system: options.system ?? '', ...(options.model === undefined ? {} : { model: options.model }) })
-                const response = pending.shift()
-                if (response === undefined) throw new Error('missing fake model response')
-                if (response instanceof Error) throw response
-                return response
-            }
-        }
-    } as unknown as Context
+    const { chat, calls: prompts } = createStructuredChat(() => pending.shift())
+    const ctx = { chatluna: { chat } } as unknown as Context
     return { ctx, prompts }
 }
 
 const invoke = (
-    responses: (unknown | Error)[],
+    responses: unknown[],
     validateResult?: (value: { items: string[]; note?: string }) => string | undefined
 ) => {
     const harness = createHarness(responses)
@@ -39,6 +28,7 @@ const invoke = (
         result: invokeStructuredOutput({
             ctx: harness.ctx,
             schema,
+            logging,
             systemPrompt: '提交结果。',
             inputPrompt: '提交结果。',
             validateResult,
@@ -56,7 +46,10 @@ it('accepts one valid structured result', async () => {
     assert.equal(resolved.parseError, null)
     assert.match(resolved.output, /^\[attempt 1\]/u)
     assert.equal(prompts.length, 1)
-    assert.equal(prompts[0].system, '提交结果。')
+    const [system, instruction, jsonSchema] = prompts[0].system.split('\n\n')
+    assert.equal(system, '提交结果。')
+    assert.match(instruction, /Return ONLY a JSON value/u)
+    assert.deepEqual(JSON.parse(jsonSchema), schemasteryToJsonSchema(schema))
     assert.equal(prompts[0].prompt, '提交结果。')
 })
 
@@ -75,7 +68,7 @@ it('retries results rejected by contextual validation', async () => {
 })
 
 it('retries malformed stringified arrays with direct array guidance', async () => {
-    const { result, prompts } = invoke([parseFailure('items is not an array'), { items: ['corrected'] }])
+    const { result, prompts } = invoke([{ items: '[]' }, { items: ['corrected'] }])
 
     const resolved = await result
 
@@ -96,43 +89,56 @@ it('propagates model invocation errors without a correction retry', async () => 
 
 it('returns a parse error after three invalid structured responses', async () => {
     const { result, prompts } = invoke([
-        parseFailure('schema mismatch'),
-        parseFailure('schema mismatch'),
-        parseFailure('schema mismatch')
+        'no JSON',
+        'no JSON',
+        'no JSON'
     ])
 
     const resolved = await result
 
     assert.equal(resolved.value, null)
-    assert.match(resolved.parseError ?? '', /schema mismatch/u)
+    assert.match(resolved.parseError ?? '', /did not contain a JSON value/u)
     assert.equal(prompts.length, 3)
     assert.match(resolved.output, /\[attempt 1\][\s\S]*\[attempt 2\][\s\S]*\[attempt 3\]/u)
 })
 
 it('propagates cancellation without entering correction retries', async () => {
     const controller = new AbortController()
+    const pending = Promise.withResolvers<never>()
     let calls = 0
     const ctx = {
         chatluna: {
-            extract: async () => {
+            chat: () => {
                 calls += 1
-                controller.abort(new Error('disposed'))
-                return { items: ['invalid'] }
+                return Object.assign(pending.promise, { abort: pending.reject })
             }
         }
     } as unknown as Context
 
-    await assert.rejects(
-        invokeStructuredOutput({
-            ctx,
-            schema,
-            systemPrompt: '结果。',
-            inputPrompt: '结果。',
-            signal: controller.signal
-        }),
-        /disposed|abort/iu
-    )
+    const result = invokeStructuredOutput({
+        ctx, schema, logging, systemPrompt: '结果。', inputPrompt: '结果。', signal: controller.signal
+    })
+    controller.abort(new Error('disposed'))
+    await assert.rejects(result, /disposed/u)
     assert.equal(calls, 1)
+})
+
+it('logs the schema, retry instructions and raw model text before validation', async () => {
+    const captured = createCapturedLogger()
+    const raw = '模型说明：\n```json\n{"items":["  trimmed  "]}\n```'
+    const { ctx } = createHarness(['malformed reply', raw])
+    const result = await invokeStructuredOutput({
+        ctx, schema, systemPrompt: 'system', inputPrompt: 'input',
+        logging: { logger: captured.logger, stage: 'memory-extraction' }
+    })
+    assert.deepEqual(result.value, { items: ['trimmed'] })
+    const requests = captured.info.filter(line => line.includes('记忆提取模型调用'))
+    assert.equal(requests.length, 2)
+    assert.ok(requests[0].includes(JSON.stringify(schemasteryToJsonSchema(schema))))
+    assert.match(requests[1], /结构化结果无效/u)
+    const responses = captured.info.filter(line => line.includes('记忆提取模型响应'))
+    assert.ok(responses[0].includes('malformed reply'))
+    assert.ok(responses[1].includes(raw))
 })
 
 it('passes the configured model through to the call', async () => {
@@ -142,7 +148,8 @@ it('passes the configured model through to the call', async () => {
         schema,
         systemPrompt: 's',
         inputPrompt: 'p',
-        model: 'openai/gpt-4o'
+        model: 'openai/gpt-4o',
+        logging
     })
 
     assert.equal(resolved.parseError, null)

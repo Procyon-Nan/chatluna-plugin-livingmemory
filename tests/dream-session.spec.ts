@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
+import { getEventListeners } from 'node:events'
+import { estimateMessageTokens } from '@chatluna/utils'
 import type { Context } from 'cordis'
+import type { ChatOptions as ChatRequest } from '@chatluna/ai-runtime/ops'
+import { ModelId, ProviderId } from '@chatluna/symbol'
 import { Schema } from '@chatluna/schema'
-import type { ChatBlock, ChatSpecMessage, ChatToolCallBlock } from '@chatluna/message'
+import type { ChatBlock, ChatToolCallBlock } from '@chatluna/message'
 import { LivingMemoryLogger } from '../src/service/logging/logger.ts'
 import { buildDreamMemoryBatchPrompt } from '../src/service/prompts/dream.ts'
 import { DreamSessionHistory } from '../src/service/workflows/dream/session/history.ts'
@@ -14,14 +18,8 @@ import {
 import type { DreamBatch } from '../src/service/workflows/dream/types.ts'
 import type { LivingMemoryLoopTool } from '../src/service/workflows/tool_call.ts'
 
-interface ChatRequest {
-    model?: string
-    system?: string
-    messages: readonly ChatSpecMessage[]
-    toolSpecs?: readonly { name?: string }[]
-}
-
 interface ChatFold {
+    finish: { kind: 'tool-calls' | 'stop' }
     content: readonly ChatBlock[]
     text: string
     toolCalls: readonly ChatToolCallBlock[]
@@ -73,12 +71,14 @@ const toolCall = (name: string, input: unknown, id: string) => {
 }
 
 const callFold = (...blocks: ChatToolCallBlock[]): ChatFold => ({
+    finish: { kind: 'tool-calls' },
     content: blocks,
     text: '',
     toolCalls: blocks
 })
 
 const textFold = (text: string): ChatFold => ({
+    finish: { kind: 'stop' },
     content: [{ type: 'text', text }],
     text,
     toolCalls: []
@@ -207,14 +207,16 @@ it('drives the dream conversation with stable prefixes and paired tools', async 
         processedCount: 2,
         unprocessedMemoryIds: []
     })
+    assert.ok(run.requests[0]!.system)
+    assert.equal(run.requests[1]!.system, run.requests[0]!.system)
     // 第二轮在首轮历史之上追加：system 与批次输入保持同一前缀。
     assert.deepEqual(
-        run.requests[1]!.messages.slice(0, 2),
-        run.requests[0]!.messages.slice(0, 2)
+        run.requests[1]!.messages.slice(0, run.requests[0]!.messages.length),
+        run.requests[0]!.messages
     )
     assert.deepEqual(
         run.requests[1]!.messages.map((message) => message.role),
-        ['system', 'user', 'assistant', 'tool', 'tool', 'user']
+        ['user', 'assistant', 'tool', 'tool', 'user']
     )
     assert.deepEqual(
         run.requests[1]!.messages
@@ -328,13 +330,15 @@ it('stops further writes when cancelled between tools in one response', async ()
 })
 
 it('compresses only older batches and retains complete current input', async () => {
-    const { logger: capturedLogger } = logger()
+    const { logger: capturedLogger, logs } = logger()
     const compressionRequests: ChatRequest[] = []
     const history = new DreamSessionHistory(
         {
             chatluna: {
                 chat: async (request: ChatRequest) => {
                     compressionRequests.push(request)
+                    await request.beforeDispatch?.({ messages: request.messages, system: request.system! },
+                        { provider: ProviderId('test'), model: ModelId('test-model') }, { degradations: [] })
                     return textFold('早期结论与相关 ID')
                 }
             }
@@ -344,13 +348,13 @@ it('compresses only older batches and retains complete current input', async () 
         capturedLogger
     )
     history.startBatch('早期记忆')
-    history.history.messages.push({
+    history.messages.push({
         role: 'assistant',
         content: [{ type: 'text', text: '早期完成' }]
     })
     const current = buildDreamMemoryBatchPrompt(cluster('current').entries.map(entry => ({ ...entry, sourceLabel: '来源 · unknown' })), [])
     history.startBatch(current)
-    history.history.messages.push({
+    history.messages.push({
         role: 'tool',
         content: [
             {
@@ -363,17 +367,21 @@ it('compresses only older batches and retains complete current input', async () 
     })
     history.recordUsage({ inputTokens: 200_000 })
 
-    const messages = await history.prepareMessages(1_000_000)
-    assert.equal(messages[0]!.role, 'system')
+    const signal = new AbortController().signal
+    const messages = await history.prepareMessages(1_000_000, signal)
+    assert.equal(getEventListeners(signal, 'abort').length, 0)
+    assert.equal(messages[0]!.role, 'user')
     assert.match(
-        String((messages[1]!.content[0] as { text: string }).text),
+        String((messages[0]!.content[0] as { text: string }).text),
         /早期结论/u
     )
     assert.equal(
-        String((messages[2]!.content[0] as { text: string }).text),
+        String((messages[1]!.content[0] as { text: string }).text),
         current
     )
     assert.equal(compressionRequests.length, 1)
+    assert.ok(logs.some(message => message.includes('Dream 上下文压缩模型调用') && message.includes('早期记忆')))
+    assert.ok(logs.some(message => message.includes('Dream 上下文压缩模型响应') && message.includes('早期结论与相关 ID')))
     const compressionInput = JSON.stringify(compressionRequests[0]!.messages)
     assert.ok(
         compressionInput.includes('早期记忆'),
@@ -402,14 +410,14 @@ it('uses only reported input for the threshold, without local estimates', async 
     )
     history.startBatch('旧'.repeat(310_000))
     history.startBatch('当前完整字段')
-    assert.equal((await history.prepareMessages(990_000)).length, 3)
+    assert.equal((await history.prepareMessages(990_000)).length, 2)
     history.recordUsage({ inputTokens: 199_999 })
-    assert.equal((await history.prepareMessages(990_000)).length, 3)
+    assert.equal((await history.prepareMessages(990_000)).length, 2)
     assert.equal(calls, 0)
     history.recordUsage({ inputTokens: 200_000 })
     const compressed = await history.prepareMessages(990_000)
     assert.match(
-        String((compressed[1]!.content[0] as { text: string }).text),
+        String((compressed[0]!.content[0] as { text: string }).text),
         /dream_history_summary/u
     )
     assert.equal(calls, 1)
@@ -442,7 +450,7 @@ it('leaves old history intact after a failed compression', async () => {
     fail = false
     const messages = await history.prepareMessages(990_000)
     assert.equal(
-        String((messages[2]!.content[0] as { text: string }).text),
+        String((messages[1]!.content[0] as { text: string }).text),
         '当前完整字段'
     )
 })
@@ -455,12 +463,15 @@ it('rejects oversized input instead of letting the host drop current batch messa
         logger().logger
     )
     history.startBatch('当前完整字段'.repeat(1000))
-    history.history.messages.push({
+    history.messages.push({
         role: 'user',
         content: [{ type: 'text', text: '继续' }]
     })
+    const budget = history.messages.reduce((size, entry) => size + estimateMessageTokens(entry),
+        estimateMessageTokens({ content: [{ type: 'text', text: 'system' }] }))
+    await history.prepareMessages(budget)
     await assert.rejects(
-        history.prepareMessages(100),
+        history.prepareMessages(budget - 1),
         /输入超过模型可用预算/u
     )
 })

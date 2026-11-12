@@ -75,22 +75,16 @@ it('isolates sink failures from callers', () => {
     assert.match(String(warnings[0]?.[0]), /日志输出失败/u)
 })
 
-it('formats multi-line blocks with headings and fields', () => {
+it('preserves line breaks in prompt text and separates consecutive messages', () => {
     const captured = createLogger(true)
     captured.log.diagnosticSummary(() => ({
-        event: '模型输入',
-        detail: '预设：surtur',
+        event: '召回模型调用',
+        detail: '调用序号：1',
         blocks: [
-            {
-                title: '系统消息',
-                fields: { attempt: 1 },
-                key: 'system',
-                value: { nested: ['a'] }
-            }
+            { title: '系统提示词', value: '第一行\n第二行' },
+            { title: '消息 1 · user', value: '用户输入' }
         ]
     }))
-
-    const message = String(captured.info[0]?.[0])
-    assert.match(message, /========系统消息 attempt：1========/u)
-    assert.match(message, /"nested": \[/u)
+    assert.equal(captured.info[0]?.[0],
+        '事件：召回模型调用; 调用序号：1\n========系统提示词========\n第一行\n第二行\n\n========消息 1 · user========\n用户输入')
 })

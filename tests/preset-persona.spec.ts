@@ -1,15 +1,14 @@
 import assert from 'node:assert/strict'
 import type { Context } from 'cordis'
-import { ModelError, ProtocolError } from '@chatluna/ai'
+import { ModelError } from '@chatluna/ai'
 import type { PresetPersonaRecord } from '../src/contracts/memory.ts'
 import type { PresetPersonaWriteInput } from '../src/service/persistence/preset_personas.ts'
-import { personaCardResultTool } from '../src/service/prompts/memory_tools.ts'
 import {
     LivingMemoryPresetPersonaService,
     hashPresetText,
     splitLines
 } from '../src/service/memory/preset_persona.ts'
-import { createCapturedLogger } from './workflow-test-utils.ts'
+import { createCapturedLogger, createStructuredChat } from './workflow-test-utils.ts'
 
 const presetText = [
     '你是所长，一个年轻可爱的女孩子。',
@@ -71,8 +70,11 @@ const createHarness = (
     const presetTexts = new Map<string, string>(
         Object.entries(options.presetTexts ?? {})
     )
-    const invocations: { system: string; prompt: string }[] = []
     const pending = [...responses]
+    const { chat, calls: invocations } = createStructuredChat(async () => {
+        await options.modelGate?.wait()
+        return pending.shift()
+    })
     const repository = {
         getPresetPersona: async (presetId: string) => rows.get(presetId),
         listPresetPersonas: async () => [...rows.values()],
@@ -104,31 +106,7 @@ const createHarness = (
                 }
             ]
         },
-        chatluna: {
-            extract: async (
-                _schema: unknown,
-                payload: { system: string; prompt: string }
-            ) => {
-                await options.modelGate?.wait()
-                invocations.push({
-                    system: payload.system,
-                    prompt: payload.prompt
-                })
-                const response = pending.shift()
-                if (response === undefined) {
-                    throw new Error('missing fake model response')
-                }
-                if (response instanceof Error) throw response
-                // `extract` 在真实调用里会先按 schema 校验再返回，这里走同一条路径。
-                try {
-                    return personaCardResultTool.schema(response)
-                } catch (error) {
-                    throw new ProtocolError({
-                        message: `extract: model output failed schema validation: ${String(error)}`
-                    })
-                }
-            }
-        }
+        chatluna: { chat }
     } as unknown as Context
     const service = new LivingMemoryPresetPersonaService(
         ctx,

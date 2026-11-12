@@ -46,7 +46,7 @@ export const Config: Schema<Config> = Schema.intersect([
         debug: Schema.boolean()
             .label('调试日志')
             .description(
-                '记录召回、提取、Dream 每次模型调用的完整提示词、原始响应与诊断事件。'
+                '记录 LivingMemory 每次调用对话模型时的提示词、消息、可用工具和模型响应。'
             )
             .default(DEFAULT_CONFIG.debug)
     }).description('基础配置'),

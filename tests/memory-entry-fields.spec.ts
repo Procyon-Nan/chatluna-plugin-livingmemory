@@ -10,9 +10,8 @@ import {
 } from '../src/service/memory/entry_fields.ts'
 import { LivingMemoryRepository } from '../src/service/persistence/repository.ts'
 import { LivingMemoryExtractor } from '../src/service/workflows/extraction/extractor.ts'
-import { extractionResultTool } from '../src/service/prompts/memory_tools.ts'
 import { withLivingMemoryRepository } from './persistence-test-utils.ts'
-import { logger } from './workflow-test-utils.ts'
+import { createStructuredChat, logger } from './workflow-test-utils.ts'
 
 const keywordInput = () => [
     '  alpha  ',
@@ -67,13 +66,9 @@ it('applies shared field rules to extracted memories', async () => {
             }
         ]
     }
-    // `chatluna.extract` 用工具 schema 校验并规整结果，这里照同一条路径取值，
-    // 覆盖字段规范化在真实调用链上的效果。
     const ctx = {
         ai: { chat: () => ({ bind: async () => ({}) }) },
-        chatluna: {
-            extract: async () => extractionResultTool.schema(raw)
-        }
+        chatluna: createStructuredChat(() => raw)
     } as unknown as Context
     const extractor = new LivingMemoryExtractor(ctx, 'test-model')
 

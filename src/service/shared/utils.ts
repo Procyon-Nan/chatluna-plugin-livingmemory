@@ -40,31 +40,3 @@ export const toError = (error: unknown) => {
     }
     return new Error(String(error))
 }
-
-/**
- * 提取模型消息正文的纯文本：多分片内容仅拼接 text 分片，其余形式序列化为 JSON。
- */
-export const stringifyModelContent = (content: unknown) => {
-    if (typeof content === 'string') {
-        return content
-    }
-
-    if (Array.isArray(content)) {
-        return content
-            .map((part) => {
-                if (
-                    part != null &&
-                    typeof part === 'object' &&
-                    (part as Record<string, unknown>).type === 'text' &&
-                    typeof (part as Record<string, unknown>).text === 'string'
-                ) {
-                    return (part as { text: string }).text
-                }
-
-                return ''
-            })
-            .join('')
-    }
-
-    return JSON.stringify(content) ?? ''
-}

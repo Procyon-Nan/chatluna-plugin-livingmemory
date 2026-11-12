@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import type { Context } from 'cordis'
+import type { ChatOptions as ChatInvocation } from '@chatluna/ai-runtime/ops'
+import { ModelId, ProviderId } from '@chatluna/symbol'
 import type { ChatBlock, ChatSpecMessage, ChatToolCallBlock } from '@chatluna/message'
 import { deepFreeze } from '@chatluna/utils/kit'
 import { LivingMemoryLogger } from '../src/service/logging/logger.ts'
@@ -23,13 +25,6 @@ interface Fold {
 }
 
 type ScriptedResponse = Fold | Error
-
-interface ChatInvocation {
-    model?: string
-    system?: string
-    messages: readonly ChatSpecMessage[]
-    toolSpecs?: readonly { name: string }[]
-}
 
 interface SearchInvocation {
     presetId: string
@@ -119,10 +114,15 @@ const createHarness = (options: HarnessOptions) => {
         chatluna: {
             chat: async (request: ChatInvocation) => {
                 invocations.push(deepFreeze(request))
+                await request.beforeDispatch?.({
+                    system: `框架转换后：${request.system}`,
+                    messages: request.messages,
+                    ...(request.toolSpecs && { tools: request.toolSpecs })
+                }, { provider: ProviderId('test'), model: ModelId('model') }, { degradations: [] })
                 const next = responses.shift()
                 if (next === undefined) throw new Error('missing fake response')
                 if (next instanceof Error) throw next
-                return next
+                return { ...next, finish: { kind: next.toolCalls.length ? 'tool-calls' : 'stop' } }
             }
         }
     } as unknown as Context
@@ -154,6 +154,7 @@ const createHarness = (options: HarnessOptions) => {
     const saved: string[] = []
     return {
         invocations,
+        debugMessages,
         searchInvocations,
         saved,
         run: () =>
@@ -201,6 +202,12 @@ it('runs one search then commits the snapshot', async () => {
     assert.ok(input.includes('<chat_history>\n' + chatHistory + '\n</chat_history>'))
     assert.equal(input.split('记忆查询').length - 1, 1)
     assert.equal(harness.invocations.length, 2)
+    const calls = harness.debugMessages.filter(message => message.startsWith('事件：召回模型调用;'))
+    assert.equal(calls.length, 2)
+    assert.match(calls[0]!, /框架转换后：/u)
+    assert.doesNotMatch(calls[0]!, /content-memory-1/u)
+    assert.match(calls[1]!, /content-memory-1/u)
+    assert.ok(harness.debugMessages.some(message => message.startsWith('事件：召回模型响应;') && message.includes(memorySearchTool.name)))
     assert.equal(harness.invocations[0]?.model, config.subModel)
     assert.match(String(harness.invocations[0]?.system), /你是助手&lt;&amp;/u)
     assert.equal(

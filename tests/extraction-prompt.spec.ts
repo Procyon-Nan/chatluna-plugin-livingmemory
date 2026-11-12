@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict'
 import type { Context } from 'cordis'
-import { ProtocolError } from '@chatluna/ai'
 import { MAX_MEMORY_KEYWORDS } from '../src/service/memory/entry_fields.ts'
-import { extractionResultTool } from '../src/service/prompts/memory_tools.ts'
 import { LivingMemoryExtractor } from '../src/service/workflows/extraction/extractor.ts'
-import { logger } from './workflow-test-utils.ts'
+import { createStructuredChat, logger } from './workflow-test-utils.ts'
 
 const completeMemory = {
     type: 'fact',
@@ -22,42 +20,15 @@ const context = {
     speakers: [{ speakerLabel: '张三', speakerKey: 'speaker-key' }]
 }
 
-/**
- * 提取走 `chatluna.extract`：schema 在框架内部校验，未通过的调用以
- * `ProtocolError` 抛出并进入纠正重试。这里按回答序列返回结果或错误，
- * 同时记下每次调用实际收到的提示词。
- */
 const createExtraction = (
     responses: unknown[],
     scope: Partial<typeof context> = {}
 ) => {
     const pending = [...responses]
-    const calls: { prompt: string; system: string }[] = []
+    const { chat, calls } = createStructuredChat(() => pending.shift())
     const ctx = {
         ai: { chat: () => ({ bind: async () => ({}) }) },
-        chatluna: {
-            extract: async (
-                schema: (value: unknown) => unknown,
-                options: { prompt: string; system: string }
-            ) => {
-                calls.push({ prompt: options.prompt, system: options.system })
-                const response = pending.shift()
-                if (response === undefined) {
-                    throw new Error('missing fake model response')
-                }
-                // 与框架一致：schema 校验在 extract 内部完成，失败以
-                // `ProtocolError` 抛出，调用方拿不到原始值。
-                try {
-                    return schema(response)
-                } catch (error) {
-                    throw new ProtocolError({
-                        message: `extract: model output failed schema validation: ${
-                            error instanceof Error ? error.message : String(error)
-                        }`
-                    })
-                }
-            }
-        }
+        chatluna: { chat }
     } as unknown as Context
 
     return {

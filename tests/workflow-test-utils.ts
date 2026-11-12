@@ -1,3 +1,5 @@
+import type { ChatOptions } from '@chatluna/ai-runtime/ops'
+import { ModelId, ProviderId } from '@chatluna/symbol'
 import type { JobRepository } from '../src/contracts/workflows.ts'
 import type {
     AgenticMemorySnapshotItem,
@@ -13,7 +15,23 @@ export const logger = new LivingMemoryLogger(
     { info: () => {}, warn: () => {}, error: () => {} } as never,
     () => true
 )
-export const debug = () => {}
+
+export function createStructuredChat(nextResponse: () => unknown) {
+    const calls: { prompt: string; system: string; model?: string }[] = []
+    const chat = async ({ system, messages, model, beforeDispatch }: ChatOptions) => {
+        const input = messages[0]?.content[0]
+        if (input?.type !== 'text') throw new Error('expected a text prompt')
+        calls.push({ system: system ?? '', prompt: input.text, ...(model && { model }) })
+        await beforeDispatch?.({ messages, ...(system && { system }) },
+            { provider: ProviderId('test'), model: ModelId(model ?? 'default') }, { degradations: [] })
+        const response = await nextResponse()
+        if (response === undefined) throw new Error('missing fake model response')
+        if (response instanceof Error) throw response
+        const text = typeof response === 'string' ? response : JSON.stringify(response)
+        return { text, content: [{ type: 'text', text }], finish: { kind: 'stop' } }
+    }
+    return { chat, calls }
+}
 
 export const createCapturedLogger = (debugEnabled = true) => {
     const info: string[] = []

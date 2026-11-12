@@ -514,8 +514,7 @@ export class LivingMemoryExtractionCoordinator {
             return false
         }
 
-        // 结果工具在一次纠正重试后仍无法通过校验：持久化失败记录，
-        // 使任务列表如实反映“结构化输出失败”而非“抽取 0 条”。
+        // 校验失败的批次要保留失败记录，与正常提取到零条记忆区分。
         if (result.parseError != null) {
             const parseError = result.parseError
             logger.summary(

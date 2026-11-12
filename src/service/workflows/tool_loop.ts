@@ -1,11 +1,11 @@
 import type { ChatSpecMessage } from '@chatluna/ai'
-import type {} from '@chatluna/ai-runtime/ops'
+import type { ChatResult } from '@chatluna/ai-runtime/ops'
 import type { Context } from 'cordis'
-import type { ChatBlock, ChatToolCallBlock, JsonSchemaNode } from '@chatluna/message'
+import type { JsonSchemaNode } from '@chatluna/message'
 import { schemasteryToJsonSchemaNode } from '@chatluna/schema'
 import { formatErrorDetails } from '../shared/utils.ts'
 import { formatLogScope, type LivingMemoryLogger } from '../logging/logger.ts'
-import { modelStageLabels } from '../logging/model_calls.ts'
+import { modelCallLogging, modelStageLabels } from '../logging/model_calls.ts'
 import {
     runLivingMemoryToolCall,
     textBlocks,
@@ -13,39 +13,25 @@ import {
     type LivingMemoryLoopTool
 } from './tool_call.ts'
 
-export interface LivingMemoryChatFold {
-    content: readonly ChatBlock[]
-    text: string
-    toolCalls: readonly ChatToolCallBlock[]
-    usage?: { inputTokens?: number }
-}
-
-export interface LivingMemoryToolLoopOptions {
+export type LivingMemoryToolLoopOptions = {
     ctx: Context
     model: string
     system: string
-    /** 首条用户消息；传入 `history` 时由调用方自行决定是否写入。 */
-    input: string
     tools: readonly LivingMemoryLoopTool[]
     logger: LivingMemoryLogger
     stage: 'recall' | 'dream'
-    /** 沿用调用方的历史（Dream 的跨批次会话）；缺省时循环自建。 */
-    history?: LivingMemoryChatHistory
     /**
      * 一次响应里出现多个工具调用时的处理：`reject` 整轮丢弃并追加纠正消息
      * （召回要求逐个提交）；`sequential` 依次执行（Dream 允许一次改多条）。
      */
     multipleToolCalls?: 'reject' | 'sequential'
     /** 每轮模型调用结束后回调，用于记录用量。 */
-    onModelCall?(response: { fold: LivingMemoryChatFold; step: number }): void
+    onModelCall?(result: ChatResult): void
     /** 取消信号：每轮模型调用与每次工具执行前检查。 */
     signal?: AbortSignal
-    /** 发起下一轮前决定实际发送的消息（可压缩历史）；返回 undefined 表示沿用历史。 */
-    prepareMessages?(
-        messages: readonly ChatSpecMessage[],
-        step: number
-    ): Promise<readonly ChatSpecMessage[] | undefined>
-}
+    /** 发起下一轮前准备历史，例如压缩早期批次。 */
+    prepareMessages?(): Promise<readonly ChatSpecMessage[]>
+} & ({ input: string } | { history: LivingMemoryChatHistory })
 
 const missingToolCallMessage =
     '你必须调用任务限定的工具提交结果。不要输出普通文本、Markdown 或解释说明。'
@@ -60,12 +46,8 @@ export class LivingMemoryToolLoop {
     private readonly toolsByName: Map<string, LivingMemoryLoopTool>
 
     constructor(private readonly options: LivingMemoryToolLoopOptions) {
-        this.history = options.history ?? { messages: [] }
-        if (options.history === undefined) {
-            this.history.messages.push({
-                role: 'user',
-                content: textBlocks(options.input)
-            })
+        this.history = 'history' in options ? options.history : {
+            messages: [{ role: 'user', content: textBlocks(options.input) }]
         }
         this.specs = options.tools.map((tool) => ({
             name: tool.name,
@@ -97,12 +79,10 @@ export class LivingMemoryToolLoop {
     async runRound(step: number): Promise<string[]> {
         const { signal, prepareMessages, onModelCall } = this.options
         signal?.throwIfAborted()
-        const messages =
-            (await prepareMessages?.(this.history.messages, step)) ??
-            this.history.messages
+        const messages = prepareMessages ? await prepareMessages() : this.history.messages
         const fold = await this.callModel(messages, step)
         signal?.throwIfAborted()
-        onModelCall?.({ fold, step })
+        onModelCall?.(fold)
 
         if (fold.toolCalls.length === 0) {
             this.history.messages.push({
@@ -153,39 +133,22 @@ export class LivingMemoryToolLoop {
     private async callModel(
         messages: readonly ChatSpecMessage[],
         step: number
-    ): Promise<LivingMemoryChatFold> {
+    ): Promise<ChatResult> {
         const { ctx, model, logger } = this.options
-        const stage = modelStageLabels[this.options.stage]
-        logger.diagnosticSummary((fields) => ({
-            event: `${stage}模型调用`,
-            detail: `${formatLogScope(fields)}; 模型：${model}; 调用序号：${step}`
-        }))
+        const log = modelCallLogging(logger, this.options.stage, step)
         try {
             const fold = await ctx.chatluna.chat({
                 model,
                 system: this.options.system,
                 messages: [...messages],
-                toolSpecs: this.specs
+                toolSpecs: this.specs,
+                beforeDispatch: log.beforeDispatch
             })
-            logger.diagnosticSummary((fields) => {
-                if (fold.toolCalls.length === 0) return undefined
-                return {
-                    event: `${stage}模型响应`,
-                    detail: `${formatLogScope(fields)}; 工具调用：${fold.toolCalls
-                        .map((call) => call.toolName)
-                        .join('、')}`,
-                    blocks: fold.toolCalls.map((call) => ({
-                        title: '工具调用',
-                        subtitle: `${call.toolName}:${call.toolCallId}`,
-                        key: 'args',
-                        value: call.input
-                    }))
-                }
-            })
+            log.response(fold)
             return fold
         } catch (error) {
             logger.diagnosticSummary((fields) => ({
-                event: `${stage}模型调用失败`,
+                event: `${modelStageLabels[this.options.stage]}模型调用失败`,
                 detail: `${formatLogScope(fields)}; 模型：${model}; 调用序号：${step}; 原因：${formatErrorDetails(error)}`
             }))
             throw error

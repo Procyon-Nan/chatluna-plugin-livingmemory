@@ -1,5 +1,6 @@
 import type { Logger } from 'cordis'
 import type { MemoryScope } from '../../contracts/memory.ts'
+import { toError } from '../shared/utils.ts'
 
 type LogScope = Partial<
     Pick<MemoryScope, 'presetId' | 'conversationId' | 'isDirect' | 'userId' | 'guildId' | 'channelId'>
@@ -27,10 +28,7 @@ export const formatLogScope = (scope: LogScope) => {
 
 export interface LivingMemoryLogBlock {
     title: string
-    subtitle?: string
     value: unknown
-    key?: string
-    fields?: LivingMemoryLogFields
 }
 
 export type LivingMemoryLogSink = Pick<Logger, 'info' | 'warn' | 'error'>
@@ -42,9 +40,6 @@ interface LivingMemoryLoggerState {
 
 const credentialKeyPattern =
     /(?:authorization|api[-_]?key|access[-_]?token|refresh[-_]?token|(?:^|[-_])token(?:$|[-_])|password|secret)/iu
-const bareValuePattern = /^[\p{L}\p{N}._:/@*+-]+$/u
-
-const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)))
 
 const normalizeValue = (value: unknown, key: string, seen: WeakSet<object>): unknown => {
     if (credentialKeyPattern.test(key)) {
@@ -94,40 +89,10 @@ const normalizeValue = (value: unknown, key: string, seen: WeakSet<object>): unk
     }
 }
 
-const stringifyNormalized = (
-    value: unknown,
-    key: string,
-    options: { indent?: number; bareStringsOnly: boolean }
-) => {
-    const normalized = normalizeValue(value, key, new WeakSet())
-    if (typeof normalized === 'string' && (!options.bareStringsOnly || bareValuePattern.test(normalized))) {
-        return normalized
-    }
-    const serialized = JSON.stringify(normalized, null, options.indent)
-    return serialized === undefined ? '"[unserializable]"' : serialized
-}
-
-const formatValue = (value: unknown, key: string) => stringifyNormalized(value, key, { bareStringsOnly: true })
-
-const formatBlockValue = (value: unknown, key: string) =>
-    stringifyNormalized(value, key, { indent: 2, bareStringsOnly: false })
-
-const formatFields = (fields: LivingMemoryLogFields) =>
-    Object.entries(fields)
-        .filter(([, value]) => value !== undefined)
-        .map(([key, value]) => `${key}：${formatValue(value, key)}`)
-        .join('; ')
-
-const formatBlock = (block: LivingMemoryLogBlock) => {
-    const title = block.title.replace(/\r?\n/gu, ' ')
-    const detail = formatFields(block.fields ?? {})
-    const heading = detail.length > 0 ? `${title} ${detail}` : title
-    const lines = [`========${heading}========`]
-    if (block.subtitle != null) {
-        lines.push(block.subtitle.replace(/\r?\n/gu, ' '))
-    }
-    lines.push(formatBlockValue(block.value, block.key ?? ''))
-    return lines.join('\n')
+function formatBlock({ title, value }: LivingMemoryLogBlock) {
+    const normalized = normalizeValue(value, '', new WeakSet())
+    const body = typeof normalized === 'string' ? normalized : JSON.stringify(normalized, null, 2)
+    return `========${title}========\n${body}`
 }
 
 export class LivingMemoryLogger {
@@ -150,13 +115,11 @@ export class LivingMemoryLogger {
     diagnosticSummary(
         render: (
             context: LivingMemoryLogFields
-        ) => { event: string; detail: string; blocks?: LivingMemoryLogBlock[] } | undefined
+        ) => { event: string; detail: string; blocks?: LivingMemoryLogBlock[] }
     ) {
         if (!this.isDebugEnabled()) return
         try {
-            const rendered = render(this.context)
-            if (rendered === undefined) return
-            const { event, detail, blocks } = rendered
+            const { event, detail, blocks } = render(this.context)
             let content = detail
             if (blocks?.length) {
                 content += '\n' + blocks.map(formatBlock).join('\n\n')

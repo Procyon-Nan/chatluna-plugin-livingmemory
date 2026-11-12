@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createStructuredChat } from './workflow-test-utils.ts'
 import type { Context } from 'cordis'
 import { LivingMemoryLogger } from '../src/service/logging/logger.ts'
 import type {
@@ -50,7 +51,6 @@ const createHarness = (
     const reviewedProfiles: { profileId: string; sourceMemoryIds: string[] }[] =
         []
     const debugMessages: string[] = []
-    const invocations: { system: string; prompt: string }[] = []
     const existingProfiles: UserProfileRecord[] = []
     if (options.existingSourceMemoryIds != null) {
         existingProfiles.push({
@@ -94,25 +94,12 @@ const createHarness = (
         deleteUserProfile: async () => {}
     }
     let pending: unknown[] = []
+    const { chat, calls: invocations } = createStructuredChat(() => pending.shift())
 
     const ctx = {
         ai: { chat: () => ({ bind: async () => ({}) }) },
         presets: { get: (id: string) => options.presets?.[id] },
-        chatluna: {
-            extract: async (
-                _schema: unknown,
-                payload: { system: string; prompt: string }
-            ) => {
-                invocations.push({
-                    system: payload.system,
-                    prompt: payload.prompt
-                })
-                if (pending.length === 0) {
-                    throw new Error('missing fake model response')
-                }
-                return pending.shift()
-            }
-        }
+        chatluna: { chat }
     } as unknown as Context
     const service = new LivingMemoryUserProfileService(
         ctx,

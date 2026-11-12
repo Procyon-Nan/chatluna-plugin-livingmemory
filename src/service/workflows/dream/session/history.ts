@@ -1,15 +1,12 @@
+import { addAbortListener } from 'node:events'
 import type { ChatSpecMessage } from '@chatluna/ai'
 import type {} from '@chatluna/ai-runtime/ops'
 import type { Context } from 'cordis'
 import { estimateMessageTokens } from '@chatluna/utils'
-import type {
-    LivingMemoryLogger,
-    LivingMemoryLogFields
-} from '../../../logging/logger.ts'
-import { formatLogScope } from '../../../logging/logger.ts'
+import { formatLogScope, type LivingMemoryLogger } from '../../../logging/logger.ts'
+import { modelCallLogging } from '../../../logging/model_calls.ts'
 import { buildDreamHistorySummaryPrompts } from '../../../prompts/dream.ts'
 import { formatXmlBlock } from '../../../prompts/prompt_format.ts'
-import { stringifyModelContent } from '../../../shared/utils.ts'
 import { textBlocks, type LivingMemoryChatHistory } from '../../tool_call.ts'
 
 /** 达到该输入量即压缩更早批次；低于此值的会话不做处理。 */
@@ -21,9 +18,10 @@ export const dreamCompressionThreshold = 200_000
  *
  * 历史对象直接交给工具循环持有，循环在它上面追加消息。
  */
-export class DreamSessionHistory {
-    readonly history: LivingMemoryChatHistory = { messages: [] }
-    private batchStart = 1
+export class DreamSessionHistory implements LivingMemoryChatHistory {
+    messages: ChatSpecMessage[] = []
+    private readonly systemTokens: number
+    private batchStart = 0
     private inputTokens: number | undefined
     private compressions = 0
 
@@ -33,14 +31,8 @@ export class DreamSessionHistory {
         systemPrompt: string,
         private readonly logger: LivingMemoryLogger
     ) {
-        this.history.messages.push({
-            role: 'system',
-            content: textBlocks(systemPrompt)
-        })
-    }
-
-    private get messages(): ChatSpecMessage[] {
-        return this.history.messages
+        // 系统词通过 chat.system 单独发送，计入预算一次。
+        this.systemTokens = estimateMessageTokens({ content: textBlocks(systemPrompt) })
     }
 
     /** 记录上一轮模型上报的输入量；缺失或无效时保留上一次有效值。 */
@@ -79,51 +71,51 @@ export class DreamSessionHistory {
         signal?.throwIfAborted()
         const tokens = this.messages.reduce(
             (total, message) => total + estimateMessageTokens(message),
-            0
+            this.systemTokens
         )
         if (tokens > maxTokenLimit) {
             throw new Error(`Dream 输入超过模型可用预算：${tokens} tokens。`)
         }
-        return [...this.messages]
+        return this.messages
     }
 
     private async summarizeEarlierBatches(
         tokensBefore: number,
         signal?: AbortSignal
     ) {
-        if (this.batchStart <= 1) {
+        if (this.batchStart === 0) {
             throw new Error(
                 '当前 Dream 批次已达到 200k，且没有可压缩的更早批次。'
             )
         }
         const transcript = JSON.stringify(
-            this.messages.slice(1, this.batchStart)
+            this.messages.slice(0, this.batchStart)
         )
         const attempt = ++this.compressions
-        this.logger.diagnosticSummary((fields: LivingMemoryLogFields) => ({
+        this.logger.diagnosticSummary((fields) => ({
             event: 'Dream 上下文压缩开始',
             detail: `${formatLogScope(fields)}; 压缩序号：${attempt}; 压缩前输入量：${tokensBefore} tokens`
         }))
         const prompt = buildDreamHistorySummaryPrompts(transcript)
         signal?.throwIfAborted()
+        const log = modelCallLogging(this.logger, 'dream-compression', attempt)
         const run = this.ctx.chatluna.chat({
             model: this.model,
             system: prompt.systemPrompt,
             messages: [
                 { role: 'user', content: textBlocks(prompt.inputPrompt) }
-            ]
+            ],
+            beforeDispatch: log.beforeDispatch
         })
-        if (signal !== undefined) {
-            signal.addEventListener('abort', () => run.abort(), { once: true })
-        }
+        using cancellation = signal && addAbortListener(signal, () => run.abort(signal.reason))
         const fold = await run
+        log.response(fold)
         signal?.throwIfAborted()
-        const summary = stringifyModelContent(fold.content).trim()
+        const summary = fold.text.trim()
         if (!summary) {
             throw new Error('Dream 历史压缩未返回有效摘要。')
         }
-        this.history.messages = [
-            this.messages[0]!,
+        this.messages = [
             {
                 role: 'user',
                 content: textBlocks(
@@ -132,10 +124,10 @@ export class DreamSessionHistory {
             },
             ...this.messages.slice(this.batchStart)
         ]
-        this.batchStart = 2
+        this.batchStart = 1
         // 摘要请求的 usage 与保留的旧响应都不代表新上下文大小。
         this.inputTokens = undefined
-        this.logger.diagnosticSummary((fields: LivingMemoryLogFields) => ({
+        this.logger.diagnosticSummary((fields) => ({
             event: 'Dream 上下文压缩完成',
             detail: `${formatLogScope(fields)}; 压缩序号：${attempt}; 压缩前输入量：${tokensBefore} tokens`
         }))

@@ -1,20 +1,16 @@
-import type { Schema } from '@chatluna/schema'
+import { addAbortListener } from 'node:events'
+import { schemasteryToJsonSchema, type Schema } from '@chatluna/schema'
 import type { Context } from 'cordis'
 import { ProtocolError } from '@chatluna/ai'
-import type {} from '@chatluna/ai-runtime/ops'
+import { extractJsonValue } from '@chatluna/ai-runtime/ops'
 import type {} from '@chatluna/core'
 import { formatErrorDetails } from '../shared/utils.ts'
 import { formatLogScope, type LivingMemoryLogger } from '../logging/logger.ts'
-import { modelStageLabels } from '../logging/model_calls.ts'
+import { modelCallLogging, modelStageLabels } from '../logging/model_calls.ts'
 
 const structuredOutputMaxModelCalls = 3
 
-export interface StructuredOutputLogging {
-    logger: LivingMemoryLogger
-    stage: keyof typeof modelStageLabels
-}
-
-export interface StructuredOutputOptions<T> {
+interface StructuredOutputOptions<T> {
     ctx: Context
     schema: Schema<any, T>
     systemPrompt: string
@@ -25,12 +21,23 @@ export interface StructuredOutputOptions<T> {
     validateResult?: (value: T) => string | undefined
     /** 数组被错误地写成字符串时，在修正提示里点名该字段。 */
     stringifiedArrayField?: string
-    logging?: StructuredOutputLogging
+    logging: { logger: LivingMemoryLogger; stage: 'memory-extraction' | 'persona-card' | 'user-profile' }
 }
 
-export type StructuredOutputResult<T> =
+type StructuredOutputResult<T> =
     | { value: T; output: string; parseError: null }
     | { value: null; output: string; parseError: string }
+
+function parseStructuredResponse<T>(schema: Schema<any, T>, text: string): T {
+    const json = extractJsonValue(text)
+    if (json === undefined) {
+        throw new ProtocolError({ message: 'extract: model output did not contain a JSON value' })
+    }
+    const parsed = schema.safeParse(json)
+    if (parsed.success) return parsed.data
+    const reason = parsed.error instanceof Error ? parsed.error.message : String(parsed.error)
+    throw new ProtocolError({ message: `extract: model output failed schema validation: ${reason}` })
+}
 
 /**
  * 调用结构化输出。取消信号在每次调用前检查，取消不进入修正重试。
@@ -40,21 +47,31 @@ export async function invokeStructuredOutput<T>(
     options: StructuredOutputOptions<T>
 ): Promise<StructuredOutputResult<T>> {
     const outputs: string[] = []
-    const { logging } = options
+    const { logging: { logger, stage }, signal } = options
     let correction: string | undefined
     let lastError = 'structured output failed'
+    const system = [
+        options.systemPrompt,
+        'Return ONLY a JSON value that validates against the following JSON Schema:',
+        JSON.stringify(schemasteryToJsonSchema(options.schema))
+    ].filter(Boolean).join('\n\n')
 
     for (let attempt = 1; attempt <= structuredOutputMaxModelCalls; attempt++) {
-        options.signal?.throwIfAborted()
+        signal?.throwIfAborted()
         const prompt = correction === undefined ? options.inputPrompt : `${options.inputPrompt}\n\n${correction}`
         try {
-            const value = await options.ctx.chatluna.extract(options.schema, {
-                prompt,
-                system: options.systemPrompt,
+            const log = modelCallLogging(logger, stage, attempt)
+            const run = options.ctx.chatluna.chat({
+                system,
+                messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
                 ...(options.model === undefined ? {} : { model: options.model }),
-                ...(options.signal === undefined ? {} : { signal: options.signal })
+                beforeDispatch: log.beforeDispatch
             })
-            options.signal?.throwIfAborted()
+            using cancellation = signal && addAbortListener(signal, () => run.abort(signal.reason))
+            const fold = await run
+            signal?.throwIfAborted()
+            log.response(fold)
+            const value = parseStructuredResponse(options.schema, fold.text)
             outputs.push(`[attempt ${attempt}]\n${JSON.stringify(value, null, 2)}`)
             const validationError = options.validateResult?.(value)
             if (validationError === undefined) {
@@ -62,13 +79,13 @@ export async function invokeStructuredOutput<T>(
             }
             lastError = validationError
         } catch (error) {
-            options.signal?.throwIfAborted()
+            signal?.throwIfAborted()
             if (!(error instanceof ProtocolError)) throw error
             lastError = formatErrorDetails(error)
             outputs.push(`[attempt ${attempt}]\n${lastError}`)
         }
-        logging?.logger.diagnosticSummary((fields) => ({
-            event: `${modelStageLabels[logging.stage]}结果解析失败`,
+        logger.diagnosticSummary((fields) => ({
+            event: `${modelStageLabels[stage]}结果解析失败`,
             detail: [
                 formatLogScope(fields),
                 `调用序号：${attempt}`,

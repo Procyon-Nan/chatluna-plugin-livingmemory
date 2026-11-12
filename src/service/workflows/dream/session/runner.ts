@@ -56,11 +56,6 @@ export async function runDreamSession(input: DreamSessionRunInput) {
         input.presetPrompt
     )
     const history = new DreamSessionHistory(ctx, model, systemPrompt, logger)
-    logger.diagnosticSummary((fields) => ({
-        event: 'Dream 会话开始',
-        detail: formatLogScope(fields),
-        blocks: [{ title: '系统消息', value: systemPrompt }]
-    }))
 
     while (advanceDreamBatch(state) !== undefined) {
         signal?.throwIfAborted()
@@ -95,22 +90,20 @@ export async function runDreamSession(input: DreamSessionRunInput) {
         history.startBatch(batchPrompt)
         batchLogger.diagnosticSummary((fields) => ({
             event: 'Dream 批次开始',
-            detail: `${formatLogScope(fields)}; 批次：${batch.id}; 总批次：${state.batches.length}; 记忆：${batch.entries.length} 条`,
-            blocks: [{ title: '用户消息', value: batchPrompt }]
+            detail: `${formatLogScope(fields)}; 批次：${batch.id}; 总批次：${state.batches.length}; 记忆：${batch.entries.length} 条`
         }))
 
         const loop = new LivingMemoryToolLoop({
             ctx,
             model,
             system: systemPrompt,
-            input: batchPrompt,
             tools,
             logger: batchLogger,
             stage: 'dream',
             multipleToolCalls: 'sequential',
-            history: history.history,
+            history,
             prepareMessages: () => history.prepareMessages(maxTokenLimit, signal),
-            onModelCall: ({ fold }) => history.recordUsage(fold.usage),
+            onModelCall: fold => history.recordUsage(fold.usage),
             ...(signal === undefined ? {} : { signal })
         })
         let ineffectiveRounds = 0
