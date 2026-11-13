@@ -94,9 +94,9 @@ export function formatLogJson(value: unknown, indent?: number) {
     return JSON.stringify(normalized, null, indent)
 }
 
-function formatBlock({ title, value }: LivingMemoryLogBlock) {
+export function formatLogBlock({ title, value }: LivingMemoryLogBlock) {
     const body = typeof value === 'string' ? value : formatLogJson(value, 2)
-    return `========${title}========\n${body}`
+    return `------------${title}------------\n${body}`
 }
 
 export class LivingMemoryLogger {
@@ -126,7 +126,7 @@ export class LivingMemoryLogger {
             const { event, detail, blocks } = render(this.context)
             let content = detail
             if (blocks?.length) {
-                content += '\n' + blocks.map(formatBlock).join('\n\n')
+                content += '\n' + blocks.map(formatLogBlock).join('\n\n')
             }
             this.summary(event, content)
         } catch (error) {

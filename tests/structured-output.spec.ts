@@ -178,7 +178,7 @@ it('logs the submitted tool arguments without reasoning, narration or tool defin
     })
     assert.deepEqual(result.value, { items: ['trimmed'] })
     const log = captured.info.join('\n')
-    assert.match(log, /========系统提示词========\nsystem\n\n========消息 1 · user========\ninput/u)
+    assert.match(log, /------------系统提示词------------\nsystem\n\n------------消息 1 · user------------\ninput/u)
     assert.ok(log.includes('submit_result\n' + JSON.stringify({ items: ['  trimmed  '] }, null, 2)))
     assert.doesNotMatch(log, /内部思考|模型多余旁白|Return ONLY|"properties"/u)
 })
@@ -194,7 +194,7 @@ it('logs each new correction even when its wording repeats, and resets between w
     assert.match(requests[0]!, /固定系统词[\s\S]*原始聊天/u)
     for (const i of [1, 2]) {
         assert.match(requests[i]!, /提交失败/u)
-        assert.doesNotMatch(requests[i]!, /固定系统词|原始聊天| · assistant========/u)
+        assert.doesNotMatch(requests[i]!, /固定系统词|原始聊天| · assistant------------/u)
         assert.equal(prompts[i]!.system, options.systemPrompt)
         assert.equal(prompts[i]!.prompt, options.inputPrompt)
     }

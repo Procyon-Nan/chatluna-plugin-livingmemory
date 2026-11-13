@@ -86,5 +86,5 @@ it('preserves line breaks in prompt text and separates consecutive messages', ()
         ]
     }))
     assert.equal(captured.info[0]?.[0],
-        '事件：召回模型调用; 调用序号：1\n========系统提示词========\n第一行\n第二行\n\n========消息 1 · user========\n用户输入')
+        '事件：召回模型调用; 调用序号：1\n------------系统提示词------------\n第一行\n第二行\n\n------------消息 1 · user------------\n用户输入')
 })

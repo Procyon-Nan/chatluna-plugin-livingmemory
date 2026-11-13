@@ -2,7 +2,7 @@ import { isCustomConversation, type RouteSettings } from '../../../routing.ts'
 import { isModelConfigured } from '../../shared/utils.ts'
 import { SerialTaskQueue } from '../../shared/serial_task_queue.ts'
 import { memorySourceId, scopeKey, snapshotScopeOf } from '../../memory/helpers.ts'
-import { formatLogScope, type LivingMemoryLogger } from '../../logging/logger.ts'
+import { formatLogBlock, formatLogScope, type LivingMemoryLogger } from '../../logging/logger.ts'
 import { renderSnapshotText } from '../../memory/snapshot/snapshot_text.ts'
 import { renderLivingMemoryTranscript } from '../../transcript/transcript_renderer.ts'
 import type { LivingMemoryAgenticRecallExecutor } from './agentic_recall.ts'
@@ -191,8 +191,7 @@ export class LivingMemoryRecallCoordinator {
                 '召回快照已更新',
                 [
                     `${formatLogScope(scope)}; 命中记忆：${updatedSnapshot.matchedMemories.length} 条`,
-                    '========召回快照========',
-                    renderSnapshotText([updatedSnapshot])
+                    formatLogBlock({ title: '召回快照', value: renderSnapshotText([updatedSnapshot]) })
                 ].join('\n')
             )
         } catch (error) {
