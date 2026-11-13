@@ -22,7 +22,7 @@ export const ROUTE_SCHEMA = Schema.object({
         Schema.const('preset').description('所有会话共享一个记忆快照')
     ]).default('conversation').label('记忆快照的使用范围')
         .description('开启「会话记忆隔离」时所有会话始终拥有一个独立记忆快照。'),
-    snapshotMaxLines: Schema.natural().min(5).max(50).default(5).label('记忆快照的最大行数'),
+    snapshotMaxLines: Schema.natural().min(5).max(50).default(10).label('记忆快照的最大行数'),
     enableConversationIsolation: Schema.boolean().default(false).label('会话记忆隔离')
         .description('记忆召回与记忆检索工具只检索来源于当前会话的记忆和全局记忆。'),
     enableSnapshotInjection: Schema.boolean().default(true).label('向 bot 注入记忆快照'),

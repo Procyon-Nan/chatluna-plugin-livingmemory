@@ -49,7 +49,7 @@ export const DEFAULT_CONFIG: LivingMemoryServiceConfig = {
     mainModel: '无',
     subModel: '无',
     userProfileMinMemoryCount: 3,
-    userProfileMemoryLimit: 20,
+    userProfileMemoryLimit: 30,
     embeddingModel: '无',
     rerankModel: '无',
     memorySearchToolMaxResults: 15,

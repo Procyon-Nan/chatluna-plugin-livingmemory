@@ -34,7 +34,7 @@ yarn build
 | 记忆自动召回的间隔 | `recallIntervalMessages` | `20` | bot 发完一轮回复后，按新增聊天条数判断是否在后台召回；`0` 关闭自动召回。 |
 | 用于召回记忆的聊天消息数 | `recallHistoryMessages` | `20` | 召回从本轮 bot 的最后一条回复向前读取，包含该回复。画像注入使用相同条数，以本轮唤醒为截止点。 |
 | 记忆快照的使用范围 | `snapshotScope` | `conversation` | 每一个会话拥有独立记忆快照（`conversation`）或所有会话共享一个记忆快照（`preset`）。开启「会话记忆隔离」时使用独立快照。 |
-| 记忆快照的最大行数 | `snapshotMaxLines` | `5` | 可设为 5—50 行。 |
+| 记忆快照的最大行数 | `snapshotMaxLines` | `10` | 可设为 5—50 行。 |
 | 会话记忆隔离 | `enableConversationIsolation` | `false` | 召回和检索工具只查当前会话的记忆和全局记忆。 |
 | 向 bot 注入记忆快照 | `enableSnapshotInjection` | `true` | 在对话中提供已召回的记忆。 |
 | 向 bot 注入用户画像 | `enableUserProfileInjection` | `false` | 在对话中提供最近聊天里发言人的已有画像。 |
@@ -76,7 +76,7 @@ yarn build
 | `enableUserProfileGeneration` | boolean | `true` | 提取后生成或更新画像 |
 | `enableDreamUserProfileGeneration` | boolean | `true` | Dream 后生成或更新画像 |
 | `userProfileMinMemoryCount` | number | `3` | 生成画像所需最少活跃记忆数 |
-| `userProfileMemoryLimit` | number | `20` | 送入模型的关联记忆上限 |
+| `userProfileMemoryLimit` | number | `30` | 送入模型的关联记忆上限 |
 
 ## 命令
 
