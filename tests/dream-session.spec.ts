@@ -201,6 +201,9 @@ it('drives the dream conversation with stable prefixes and paired tools', async 
     await run.run()
 
     assert.equal(run.requests.length, 2)
+    const followUpLog = run.logs.filter(line => line.startsWith('事件：Dream模型调用;'))[1]!
+    assert.match(followUpLog, /living_memory_update_memory（结果已在工具日志中显示）/u)
+    assert.match(followUpLog, /living_memory_checked_memory（结果已在工具日志中显示）/u)
     const progress = userTexts(run.requests[1]).at(-1)!
     assert.match(progress, /当前批次尚未处理的记忆 ID：b\n/u)
     assert.doesNotMatch(progress, /本轮模型请求或工具执行失败|次模型调用内未完成/u)
@@ -237,6 +240,22 @@ it('drives the dream conversation with stable prefixes and paired tools', async 
         assert.equal(request.model, 'test-model')
         assert.equal(request.toolSpecs?.length, 2)
     }
+})
+
+it('logs the new result when compression removes an older call to the same tool', async () => {
+    const run = createRun({
+        batches: ['a', ['b', 'c']],
+        respond: (request, index) => {
+            if (!request.toolSpecs) return textFold('已检查 a。')
+            if (index === 1) return callFold(check(['a'], 'check-a'))
+            if (index === 2) return { ...callFold(check(['b'], 'check-b')), usage: { inputTokens: 200_000 } }
+            return callFold(check(['c'], 'check-c'))
+        }
+    })
+    await run.run()
+
+    const lastRequest = run.logs.filter(line => line.startsWith('事件：Dream模型调用;')).at(-1)!
+    assert.match(lastRequest, /living_memory_checked_memory（结果已在工具日志中显示）/u)
 })
 
 it('keeps successful work, retries ineffective rounds and moves on after three consecutive failures', async () => {

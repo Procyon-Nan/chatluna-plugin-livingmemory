@@ -48,10 +48,14 @@ export class ModelCallLogs {
                 // 后续请求回放的工具调用，已随模型响应打印。
                 if (previous !== undefined && message.role === 'assistant') continue
                 const visible = message === foldedUser ? { ...message, content: message.content.slice(1) } : message
+                const entries = message.role === 'tool' && (this.stage === 'recall' || this.stage === 'dream')
+                    ? message.content.filter(block => block.type === 'tool-result').map(block => ({
+                        key: `tool-call:${block.toolCallId}`, value: `${block.toolName}（结果已在工具日志中显示）`
+                    }))
+                    : logMessageParts(visible, displayText).map(value => ({ key: `${message.role}\n${value}`, value }))
                 const parts: string[] = []
                 // 按出现次数比较：Dream 在历史末尾再次追加同一句指令时，也要打印。
-                for (const value of logMessageParts(visible, displayText)) {
-                    const key = `${message.role}\n${value}`
+                for (const { key, value } of entries) {
                     const count = (current.get(key) ?? 0) + 1
                     current.set(key, count)
                     if (index >= newMessagesFrom || count > (this.previousParts.get(key) ?? 0)) parts.push(value)
