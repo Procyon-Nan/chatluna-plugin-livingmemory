@@ -31,8 +31,8 @@ yarn build
 | 从聊天中提取记忆的间隔 | `extractionWindowMessages` | `60` | 按未提取的聊天消息条数计算（0—360）；`0` 关闭自动提取。 |
 | 允许群友闲聊触发记忆提取 | `extractionIncludeOverheard` | `false` | 开启后，群友闲聊达到设定条数就能触发提取；关闭时，等 bot 回复后再检查。 |
 | 是否在提取新记忆后进行 Dream 整理 | `enableAutoDream` | `true` | 自动提取保存新记忆后，由 Dream 检查是否需要整理。 |
-| 记忆自动召回的间隔 | `recallIntervalMessages` | `20` | bot 被唤醒时按新增聊天条数判断是否召回；`0` 关闭自动召回。 |
-| 用于召回记忆的聊天消息数 | `recallHistoryMessages` | `20` | 召回时最多读取多少条最近的聊天消息；画像注入也使用这段聊天记录。 |
+| 记忆自动召回的间隔 | `recallIntervalMessages` | `20` | bot 发完一轮回复后，按新增聊天条数判断是否在后台召回；`0` 关闭自动召回。 |
+| 用于召回记忆的聊天消息数 | `recallHistoryMessages` | `20` | 召回从本轮 bot 的最后一条回复向前读取，包含该回复。画像注入使用相同条数，以本轮唤醒为截止点。 |
 | 记忆快照的使用范围 | `snapshotScope` | `conversation` | 每一个会话拥有独立记忆快照（`conversation`）或所有会话共享一个记忆快照（`preset`）。开启「会话记忆隔离」时使用独立快照。 |
 | 记忆快照的最大行数 | `snapshotMaxLines` | `5` | 可设为 5—50 行。 |
 | 会话记忆隔离 | `enableConversationIsolation` | `false` | 召回和检索工具只查当前会话的记忆和全局记忆。 |

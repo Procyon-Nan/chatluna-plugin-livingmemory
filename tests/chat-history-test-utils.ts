@@ -3,11 +3,14 @@ import type { RouteIdentity } from '@chatluna/satori'
 
 export const historyScope = { conversationId: 'conv-1', sessionId: 'session-1', presetId: 'preset-1', platform: 'onebot' }
 
-export const historyMessage = (id: number, text: string, overrides: Partial<ObservedMessage> = {}): ObservedMessage => ({
-    id: ('route:m-' + id) as ObservedMessage['id'], platformMessageId: 'm-' + id, cid: 'onebot:c', routeId: 'route',
-    time: 1_000 + id, self: false, backfilled: false, userId: 'user-1', name: '用户A',
-    content: [{ type: 'text', text }], ...overrides
-})
+export function historyMessage(id: number, text: string, overrides: Partial<ObservedMessage> = {}): ObservedMessage {
+    const { routeId = 'route', platformMessageId = 'm-' + id } = overrides
+    return {
+        id: `${routeId}:${platformMessageId}` as ObservedMessage['id'], platformMessageId, routeId, cid: 'onebot:c',
+        time: 1_000 + id, self: false, backfilled: false, userId: 'user-1', name: '用户A',
+        content: [{ type: 'text', text }], ...overrides
+    }
+}
 
 export class FrameworkHistoryFixture {
     constructor(readonly conversationKey = historyScope.conversationId) {}

@@ -3,11 +3,11 @@ import { Context } from 'cordis'
 import Routing from '@chatluna/routing'
 import SchemaRegistry from '@chatluna/ui-schema-registry'
 import { routeIdOf } from '@chatluna/satori'
-import { registerRouteSettings, routeSettings } from '../src/routing.ts'
+import { registerRouteSettings, routeSettings, ROUTE_SCHEMA } from '../src/routing.ts'
 import type { SnapshotRepository } from '../src/contracts/workflows.ts'
 import { withLivingMemoryRepository } from './persistence-test-utils.ts'
 import type { RouteSettings } from '../src/routing.ts'
-import type { Agent } from '@chatluna/agent'
+import type { Agent, TurnReason } from '@chatluna/agent'
 import { ChatMessage, contentText } from '@chatluna/message'
 import { CallId, ModelId, ProviderId } from '@chatluna/symbol'
 import { absorb } from '@chatluna/chat-observer'
@@ -34,7 +34,7 @@ function createHarness(config: {
     snapshots?: Pick<SnapshotRepository, 'getLatestSnapshotByScope'>
     rules?: Partial<RouteSettings>
     settingsOf?: ConstructorParameters<typeof LivingMemoryConversationHooks>[1]['settingsOf']
-    onRecallModel?: (input: string) => void
+    onRecallModel?: (input: string) => void | Promise<void>
 } = {}) {
     const framework = new FrameworkHistoryFixture(config.conversationKey)
     const listeners = new Map<string, ((payload: any) => unknown)[]>()
@@ -81,7 +81,7 @@ function createHarness(config: {
             createFailedJob: createJobStore().createFailedJob,
             getLatestSnapshotByScope: async () => undefined,
             upsertSnapshot: async () => {}
-        }, { run: async (_settings, _scope, input) => { onModel(input); return null } }, captured.logger) : {
+        }, { run: async (_settings, _scope, input) => { await onModel(input); return null } }, captured.logger) : {
             queue: async (_settings: unknown, scope: ChatHistoryScope,
                 history: LivingMemoryTranscriptMessage[], position: number) => {
                 recalls.push({ scope, history, position })
@@ -147,7 +147,8 @@ function createHarness(config: {
             })
             return [...messages, ...appended]
         },
-        send: (ids: number[], turn = 1, originPreset = presetId) => emit('send', {
+        send: (ids: number[], turn = 1, originPreset = presetId, routeId = 'route') => emit('send', {
+            routeId,
             chatSent: { own: true, reply: { conversationKey: framework.conversationKey, sessionId, presetId: originPreset, turn },
                 messageIds: ids.map(id => 'm-' + id) }
         }),
@@ -157,7 +158,7 @@ function createHarness(config: {
             emit('chatluna/observed', { conversationKey: framework.conversationKey, sessionId, message })
             await settle()
         },
-        turn: async (target: Agent) => { emit('chatluna/agent-turn', { agent: target, reason: 'completed' }); await settle() },
+        turn: async (target: Agent, reason: TurnReason = 'completed') => { emit('chatluna/agent-turn', { agent: target, reason }); await settle() },
         switch: (nextPreset: string | undefined, nextSession = sessionId) => {
             const previous = { sessionId, presetId: headPresetId }
             presetId = nextPreset
@@ -180,7 +181,11 @@ describe('LivingMemoryConversationHooks', () => {
     it('uses the active preset display name for a bot mention in the waking chat', async () => {
         const h = createHarness()
         h.framework.messages.push(historyMessage(1, '@self 想我什么呀'))
-        await h.begin(h.agent(), 1)
+        const agent = h.agent()
+        await h.begin(agent, 1)
+        await h.send([2])
+        await h.observed(2, '答', { self: true })
+        await h.turn(agent)
         assert.equal(h.recalls[0].scope.presetId, 'preset-1')
         assert.deepEqual(h.recalls[0].history[0].contentLines, ['@所长 想我什么呀'])
     })
@@ -197,7 +202,11 @@ describe('LivingMemoryConversationHooks', () => {
             source: { kind: 'user', routeId: 'B' }, meta: { externalId: 'same' }
         })])
         assert.equal(h.hooks.contextForTurn(agent)?.routeId, 'B')
-        assert.deepEqual(h.recalls[0].history.map(row => row.contentLines), [['乙群上一条'], ['乙群唤醒']])
+        await h.send([4], 1, undefined, 'B')
+        await h.observed(4, '甲群同号回执', { self: true, routeId: 'A', cid: 'channel:A' })
+        await h.observed(4, '乙群答复', { self: true, routeId: 'B', cid: 'channel:B' })
+        await h.turn(agent)
+        assert.deepEqual(h.recalls[0].history.map(row => row.contentLines), [['乙群上一条'], ['乙群唤醒'], ['乙群答复']])
     })
 
     it('injects the selected snapshot even with automatic recall disabled', async () => {
@@ -217,6 +226,10 @@ describe('LivingMemoryConversationHooks', () => {
                 await h.begin(agent, 1)
                 const [injection] = await h.request(agent)
                 assert.equal(contentText(injection.content), `<memory>\n${expected}\n</memory>`)
+                await h.send([2])
+                await h.observed(2, 'answer', { self: true })
+                await h.turn(agent)
+                assert.deepEqual(h.recalls, [])
             }
         })
     })
@@ -268,6 +281,36 @@ describe('LivingMemoryConversationHooks', () => {
         assert.deepEqual(await h.request(agent, history), history)
     })
 
+    it('serves the last ready snapshot while a post-reply recall is still running', async () => {
+        const gate = Promise.withResolvers<void>()
+        const saved = Promise.withResolvers<void>()
+        const h = createHarness({ onRecallModel: async () => {
+            await gate.promise
+            h.setSnapshot('updated')
+            saved.resolve()
+        } })
+        h.setSnapshot('old')
+        await h.observed(1, 'question')
+        const agent = h.agent()
+        await h.begin(agent, 1)
+        await h.send([2])
+        await h.observed(2, 'answer', { self: true })
+        await h.turn(agent)
+
+        await h.observed(3, 'quick follow-up')
+        await h.engineTurn(agent, 2, 3)
+        const [old] = await h.request(agent)
+        assert.equal(contentText(old.content), '<memory>\nold\n</memory>')
+        gate.resolve()
+        await saved.promise
+        assert.deepEqual(await h.request(agent), [old])
+        await h.turn(agent)
+        await h.observed(4, 'next question')
+        await h.engineTurn(agent, 3, 4)
+        const [updated] = await h.request(agent)
+        assert.equal(contentText(updated.content), '<memory>\nupdated\n</memory>')
+    })
+
     it('leaves existing history untouched when there is nothing to append', async () => {
         const h = createHarness()
         const agent = h.agent()
@@ -278,37 +321,42 @@ describe('LivingMemoryConversationHooks', () => {
     })
 
     it('uses the actual input batch while a later user message is already recorded', async () => {
-        const harness = createHarness()
+        const harness = createHarness({ rules: { enableUserProfileInjection: true } })
         await harness.observed(10, 'earlier')
-        await harness.observed(30, 'current')
-        await harness.observed(50, 'queued next')
-        await harness.begin(harness.agent(), [harness.user(30), harness.user(50)])
-        assert.equal(harness.recalls[0].position, 1)
-        assert.deepEqual(harness.recalls[0].history.map((message) => message.contentLines.join('')), ['earlier', 'current'])
+        await harness.observed(30, 'current', { userId: 'current' })
+        await harness.observed(50, 'queued next', { userId: 'next' })
+        const agent = harness.agent()
+        await harness.begin(agent, [harness.user(30), harness.user(50)])
+        await harness.request(agent)
+        assert.deepEqual(harness.profiles, [['user-1', 'current'].map(id => createSpeakerKey('onebot', id))])
     })
 
     it('uses the first wake after quiet chat even when a later input mentions the bot', async () => {
-        const h = createHarness({ rules: { enableConversationIsolation: true } })
+        const h = createHarness({ rules: { enableUserProfileInjection: true, enableConversationIsolation: true } })
         for (const id of [1, 2, 3]) await h.observed(id, 'chat', { userId: 'u' + id })
         const ordinary = ChatMessage.user('ordinary wake', { meta: { externalId: 'm-2', wake: { by: 'activity', reason: 'activity' } } })
         const mention = ChatMessage.user('later @', { meta: { externalId: 'm-3', wake: { by: 'chat', reason: 'at-me', direct: true } } })
         const agent = h.agent()
         await h.begin(agent, [h.user(1), ordinary, mention])
-        assert.equal(h.recalls[0].position, 1)
+        await h.request(agent)
+        assert.deepEqual(h.profiles, [['u1', 'u2'].map(id => createSpeakerKey('onebot', id))])
         assert.equal(h.hooks.contextForTurn(agent)?.settings.enableConversationIsolation, true)
     })
 
     it('locates the original chat in a folded envelope and excludes notices', async () => {
-        const harness = createHarness()
+        const harness = createHarness({ rules: { enableUserProfileInjection: true } })
         await harness.observed(10, '问')
         const folded = ChatMessage.user([{
             type: 'envelope', kind: 'message', id: 'route:m-10', externalId: 'm-10',
             sender: { id: 'user-1' }, time: 1_010, content: [{ type: 'text', text: '问' }]
         }])
-        await harness.begin(harness.agent(), [folded, ChatMessage.notice('internal', 'notice')])
-        assert.equal(harness.recalls[0].position, 0)
-        await harness.begin(harness.agent(), [ChatMessage.notice('wake', 'proactive wake'), ChatMessage.user('internal steer')])
-        assert.equal(harness.recalls.length, 1)
+        const agent = harness.agent()
+        await harness.begin(agent, [folded, ChatMessage.notice('internal', 'notice')])
+        await harness.request(agent)
+        assert.deepEqual(harness.profiles, [[createSpeakerKey('onebot', 'user-1')]])
+        const next = harness.agent(2)
+        await harness.begin(next, [ChatMessage.notice('wake', 'proactive wake'), ChatMessage.user('internal steer')])
+        assert.deepEqual(await harness.request(next), [])
     })
 
     it('counts the first post-restart user message and preserves the baseline across agent recreation', async () => {
@@ -368,10 +416,10 @@ describe('LivingMemoryConversationHooks', () => {
         assert.equal(harness.hooks.contextForTurn(oldAgent), undefined, 'a late old agent cannot reclaim the conversation')
         const agent = harness.agent()
         await harness.begin(agent, 80)
-        assert.deepEqual(harness.recalls.at(-1)!.history.map(m => m.contentLines), [['new history']])
         harness.send([90], 1)
         await harness.observed(90, 'new reply', { self: true })
         await harness.turn(agent)
+        assert.deepEqual(harness.recalls.map(call => call.history.map(m => m.contentLines)), [[['new history'], ['new reply']]])
         assert.equal(harness.extractions[0].scope.sessionId, 'session-2')
         assert.equal(harness.extractions[0].boundary, 0)
     })
@@ -407,8 +455,8 @@ describe('LivingMemoryConversationHooks', () => {
         assert.equal(h.extractions.length, 2, 'the previous session’s live agent cannot identify the new session')
     })
 
-    it('waits for full rendering and history commit before normal extraction', async () => {
-        const harness = createHarness()
+    it('waits for full rendering and history commit before recall and extraction', async () => {
+        const harness = createHarness({ rules: { recallHistoryMessages: 2 } })
         let release!: () => void
         harness.setDrain(new Promise<void>((resolve) => { release = resolve }))
         await harness.observed(10, 'question')
@@ -425,23 +473,54 @@ describe('LivingMemoryConversationHooks', () => {
         await harness.begin(agent, 40)
         harness.send([50], 2)
         await harness.observed(50, 'next turn partial reply', { self: true })
+        assert.equal(harness.recalls.length, 0)
         release()
         await settle()
         assert.deepEqual(harness.order, ['drain', 'extract'])
         assert.equal(harness.extractions[0].eligible, 2)
+        assert.deepEqual(harness.recalls.map(call => call.history.map(m => m.contentLines)), [
+            [['first split reply'], ['second split reply']]
+        ])
+    })
+
+    it('does not use another message when the final reply has no transcript', async () => {
+        const h = createHarness()
+        await h.observed(1, 'question')
+        const agent = h.agent()
+        await h.begin(agent, 1)
+        await h.send([2])
+        await h.observed(2, '', { self: true, content: [] })
+        await h.turn(agent)
+        assert.deepEqual(h.recalls, [])
     })
 
     it('waits for observation after drain and counts a multi-ID send only once', async () => {
-        const harness = createHarness()
+        const harness = createHarness({ overheard: true })
         await harness.observed(10, 'question')
         const agent = harness.agent()
         await harness.begin(agent, 10)
         harness.send([20, 21])
         await harness.turn(agent)
-        assert.equal(harness.extractions.length, 0)
+        assert.equal(harness.recalls.length, 0)
         await harness.observed(20, 'reply', { self: true })
         await harness.observed(21, 'reply', { self: true })
-        assert.deepEqual(harness.extractions.map(x => x.eligible), [1])
+        assert.deepEqual(harness.extractions.map(x => x.eligible), [0, 1])
+        assert.deepEqual(harness.recalls.map(x => x.position), [1])
+    })
+
+    it('anchors recall to the last segment sent when its observer event arrives first', async () => {
+        const h = createHarness()
+        const agent = h.agent()
+        await h.observed(1, 'question')
+        await h.begin(agent, 1)
+        await h.send([2])
+        await h.send([3])
+        await h.turn(agent)
+        await h.observed(3, 'last sent', { self: true })
+        assert.equal(h.recalls.length, 0)
+        await h.observed(2, 'first sent', { self: true })
+        assert.deepEqual(h.recalls.map(call => call.history.at(-1)?.contentLines), [['last sent']])
+        assert.deepEqual(h.extractions.map(call => call.eligible), [2])
     })
 
     it('attributes a direct engine reply even when the engine does not request a model', async () => {
@@ -451,21 +530,33 @@ describe('LivingMemoryConversationHooks', () => {
         await harness.begin(agent, 1)
         assert.equal(harness.recalls.length, 0, 'wait for the engine to resolve its preset')
         await harness.engineTurn(agent, 7, 1)
-        assert.equal(harness.recalls.length, 1)
-        assert.deepEqual(harness.recalls[0].history.map(m => m.contentLines), [['question']])
+        assert.equal(harness.recalls.length, 0)
         harness.send([2], 7)
         await harness.observed(2, 'direct answer', { self: true })
         await harness.turn(agent)
+        assert.deepEqual(harness.recalls.map(call => call.history.map(m => m.contentLines)), [[['question'], ['direct answer']]])
         assert.deepEqual(harness.extractions.map(x => x.eligible), [1])
     })
 
-    it('does not trigger normal extraction for a turn without an actually delivered reply', async () => {
+    it('does not trigger recall or normal extraction for a turn without an actually delivered reply', async () => {
         const harness = createHarness()
         await harness.observed(10, 'question')
         const agent = harness.agent()
         await harness.begin(agent, 10)
         await harness.turn(agent)
         assert.equal(harness.extractions.length, 0)
+        assert.equal(harness.recalls.length, 0)
+    })
+
+    it('does not recall from a partial reply on an interrupted turn', async () => {
+        const h = createHarness()
+        await h.observed(1, 'question')
+        const agent = h.agent()
+        await h.begin(agent, 1)
+        await h.send([2])
+        await h.observed(2, 'partial reply', { self: true })
+        await h.turn(agent, 'aborted')
+        assert.deepEqual(h.recalls, [])
     })
 
     it('discards a pending scope lookup if the preset changes', async () => {
@@ -480,7 +571,11 @@ describe('LivingMemoryConversationHooks', () => {
         await preparing
         assert.equal(harness.recalls.length, 0)
         await harness.observed(30, 'new')
-        await harness.begin(harness.agent(), 30)
+        const agent = harness.agent()
+        await harness.begin(agent, 30)
+        await harness.send([40])
+        await harness.observed(40, 'new reply', { self: true })
+        await harness.turn(agent)
         assert.equal(harness.recalls[0].scope.presetId, 'preset-2')
     })
 
@@ -489,8 +584,11 @@ describe('LivingMemoryConversationHooks', () => {
         await disabled.observed(10, 'question')
         const disabledAgent = disabled.agent()
         await disabled.begin(disabledAgent, 10)
+        await disabled.send([20])
+        await disabled.observed(20, 'answer', { self: true })
         await disabled.turn(disabledAgent)
         assert.equal(disabled.extractions.length, 0)
+        assert.equal(disabled.recalls.length, 1)
 
         const harness = createHarness()
         let release!: () => void
@@ -498,11 +596,14 @@ describe('LivingMemoryConversationHooks', () => {
         await harness.observed(10, 'question')
         const agent = harness.agent()
         await harness.begin(agent, 10)
+        await harness.send([20])
+        await harness.observed(20, 'answer', { self: true })
         await harness.turn(agent)
         harness.dispose()
         release()
         await settle()
         assert.equal(harness.extractions.length, 0)
+        assert.equal(harness.recalls.length, 0)
     })
 })
 
@@ -524,39 +625,33 @@ it('freezes Alice’s triggering window on enqueue across folded inputs, buffer 
     h.framework.messages.splice(0, 2)
     await queued
     await settle()
-    assert.equal(h.recalls.length, 1, 'the accepted wake is scheduled before engine-turn')
-    assert.equal(h.recalls[0].scope.presetId, 'preset-1')
     await h.observed(2, 'same batch', { userId: 'bob' })
     const batch = absorb(firstInput, foldedChat(2, 'bob', direct), 2)
     // 框架合批时先丢弃旧信封，再把含两条消息的新信封入队。
     await Promise.all([h.input(a, firstInput, 'dropped'), h.input(a, batch, 'queued')])
     await h.input(a, batch, 'taken')
-    assert.equal(h.recalls.length, 1, 'folding keeps the original wake')
     await h.engineTurn(a, 1, [batch])
-    assert.equal(h.recalls.length, 1)
-    assert.equal(h.recalls[0].position, 1)
     assert.equal(h.hooks.contextForTurn(a)?.settings.enableConversationIsolation, true)
 
     await h.observed(3, 'queued next', { userId: 'alice' })
     const first = await h.request(a, [h.user(3)])
     assert.equal(contentText(first.at(-1)!.content), '<users_profile>\n测试画像\n</users_profile>')
     assert.equal((await h.request(a)).at(-1), first.at(-1))
-    assert.equal(h.recalls.length, 1)
-    assert.deepEqual(h.recalls[0].history.map(m => m.contentLines), [['earlier'], ['question']])
     assert.deepEqual(h.profiles, [['dave', 'alice'].map(id => createSpeakerKey('onebot', id))])
 
     // Bob 留在频道历史中，下次有真实触发时可进入该轮窗口。
     await h.engineTurn(a, 2, 3)
-    assert.equal(h.recalls.length, 2)
-    assert.deepEqual(h.recalls[1].history.map(m => m.contentLines), [['same batch'], ['queued next']])
+    await h.request(a)
+    assert.deepEqual(h.profiles[1], ['bob', 'alice'].map(id => createSpeakerKey('onebot', id)))
+    assert.equal(h.recalls.length, 0)
     h.switch('preset-2')
     assert.equal(h.hooks.contextForTurn(a), undefined)
     const nextInput = h.user(3)
     assert.deepEqual(await h.request(a, [nextInput]), [nextInput])
 })
 
-it('schedules a bare agent’s first wake on enqueue and reuses it at turn start', async () => {
-    const h = createHarness()
+it('captures a bare agent’s profile window on enqueue and reuses it at turn start', async () => {
+    const h = createHarness({ rules: { enableUserProfileInjection: true } })
     const a = h.agent()
     await h.observed(1, 'question', { userId: 'alice' })
     const first = foldedChat(1, 'alice', direct)
@@ -564,12 +659,10 @@ it('schedules a bare agent’s first wake on enqueue and reuses it at turn start
     h.framework.messages.splice(0)
     await queued
     await settle()
-    assert.equal(h.recalls.length, 1)
-    assert.deepEqual(h.recalls[0].history.map(m => m.contentLines), [['question']])
     await h.input(a, first, 'taken')
     await h.begin(a, [first])
     await h.request(a)
-    assert.equal(h.recalls.length, 1)
+    assert.deepEqual(h.profiles, [[createSpeakerKey('onebot', 'alice')]])
 })
 
 const proactive = (reason: string) => ChatMessage.notice('timer', '[wake] ' + reason, {
@@ -607,6 +700,21 @@ it('keeps conversation snapshots available on an unaddressed custom wake without
     assert.equal(contentText(injection.content), '<memory>\n该会话的快照\n</memory>')
 })
 
+it('uses the actual reply route for recall when a scheduled custom wake has no route', async () => {
+    const h = createHarness({ conversationKey: 'custom:test', settingsOf: (_key, _location, route) =>
+        ROUTE_SCHEMA.parse({ enableConversationIsolation: route === 'B', recallIntervalMessages: route === 'B' ? 1 : 0 })
+    })
+    h.framework.messages.push(historyMessage(1, 'elsewhere', { routeId: 'A' }))
+    const agent = h.agent()
+    const notice = proactive('scheduled')
+    await h.input(agent, notice, 'queued')
+    await h.begin(agent, [notice])
+    await h.send([2], 1, undefined, 'B')
+    await h.observed(2, 'scheduled reply', { self: true, routeId: 'B' })
+    await h.turn(agent)
+    assert.deepEqual(h.recalls.map(call => call.history.map(m => m.contentLines)), [[['scheduled reply']]])
+})
+
 it('uses the target DM rule on the first scheduled wake before any chat is observed', async (t) => {
     const ctx = new Context()
     t.after(() => ctx.fiber.dispose())
@@ -634,7 +742,7 @@ it('uses the target DM rule on the first scheduled wake before any chat is obser
     assert.equal(settings.enableUserProfileInjection, false)
 })
 
-it('captures each proactive wake at enqueue and shares the first window with profiles', async () => {
+it('uses the first proactive wake for profiles without recalling on either notification', async () => {
     const h = createHarness({ rules: { enableUserProfileInjection: true } })
     const agent = h.agent(1, 'test-engine')
     await h.observed(1, 'quiet chat', { userId: 'alice' })
@@ -648,17 +756,13 @@ it('captures each proactive wake at enqueue and shares the first window with pro
     const queued = h.input(agent, timer, 'queued')
     await h.observed(3, 'after notice', { userId: 'bob' })
     await queued
-    assert.deepEqual(h.recalls.map(call => call.history.map(m => m.contentLines)), [[['quiet chat'], ['before notice']]])
 
-    // 首条通知尚在队列，第二个独立 wake 应以自己的时间截取窗口。
     const idle = proactive('idle')
     await h.input(agent, idle, 'queued')
-    assert.deepEqual(h.recalls.map(call => call.position), [1, 2])
-    assert.deepEqual(h.recalls[1].history.map(m => m.contentLines), [['quiet chat'], ['before notice'], ['after notice']])
     for (const input of [quiet, timer, idle]) await h.input(agent, input, 'taken')
     await h.engineTurn(agent, 1, [quiet, timer, idle])
     await h.request(agent)
-    assert.equal(h.recalls.length, 2)
+    assert.equal(h.recalls.length, 0)
     assert.deepEqual(h.profiles, [['alice', 'charlie'].map(id => createSpeakerKey('onebot', id))])
 })
 
@@ -674,62 +778,55 @@ it('does not recall for a notice without a wake', async () => {
     assert.equal(h.recalls.length, 0)
 })
 
-it('advances the recall interval with actual chats, never with repeated proactive notices', async () => {
+it('checks the recall interval after delivery and counts both user and bot messages', async () => {
     const inputs: string[] = []
-    const h = createHarness({ recallInterval: 2, onRecallModel: input => inputs.push(input) })
-    const agent = h.agent()
-    const wake = async () => {
-        const notice = proactive('idle')
-        await h.input(agent, notice, 'queued')
-        await h.input(agent, notice, 'taken')
-        await settle()
+    const h = createHarness({ recallInterval: 3, onRecallModel: input => { inputs.push(input) } })
+    for (const turn of [1, 2, 3]) {
+        const agent = h.agent(turn)
+        await h.observed(turn * 2, 'question ' + turn)
+        await h.begin(agent, turn * 2)
+        assert.equal(inputs.length, turn === 1 ? 0 : 1)
+        await h.send([turn * 2 + 1], turn)
+        await h.observed(turn * 2 + 1, 'reply ' + turn, { self: true })
+        await h.turn(agent)
     }
-    await h.observed(1, 'first chat')
-    await wake()
-    assert.equal(inputs.length, 1)
-    await wake()
-    await wake()
-    assert.equal(inputs.length, 1)
-    await h.observed(2, 'second chat')
-    await wake()
-    assert.equal(inputs.length, 1)
-    await h.observed(3, 'third chat')
-    await wake()
     assert.equal(inputs.length, 2)
-    assert.match(inputs[1], /third chat/u)
-    assert.doesNotMatch(inputs[1], /idle/u)
+    assert.match(inputs[0], /reply 1/u)
+    assert.match(inputs[1], /reply 3/u)
 })
 
-it('logs a failed enqueue lookup once, skips it at turn start and recovers on the next wake', async () => {
+it('resolves the session only at turn start and recovers from a failed lookup on the next turn', async () => {
     const h = createHarness()
     h.switch(undefined)
     const agent = h.agent(1, 'test-engine')
     await h.observed(1, 'first chat', { userId: 'alice' })
     const first = foldedChat(1, 'alice', direct)
-    h.setCurrent(Promise.reject(new Error('scope lookup failed')))
-    await h.input(agent, first, 'queued')
-    assert.equal(h.warnings.length, 1)
     const lookups = h.scopeLookups
-    h.setCurrent(Promise.resolve())
+    await h.input(agent, first, 'queued')
+    assert.equal(h.scopeLookups, lookups)
     h.switch('preset-2')
     await h.input(agent, first, 'taken')
+    h.setCurrent(Promise.reject(new Error('scope lookup failed')))
     await h.engineTurn(agent, 1, [first])
-    assert.equal(h.scopeLookups, lookups, 'a failed lookup is terminal for this wake')
+    assert.equal(h.scopeLookups, lookups + 1)
     assert.equal(h.warnings.length, 1)
     assert.equal(h.recalls.length, 0)
 
+    h.setCurrent(Promise.resolve())
     await h.observed(2, 'next chat', { userId: 'bob' })
     const next = foldedChat(2, 'bob', direct)
     await h.input(agent, next, 'queued')
     await h.input(agent, next, 'taken')
     await h.engineTurn(agent, 2, [next])
-    assert.equal(h.recalls.length, 1)
-    assert.equal(h.recalls[0].position, 1)
+    await h.send([3], 2)
+    await h.observed(3, 'reply', { self: true })
+    await h.turn(agent)
+    assert.deepEqual(h.recalls.map(call => call.position), [2])
     assert.equal(h.warnings.length, 1)
 })
 
 it('defers a wake without a preset and uses its original chat when the preset is ready', async (t) => {
-    const h = createHarness()
+    const h = createHarness({ rules: { enableUserProfileInjection: true } })
     h.switch(undefined)
     const agent = h.agent(1, 'test-engine')
     await h.observed(1, 'original question', { userId: 'alice' })
@@ -743,24 +840,24 @@ it('defers a wake without a preset and uses its original chat when the preset is
     const reads = t.mock.method(h.framework, 'recentOfConversation')
     await h.engineTurn(agent, 1, [wake])
     assert.equal(reads.mock.callCount(), 0)
-    assert.deepEqual(h.recalls.map(call => call.scope.presetId), ['preset-2'])
-    assert.deepEqual(h.recalls[0].history.map(message => message.contentLines), [['original question']])
+    await h.request(agent)
+    assert.deepEqual(h.profiles, [[createSpeakerKey('onebot', 'alice')]])
     assert.equal(h.warnings.length, 0)
 })
 
-it('keeps a queued recall in its original preset after a switch before engine-turn', async () => {
+it('discards the queued turn context after a switch before engine-turn', async () => {
     const h = createHarness({ rules: { enableUserProfileInjection: true } })
     const agent = h.agent(1, 'test-engine')
     await h.observed(1, 'question in A', { userId: 'alice' })
     const input = foldedChat(1, 'alice', direct)
     await h.input(agent, input, 'queued')
     await settle()
-    assert.deepEqual(h.recalls.map(call => call.scope.presetId), ['preset-1'])
+    assert.equal(h.recalls.length, 0)
     h.switch('preset-2')
     await h.input(agent, input, 'taken')
     await h.engineTurn(agent, 1, [input])
     assert.deepEqual(await h.request(agent), [])
-    assert.deepEqual(h.recalls.map(call => call.scope.presetId), ['preset-1'])
+    assert.equal(h.recalls.length, 0)
     assert.deepEqual(h.profiles.flat(), [])
 })
 

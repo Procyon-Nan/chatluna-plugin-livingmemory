@@ -1,7 +1,6 @@
 import { ModelError } from '@chatluna/ai'
 import type { Context } from 'cordis'
 import type {
-    LivingMemoryTranscriptMessage,
     MemoryEntryWithSource,
     PresetPersonaResolver,
     UserProfileRecord
@@ -59,19 +58,6 @@ const compareEntriesByProfilePriority = (
 ) =>
     (right.importance ?? 0.5) - (left.importance ?? 0.5) ||
     +right.updatedAt - +left.updatedAt
-
-export const collectUserProfileSpeakerKeys = (
-    messages: LivingMemoryTranscriptMessage[]
-) => {
-    return [
-        ...new Set(
-            messages
-                .filter((message) => message.role === 'user')
-                .map((message) => message.speakerKey?.trim())
-                .filter((key): key is string => Boolean(key))
-        )
-    ]
-}
 
 export class LivingMemoryUserProfileService {
     private readonly queue = new SerialTaskQueue()

@@ -14,7 +14,7 @@ export const ROUTE_SCHEMA = Schema.object({
         .description('开启后，bot 未参与的群友闲聊也会触发记忆提取。'),
     enableAutoDream: Schema.boolean().default(true).label('是否在提取新记忆后进行 Dream 整理'),
     recallIntervalMessages: Schema.natural().max(200).default(20).label('记忆自动召回的间隔')
-        .description('累计多少条消息后唤醒 bot 会自动召回记忆；0 表示关闭记忆召回。'),
+        .description('bot 发完一轮回复后检查，自上次召回起累计到此条数则自动召回；0 表示关闭记忆召回。'),
     recallHistoryMessages: Schema.natural().min(1).max(200).default(20).label('用于召回记忆的聊天消息数')
         .description('使用多少条聊天信息作为上下文来召回记忆，建议与记忆自动召回的间隔保持一致。'),
     snapshotScope: Schema.union([
