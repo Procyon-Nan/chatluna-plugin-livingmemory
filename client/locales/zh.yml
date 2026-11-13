@@ -18,7 +18,7 @@ empty.noPreset: 还没有预设数据。可以新建第一条记忆，也可以�
 
 tab.entries: 记忆
 tab.settings: 插件配置
-tab.guide: 插件指南
+tab.guide: 插件配置指南
 guide.start: 第一次使用
 guide.intro: 先配置模型、选好要记录的对话，再用一条记忆试试检索。下面也说明了机器人何时提取记忆、何时想起它，以及 Dream 如何整理已有的记忆。
 guide.contents: 本页目录

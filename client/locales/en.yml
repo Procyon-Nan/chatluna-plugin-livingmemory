@@ -132,7 +132,7 @@ search.scores: 'cosine {cosine} · keywords {keyword} · boosted {boosted}'
 preset.actions: Preset actions
 tab.navigation: Memory management
 tab.settings: Plugin configuration
-tab.guide: Plugin guide
+tab.guide: Plugin configuration guide
 guide.start: Getting started
 guide.intro: Choose your models and conversations, then try a search with one memory. The following sections explain when the bot saves and recalls memories, how to use profiles, and how Dream organizes existing memories.
 guide.contents: On this page
