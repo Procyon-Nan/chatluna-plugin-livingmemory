@@ -5,7 +5,7 @@
         "registry": "https://registry.npmjs.org/",
         "access": "public"
     },
-    "description": "让 AI 以第一人称的叙事记忆，记录下与你共度的时光。",
+    "description": "LivingSystem 生态下构筑的长期记忆插件，让 bot 的记忆带上生动的人格化色彩。通过异步、非阻塞的记忆召回和记忆整理流程让 bot 记叙共度的时光。",
     "type": "module",
     "engines": {
         "node": ">=24.0.0"
@@ -95,8 +95,8 @@
     },
     "cordis": {
         "description": {
-            "zh": "让 AI 以第一人称的叙事记忆，记录下与你共度的时光。",
-            "en": "Let the AI record the time spent with you as a first-person narrative memory."
+            "zh": "LivingSystem 生态下构筑的长期记忆插件，让 bot 的记忆带上生动的人格化色彩。通过异步、非阻塞的记忆召回和记忆整理流程让 bot 记叙共度的时光。",
+            "en": "Built for the LivingSystem ecosystem, this long-term memory plugin gives your bot’s memories a voice of their own. Your bot recalls and organizes memories in the background, telling the story of your time together without pausing the conversation."
         }
     }
 }

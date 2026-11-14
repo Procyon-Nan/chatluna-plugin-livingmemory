@@ -1,6 +1,8 @@
 # chatluna-plugin-livingmemory
 
-ChatLuna v2 的长期记忆插件，支持记忆提取与召回、Dream 整理、用户画像和预设人设卡片。可单独使用；与原生 memory 同时启用时，两者各自提取、保存和注入记忆。
+LivingSystem 生态下构筑的长期记忆插件，让 bot 的记忆带上生动的人格化色彩。通过异步、非阻塞的记忆召回和记忆整理流程让 bot 记叙共度的时光。
+
+LivingMemory 不建议与原生 memory 同时启用，两者各自提取、保存和注入记忆，可能会导致额外的 token 开销与其他未知问题。
 
 ## 构建
 
