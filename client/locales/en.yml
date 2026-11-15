@@ -79,10 +79,14 @@ jobs.dreamRunning: 'Dream is already running for “{preset}”'
 jobs.dreamInsufficient: 'Not enough memories in “{preset}” to run Dream'
 jobs.rebuildIndex: Rebuild vector index
 jobs.empty: No jobs recorded yet
-job.kind.extract: Extract
+jobs.startedAt: Started
+jobs.finishedAt: Finished
+jobs.id: Job ID
+jobs.detail: View original record
+job.kind.extract: Memory extraction
 job.kind.dream: Dream
-job.kind.recall: Recall
-job.kind.index: Index
+job.kind.recall: Memory recall
+job.kind.index: Index maintenance
 job.status.pending: Pending
 job.status.running: Running
 job.status.completed: Completed

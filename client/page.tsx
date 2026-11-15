@@ -70,11 +70,12 @@ const useT = (): Translate => useTranslate(LOCALE_NS)
 
 const report = (error: unknown) => toast.error(apiErrorMessage(error))
 
+const calendarDate = (date: Date) => `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`
+const clockTime = (date: Date) => [date.getHours(), date.getMinutes()].map(n => String(n).padStart(2, '0')).join(':')
 const formatTime = (at: number | null | undefined) => {
     if (at == null) return '—'
     const date = new Date(at)
-    const pad = (value: number) => String(value).padStart(2, '0')
-    return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+    return `${calendarDate(date)} ${clockTime(date)}`
 }
 
 type StatusFilter = 'active' | 'archived' | 'all'
@@ -1007,39 +1008,62 @@ function RunDreamButton({ presetId }: { presetId: string }) {
 
 function JobsPanel({ presetId }: { presetId: string }) {
     const t = useT()
-    const jobs = useLive('livingmemory.jobs', { presetId })
-    const items = jobs.data ?? []
-    if (items.length === 0) return <EmptyState title={t('jobs.empty')} />
+    const { data, error } = useLive('livingmemory.jobs', { presetId })
+    if (error) return <Alert variant="destructive">{error}</Alert>
+    if (!data) return <Skeleton className="h-12 w-full" />
+    if (!data.length) return <EmptyState title={t('jobs.empty')} />
+    const days = Map.groupBy(data, job => calendarDate(new Date(job.createdAt)))
     return (
-        <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-            {items.map(job => <JobRow key={job.id} job={job} />)}
-        </ul>
+        <div className="@container min-h-0 flex-1 overflow-y-auto">
+            <div className="mx-auto max-w-6xl space-y-7 px-1 py-2">
+                {Array.from(days, ([day, jobs]) => (
+                    <section key={day}>
+                        <h2 className="mb-1 border-b border-border pb-2 text-sm font-semibold tabular-nums">{day}</h2>
+                        <ul className="divide-y divide-border/60">
+                            {jobs.map(job => <JobRow key={job.id} job={job} />)}
+                        </ul>
+                    </section>
+                ))}
+            </div>
+        </div>
     )
 }
 
 function JobRow({ job }: { job: LivingMemoryJobView }) {
     const t = useT()
+    const [summary, ...detailLines] = job.detail.split('\n', 3)
+    const operations = job.kind === 'dream' && job.detail !== job.error ? detailLines.shift() : undefined
+    const error = job.error?.split('\n', 1)[0]
+    const rawDetail = detailLines.length ? job.detail : ''
+    const stack = job.error && job.error !== error && !rawDetail.includes(job.error) ? job.error : ''
+    const record = [rawDetail, stack].filter(Boolean).join('\n\n')
+    const created = new Date(job.createdAt)
     return (
-        <li className="flex flex-col gap-1 rounded-md border border-border p-3 text-sm">
-            <div className="flex items-center gap-2">
-                <Badge variant="outline">{t(`job.kind.${job.kind}`)}</Badge>
-                <Badge
-                    variant={job.status === 'failed' ? 'destructive' : 'secondary'}
-                >
-                    {t(`job.status.${job.status}`)}
-                </Badge>
-                <span className="ml-auto text-xs opacity-60">
-                    {formatTime(job.createdAt)}
-                </span>
-            </div>
-            {job.detail.length > 0 && (
-                <p className="whitespace-pre-wrap break-words opacity-80">
-                    {job.detail}
-                </p>
-            )}
-            {job.error !== null && (
-                <p className="text-destructive">{job.error}</p>
-            )}
+        <li>
+            <details className="group">
+                <summary className="grid cursor-pointer list-none grid-cols-[3rem_1fr_auto_1rem] items-baseline gap-x-3 gap-y-1 rounded-md px-2 py-3 text-sm hover:bg-muted/40 focus-visible:outline-ring @xl:grid-cols-[3rem_7rem_5rem_minmax(0,1fr)_1rem] [&::-webkit-details-marker]:hidden">
+                    <time dateTime={created.toISOString()} className="text-xs tabular-nums text-muted-foreground">{clockTime(created)}</time>
+                    <span className="font-medium">{t(`job.kind.${job.kind}`)}</span>
+                    <span data-status={job.status} className="text-xs font-medium text-muted-foreground data-[status=failed]:text-destructive data-[status=running]:text-primary data-[status=partial]:text-foreground">{t(`job.status.${job.status}`)}</span>
+                    <span className="col-span-full row-start-2 min-w-0 space-y-0.5 @xl:col-span-1 @xl:col-start-4 @xl:row-start-1">
+                        {summary && summary !== error && <span className="line-clamp-1 text-muted-foreground group-open:line-clamp-none [overflow-wrap:anywhere]">{summary}</span>}
+                        {error && <span className="line-clamp-1 text-destructive group-open:line-clamp-none [overflow-wrap:anywhere]">{error}</span>}
+                    </span>
+                    <span aria-hidden="true" className="col-start-4 row-start-1 self-center justify-self-center text-muted-foreground transition-transform group-open:rotate-90 motion-reduce:transition-none @xl:col-start-5">›</span>
+                </summary>
+                <div className="mb-3 ml-2 space-y-3 border-l-2 border-border py-1 pl-4 text-sm">
+                    <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
+                        {job.startedAt !== null && <div><dt className="inline">{t('jobs.startedAt')} · </dt><dd className="inline">{formatTime(job.startedAt)}</dd></div>}
+                        {job.finishedAt !== null && <div><dt className="inline">{t('jobs.finishedAt')} · </dt><dd className="inline">{formatTime(job.finishedAt)}</dd></div>}
+                        <div><dt className="inline">{t('jobs.id')} · </dt><dd className="inline font-mono [overflow-wrap:anywhere]">{job.id}</dd></div>
+                    </dl>
+                    {operations && <p className="text-muted-foreground [overflow-wrap:anywhere]">{operations}</p>}
+                    {record && <details>
+                        <summary className="cursor-pointer text-muted-foreground">{t('jobs.detail')}</summary>
+                        <pre className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap bg-muted/40 p-3 text-xs leading-relaxed [overflow-wrap:anywhere]">{record}</pre>
+                    </details>}
+                </div>
+            </details>
         </li>
     )
 }

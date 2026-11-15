@@ -119,10 +119,14 @@ jobs.dreamRunning: 「{preset}」已有 Dream 在运行
 jobs.dreamInsufficient: 「{preset}」可整理的记忆不足
 jobs.rebuildIndex: 重建向量索引
 jobs.empty: 还没有任务记录
-job.kind.extract: 提取
-job.kind.dream: Dream
-job.kind.recall: 召回
-job.kind.index: 索引
+jobs.startedAt: 开始
+jobs.finishedAt: 结束
+jobs.id: 任务 ID
+jobs.detail: 查看原始记录
+job.kind.extract: 记忆提取
+job.kind.dream: Dream 整理
+job.kind.recall: 记忆召回
+job.kind.index: 索引维护
 job.status.pending: 排队中
 job.status.running: 运行中
 job.status.completed: 已完成
