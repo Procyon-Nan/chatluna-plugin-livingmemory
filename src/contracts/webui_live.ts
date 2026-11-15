@@ -2,6 +2,7 @@ import type {} from '@chatluna/ui-client/client'
 import type {
     LivingMemoryEntriesParams,
     LivingMemoryEntriesSnapshot,
+    LivingMemoryEntryView,
     LivingMemoryJobView,
     LivingMemoryPersonaView,
     LivingMemoryProfilesSnapshot,
@@ -36,6 +37,7 @@ declare module '@chatluna/ui-client/client' {
         'livingmemory.jobs': LivingMemoryJobView[]
         'livingmemory.persona': { persona: LivingMemoryPersonaView | null }
         'livingmemory.profiles': LivingMemoryProfilesSnapshot
+        'livingmemory.profileMemories': LivingMemoryEntryView[]
         'livingmemory.snapshots': LivingMemorySnapshotsSnapshot
         'livingmemory.status': LivingMemoryStatusSnapshot
         'livingmemory.settingsEntry': { id: string; name: string } | null

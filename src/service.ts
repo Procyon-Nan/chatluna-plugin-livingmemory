@@ -1,4 +1,5 @@
 import { Context, Service } from 'cordis'
+import { existsSync, watch } from 'node:fs'
 import type { Disposable } from 'cordis'
 import type {} from '@cordisjs/plugin-database'
 import type {} from '@cordisjs/plugin-loader'
@@ -274,11 +275,24 @@ export default class LivingmemoryService extends Service {
                         return entry ? { id: entry.id, name: entry.options.name } : null
                     }
                 })
-                ctx.chatluna_webui.addEntry({
+                const files = {
                     baseUrl: import.meta.url,
                     source: '../client/index.ts',
                     bundle: '../dist/client.js'
-                })
+                }
+                const webui = ctx.chatluna_webui
+                let entry = webui.addEntry(files)
+                if (!webui.config.devMode && existsSync(new URL('../scripts/build-client.mjs', import.meta.url))) {
+                    ctx.effect(() => {
+                        const watcher = watch(new URL('../', import.meta.url), (_event, file) => {
+                            if (file !== '.webui-reload') return
+                            const previous = entry
+                            entry = webui.addEntry(files)
+                            previous.dispose()
+                        })
+                        return () => watcher.close()
+                    })
+                }
                 livingMemoryWebUI(ctx, ui)
             }
         })

@@ -146,6 +146,13 @@ tab.profiles: 用户画像
 tab.snapshots: 快照
 
 profiles.empty: 还没有为这个预设生成过用户画像
+profiles.directory: 用户目录
+profiles.linkedMemories: 关联记忆
+profiles.search: 搜索昵称或用户 ID
+profiles.clearSearch: 清除搜索
+profiles.noMatch: 没有找到匹配的用户
+profiles.noMemories: 这份画像没有关联记忆。
+profiles.unavailableMemories: '有 {count} 条关联记忆已无法查看。'
 profiles.hint: 画像由模型从关联记忆提炼；保存后不再被自动生成覆盖。
 profiles.sourceCount: '关联 {count} 条记忆'
 profiles.regenerate: 重新生成

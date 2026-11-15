@@ -81,11 +81,13 @@ livingmemory/
 │   └── *.spec.ts               # 各模块的单元和集成测试
 ├── scripts/
 │   ├── build.mjs               # 打包服务端与 WebUI，串行执行 Worker 构建
+│   ├── build-client.mjs        # 构建 WebUI，开发时监听改动并通知模板项目
 │   ├── clean.mjs               # 清理插件构建产物与增量编译记录
 │   └── build-workers.mjs       # 用 rolldown 打包 Vector 与语义分组 Worker 产物
 ├── client/
 │   ├── index.ts                # WebUI 客户端入口：注册 `/livingmemory` 路由与语言资源
 │   ├── page.tsx                # 管理页：记忆、画像、人设、快照、任务、召回测试与插件配置
+│   ├── page.css                # 管理页滚动区域与画像详情样式
 │   ├── settings-panel.tsx      # 当前插件实例的配置表单与保存操作
 │   ├── guide-panel.tsx         # 插件配置指南：首次配置、检索示例与常用对话规则
 │   ├── memory-deletion-dialog.tsx # 删除选中记忆及清空预设的确认弹窗

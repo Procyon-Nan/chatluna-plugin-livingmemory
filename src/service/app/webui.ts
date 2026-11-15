@@ -27,10 +27,9 @@ import type {
     MemoryEntryWithSource,
     MemoryJobRecord,
     MemorySnapshotRecord,
-    PresetPersonaCardInfo,
-    UserProfileRecord
+    PresetPersonaCardInfo
 } from '../../contracts/memory.ts'
-import type { MemoryListQuery, UserProfileListQuery, SnapshotListQuery } from '../../contracts/rpc.ts'
+import type { MemoryListQuery, UserProfileListItem, UserProfileListQuery, SnapshotListQuery } from '../../contracts/rpc.ts'
 import { memoryEntryStatuses, memoryEntryTypes } from '../../contracts/memory.ts'
 
 /** 管理页写操作要求的权限等级。 */
@@ -123,6 +122,7 @@ export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
     ctx.chatluna_webui.state('livingmemory.profiles', {
         params: Schema.object({
             presetId: Schema.string().required(),
+            keyword: Schema.string(),
             page: Schema.natural(),
             pageSize: Schema.natural()
         }),
@@ -135,6 +135,15 @@ export const livingMemoryWebUI = (ctx: Context, ui: LivingMemoryWebUI) => {
                 page: result.page,
                 pageSize: result.pageSize
             }
+        },
+        refreshOn
+    })
+
+    ctx.chatluna_webui.state('livingmemory.profileMemories', {
+        params: Schema.object({ presetId: Schema.string().required(), profileId: Schema.string().required() }),
+        get: async ({ presetId, profileId }: { presetId: string; profileId: string }) => {
+            const entries = await ui.repository.listProfileMemories(presetId, profileId)
+            return entries.map(toEntryView)
         },
         refreshOn
     })
@@ -470,12 +479,14 @@ const toPersonaView = (card: PresetPersonaCardInfo): LivingMemoryPersonaView => 
     updatedAt: card.updatedAt.getTime()
 })
 
-const toProfileView = (profile: UserProfileRecord): LivingMemoryProfileView => ({
+const toProfileView = (profile: UserProfileListItem): LivingMemoryProfileView => ({
     id: profile.id,
     speakerKey: profile.speakerKey,
     speakerLabel: profile.speakerLabel,
+    speakerId: profile.speakerId,
+    platform: profile.platform,
     content: profile.content,
-    sourceMemoryIds: [...profile.sourceMemoryIds],
+    sourceMemoryCount: profile.sourceMemoryIds.length,
     updatedAt: profile.updatedAt.getTime()
 })
 

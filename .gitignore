@@ -1,5 +1,7 @@
 node_modules/
 lib/
 dist/
+.webui-reload
+/data/
 tmp/
 *.tsbuildinfo

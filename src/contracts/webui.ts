@@ -84,8 +84,10 @@ export interface LivingMemoryProfileView {
     id: string
     speakerKey: string
     speakerLabel: string
+    speakerId: string | null
+    platform: string | null
     content: string
-    sourceMemoryIds: string[]
+    sourceMemoryCount: number
     updatedAt: number
 }
 

@@ -3,7 +3,9 @@ import type {
     MemoryEntryStatus,
     MemoryEntryType,
     MemoryJobRecord,
-    MemoryJobStatus
+    MemoryJobStatus,
+    PresetSpeakerRecord,
+    UserProfileRecord
 } from './memory.ts'
 
 export interface PageRequest {
@@ -34,7 +36,10 @@ export interface JobListQuery extends PageRequest {
 
 export interface UserProfileListQuery extends PageRequest {
     presetId: string
+    keyword?: string
 }
+
+export type UserProfileListItem = UserProfileRecord & Pick<PresetSpeakerRecord, 'speakerId' | 'platform'>
 
 export interface PageResult<T> {
     items: T[]

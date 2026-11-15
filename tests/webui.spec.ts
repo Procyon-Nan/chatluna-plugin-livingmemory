@@ -9,7 +9,7 @@ import { routeIdOf, type RouteIdentity } from '@chatluna/satori'
 import { LivingMemoryChatHistory } from '../src/service/chat_history.ts'
 import { FrameworkHistoryFixture, historyMessage } from './chat-history-test-utils.ts'
 import type { Schema } from '@chatluna/schema'
-import type { LivingMemoryEntriesSnapshot, LivingMemorySnapshotsSnapshot } from '../src/contracts/webui.ts'
+import type { LivingMemoryEntriesSnapshot, LivingMemoryProfilesSnapshot, LivingMemorySnapshotsSnapshot } from '../src/contracts/webui.ts'
 import { withLivingMemoryRepository } from './persistence-test-utils.ts'
 import { livingMemoryWebUI } from '../src/service/app/webui.ts'
 import { LivingMemoryAdminService } from '../src/service/app/admin_service.ts'
@@ -234,7 +234,7 @@ it('offers registered speakers in the selected preset even without a profile', a
     })
 })
 
-it('projects a profile with the memories it was built from', async () => {
+it('projects a profile with its source memory count', async () => {
     await withWebUI(async (ctx, repository, ui) => {
         const memory = await seed(ctx, repository, '用户喜欢喝咖啡')
         await repository.replaceUserProfile('preset-1', {
@@ -246,19 +246,55 @@ it('projects a profile with the memories it was built from', async () => {
 
         const snapshot = (await ui.read('livingmemory.profiles', {
             presetId: 'preset-1'
-        })) as {
-            profiles: {
-                speakerLabel: string
-                sourceMemoryIds: string[]
-                updatedAt: number
-            }[]
-            total: number
-        }
+        })) as LivingMemoryProfilesSnapshot
 
         assert.equal(snapshot.total, 1)
         assert.equal(snapshot.profiles[0]?.speakerLabel, '小明')
-        assert.deepEqual(snapshot.profiles[0]?.sourceMemoryIds, [memory.id])
+        assert.equal(snapshot.profiles[0]?.sourceMemoryCount, 1)
         assert.equal(typeof snapshot.profiles[0]?.updatedAt, 'number')
+    })
+})
+
+it('expands only the profile’s surviving sources in saved order within its preset', async () => {
+    await withWebUI(async (ctx, repository, ui) => {
+        const older = await seed(ctx, repository, '旧约定', 'archived')
+        const newer = await repository.createMemory({ presetId: 'preset-1', conversationId: '' }, {
+            type: 'plan', content: '新计划', summary: '散步约定', sentiment: '期待', importance: 0.8, keywords: ['散步'], speakerKeys: ['alice']
+        }, [])
+        await seed(ctx, repository, '未被画像引用')
+        const other = await repository.createMemory({ presetId: 'other', conversationId: '' }, { type: 'fact', content: '其他预设' }, [])
+        await repository.replaceUserProfile('preset-1', {
+            speakerKey: 'alice', speakerLabel: 'Alice', content: '画像', sourceMemoryIds: [newer.id, other.id, 'gone', older.id]
+        })
+        const [profile] = await repository.listUserProfilesByPreset('preset-1')
+        const read = (presetId: string) => ui.read('livingmemory.profileMemories', { presetId, profileId: profile!.id })
+        const all = await ui.read('livingmemory.entries', { presetId: 'preset-1', status: 'all' }) as LivingMemoryEntriesSnapshot
+        assert.deepEqual(await read('preset-1'), [newer, older].map(row => all.entries.find(entry => entry.id === row.id)))
+        assert.deepEqual(await read('other'), [])
+    })
+})
+
+it('searches profile names and platform IDs within the selected preset before pagination', async () => {
+    await withWebUI(async (_ctx, repository, ui) => {
+        for (const [presetId, names] of Object.entries({ A: ['Alice', 'Alina', 'Bob'], B: ['Alison'] })) {
+            for (const name of names) {
+                await repository.replaceUserProfile(presetId, {
+                    speakerKey: name, speakerLabel: name, content: name, sourceMemoryIds: []
+                })
+            }
+        }
+        const names: string[] = []
+        for (const [presetId, speakerKey] of [['A', 'Alice'], ['B', 'Alison']] as const) {
+            await repository.upsertPresetSpeaker({ presetId, speakerKey, speakerLabel: speakerKey, speakerId: '0012345', platform: 'onebot' })
+        }
+        for (const page of [1, 2]) {
+            const result = await ui.read('livingmemory.profiles', { presetId: 'A', keyword: ' ALI ', pageSize: 1, page }) as LivingMemoryProfilesSnapshot
+            assert.equal(result.total, 2)
+            names.push(...result.profiles.map(profile => profile.speakerLabel))
+        }
+        assert.deepEqual(names.sort(), ['Alice', 'Alina'])
+        const rows = await ui.read('livingmemory.profiles', { presetId: 'A', keyword: ' 0123 ' }) as LivingMemoryProfilesSnapshot
+        assert.deepEqual(rows.profiles.map(p => [p.speakerLabel, p.speakerId, p.platform]), [['Alice', '0012345', 'onebot']])
     })
 })
 

@@ -1,8 +1,18 @@
 import * as React from 'react'
+import type {} from '@chatluna/adapter-webui'
+import { findDirectoryEntity } from '@chatluna/adapter-webui/client/entity-directory'
+import { skipToken, useQuery } from '@tanstack/react-query'
 import {
+    Alert,
+    Avatar,
+    AvatarFallback,
+    AvatarImage,
     Badge,
     Button,
     Checkbox,
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
     Dialog,
     DialogContent,
     DialogDescription,
@@ -12,11 +22,14 @@ import {
     Field,
     FieldLabel,
     Input,
+    SearchBox,
+    Skeleton,
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
+    SlidingHighlight,
     Textarea,
     Tooltip,
     TooltipContent,
@@ -113,7 +126,7 @@ export function LivingMemoryPage() {
                 return <EntriesPanel key={`${selection.revision}:${active}`} presetId={active} initialStatus={selection.status}
                     onCreate={() => setCreating(true)} />
             case 'profiles':
-                return <ProfilesPanel presetId={active} />
+                return <ProfilesPanel key={active} presetId={active} />
             case 'personas':
                 return <PersonaPanel key={active} presetId={active} />
             case 'snapshots':
@@ -126,7 +139,7 @@ export function LivingMemoryPage() {
     }
 
     return (
-        <div className="flex h-full min-w-0 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
+        <div className="livingmemory-page flex h-full min-w-0 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
             <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border pb-2">
                 <nav className="flex max-w-full items-center gap-1 overflow-x-auto" aria-label={t('tab.navigation')}>
                     {tabs.map(key => (
@@ -239,6 +252,11 @@ function Warnings({
     )
 }
 
+function useSpeakerNames(presetId: string) {
+    const speakers = useLive('livingmemory.speakers', { presetId })
+    return new Map(speakers.data?.map(speaker => [speaker.speakerKey, speaker.speakerLabel]))
+}
+
 function EntriesPanel({ presetId, initialStatus, onCreate }: { presetId: string; initialStatus: StatusFilter; onCreate(): void }) {
     const t = useT()
     const [status, setStatus] = React.useState<StatusFilter>(initialStatus)
@@ -247,8 +265,7 @@ function EntriesPanel({ presetId, initialStatus, onCreate }: { presetId: string;
     const filter: MemoryListFilter = { presetId, status }
     if (type !== 'all') filter.type = type as MemoryEntryRecord['type']
     if (keyword.trim()) filter.keyword = keyword.trim()
-    const speakers = useLive('livingmemory.speakers', { presetId })
-    const names = new Map(speakers.data?.map((speaker) => [speaker.speakerKey, speaker.speakerLabel]))
+    const names = useSpeakerNames(presetId)
 
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -458,7 +475,6 @@ interface MemoryCardProps {
 
 function MemoryCard({ entry, names, selected, selecting, onSelect, onEdit, onArchive, onDelete }: MemoryCardProps) {
     const t = useT()
-    const speakers = entry.speakerKeys.map(key => names.get(key) ?? key).join(', ')
 
     return (
         <li data-selected={selected}
@@ -473,24 +489,7 @@ function MemoryCard({ entry, names, selected, selecting, onSelect, onEdit, onArc
             {entry.summary && <h2 className="px-3 pb-1.5 text-base font-semibold leading-snug [overflow-wrap:anywhere]">{entry.summary}</h2>}
             <div className="row-start-3 flex flex-col gap-2.5 px-3 pb-3">
                 <MemoryBody content={entry.content} />
-                {entry.keywords.length > 0 && (
-                    <ul className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                        {entry.keywords.map(word => <li key={word} className="min-w-0 [overflow-wrap:anywhere]">#{word}</li>)}
-                    </ul>
-                )}
-                <div className="border-t border-border pt-2 text-xs leading-relaxed [overflow-wrap:anywhere]">
-                    <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-0.5">
-                        <dt className="text-muted-foreground">{t('field.importance')}</dt>
-                        <dd>{entry.importance ?? '—'}</dd>
-                        {entry.sentiment && <>
-                            <dt className="text-muted-foreground">{t('field.sentiment')}</dt>
-                            <dd>{entry.sentiment}</dd>
-                        </>}
-                        <dt className="text-muted-foreground">{t('field.speakers')}</dt>
-                        <dd>{speakers || t('entries.noSpeakers')}</dd>
-                    </dl>
-                    <p className="mt-0.5">{entry.sourceLabel}</p>
-                </div>
+                <MemoryFields entry={entry} names={names} />
             </div>
             <footer className="row-start-4 flex flex-wrap items-center justify-between gap-2 rounded-b-xl border-t border-border bg-muted/30 px-3 py-1.5">
                 <span className="text-xs text-muted-foreground">{t('field.updatedAt')} {formatTime(entry.updatedAt)}</span>
@@ -504,6 +503,33 @@ function MemoryCard({ entry, names, selected, selecting, onSelect, onEdit, onArc
                 </div>
             </footer>
         </li>
+    )
+}
+
+function MemoryFields({ entry, names }: Pick<MemoryCardProps, 'entry' | 'names'>) {
+    const t = useT()
+    const speakers = entry.speakerKeys.map(key => names.get(key) ?? key).join(', ')
+    return (
+        <>
+            {entry.keywords.length > 0 && (
+                <ul className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    {entry.keywords.map(word => <li key={word} className="min-w-0 [overflow-wrap:anywhere]">#{word}</li>)}
+                </ul>
+            )}
+            <div className="border-t border-border pt-2 text-xs leading-relaxed [overflow-wrap:anywhere]">
+                <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-0.5">
+                    <dt className="text-muted-foreground">{t('field.importance')}</dt>
+                    <dd>{entry.importance ?? '—'}</dd>
+                    {entry.sentiment && <>
+                        <dt className="text-muted-foreground">{t('field.sentiment')}</dt>
+                        <dd>{entry.sentiment}</dd>
+                    </>}
+                    <dt className="text-muted-foreground">{t('field.speakers')}</dt>
+                    <dd>{speakers || t('entries.noSpeakers')}</dd>
+                </dl>
+                <p className="mt-0.5">{entry.sourceLabel}</p>
+            </div>
+        </>
     )
 }
 
@@ -558,96 +584,161 @@ function MemoryBody({ content }: { content: string }) {
     )
 }
 
+const profileName = ({ speakerLabel, speakerId }: LivingMemoryProfileView) =>
+    speakerId ? `${speakerLabel}(${speakerId})` : speakerLabel
+
+function ProfileAvatar({ profile, selfId }: { profile: LivingMemoryProfileView; selfId: string | undefined }) {
+    const { platform, speakerId } = profile
+    const { data } = useQuery({
+        queryKey: ['directory', 'entity', 'user', platform, selfId, speakerId],
+        queryFn: platform && selfId && speakerId
+            ? ({ signal }) => findDirectoryEntity({ kind: 'user', platform, selfId, id: speakerId }, signal)
+            : skipToken,
+        staleTime: 60_000
+    })
+    return <Avatar aria-hidden="true" style={{ width: 32, height: 32, overflow: 'hidden' }}>
+        {data?.avatar && <AvatarImage src={data.avatar} alt="" referrerPolicy="no-referrer" />}
+        <AvatarFallback>{Array.from(profile.speakerLabel)[0]}</AvatarFallback>
+    </Avatar>
+}
+
 function ProfilesPanel({ presetId }: { presetId: string }) {
     const t = useT()
     const [page, setPage] = React.useState(1)
+    const [keyword, setKeyword] = React.useState('')
+    const [selectedId, setSelectedId] = React.useState<string>()
     const [editing, setEditing] = React.useState<LivingMemoryProfileView>()
-    const profiles = useLive('livingmemory.profiles', {
-        presetId,
-        page,
-        pageSize: PAGE_SIZE
-    })
-    const items = profiles.data?.profiles ?? []
+    const bots = useLive('adapters.bots').data?.bots
+    const { data, error } = useLive('livingmemory.profiles', { presetId, keyword, page, pageSize: PAGE_SIZE })
+    const profile = data?.profiles.find(item => item.id === selectedId) ?? data?.profiles[0]
 
-    React.useEffect(() => setPage(1), [presetId])
+    React.useEffect(() => {
+        if (data && page > 1 && !data.profiles.length) {
+            setPage(Math.max(1, Math.ceil(data.total / PAGE_SIZE)))
+        }
+    }, [data, page])
 
-    if (items.length === 0) return <EmptyState title={t('profiles.empty')} />
+    function renderAvatar(profile: LivingMemoryProfileView) {
+        const selfId = bots?.find(bot => bot.platform === profile.platform)?.selfId
+        return <ProfileAvatar profile={profile} selfId={selfId} />
+    }
 
     return (
-        <div className="flex min-h-0 flex-1 flex-col gap-2">
-            <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-                {items.map((profile) => (
-                    <li
-                        key={profile.id}
-                        className="flex flex-col gap-1 rounded-md border border-border p-3"
-                    >
-                        <div className="flex items-center gap-2">
-                            <span className="font-medium">
-                                {profile.speakerLabel}
-                            </span>
-                            <Badge variant="outline">
-                                {t('profiles.sourceCount', {
-                                    count: profile.sourceMemoryIds.length
-                                })}
-                            </Badge>
-                            <span className="ml-auto text-xs opacity-60">
-                                {formatTime(profile.updatedAt)}
-                            </span>
-                        </div>
-                        <p className="line-clamp-4 whitespace-pre-wrap text-sm opacity-80">
-                            {profile.content}
-                        </p>
-                        <div className="flex gap-2">
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setEditing(profile)}
-                            >
-                                {t('common.edit')}
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() =>
-                                    void callAction(
-                                        'livingmemory.regenerateProfile',
-                                        {
-                                            presetId,
-                                            speakerKey: profile.speakerKey
-                                        }
-                                    ).catch(report)
-                                }
-                            >
-                                {t('profiles.regenerate')}
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() =>
-                                    void callAction(
-                                        'livingmemory.deleteProfile',
-                                        { id: profile.id }
-                                    ).catch(report)
-                                }
-                            >
-                                {t('profiles.delete')}
-                            </Button>
+        <div className="@container min-h-0 flex-1">
+            <div className="grid gap-5 @2xl:h-full @2xl:grid-cols-[minmax(0,1fr)_15rem] @2xl:gap-6">
+                <nav aria-label={t('profiles.directory')} className="flex min-h-0 min-w-0 flex-col gap-2 border-b border-border pb-4 @2xl:col-start-2 @2xl:row-start-1 @2xl:border-b-0 @2xl:border-l @2xl:pb-0 @2xl:pl-4">
+                    <h2 className="text-sm font-semibold">{t('profiles.directory')}</h2>
+                    <SearchBox value={keyword} onChange={value => { setKeyword(value); setPage(1) }}
+                        placeholder={t('profiles.search')} clearLabel={t('profiles.clearSearch')} className="sm:w-full" />
+                    <div className="relative isolate max-h-44 overflow-y-auto @2xl:max-h-none">
+                        <SlidingHighlight hover="[data-profile-row]" className="rounded-lg bg-sidebar-accent/60 duration-150" />
+                        <SlidingHighlight attribute="aria-current" className="rounded-lg bg-sidebar-accent" />
+                        <ul className="space-y-0.5">
+                            {data?.profiles.map(item => (
+                                <li key={item.id}>
+                                    <button type="button" data-profile-row aria-current={item.id === profile?.id ? 'true' : undefined}
+                                        onClick={() => setSelectedId(item.id)}
+                                        className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:text-sidebar-accent-foreground aria-current:text-sidebar-accent-foreground focus-visible:-outline-offset-2">
+                                        {renderAvatar(item)}
+                                        <span className="min-w-0">
+                                            <span className="block text-sm font-medium [overflow-wrap:anywhere]">{profileName(item)}</span>
+                                            <span className="block text-xs text-muted-foreground">{t('profiles.sourceCount', { count: item.sourceMemoryCount })}</span>
+                                        </span>
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                    <Pager page={page} pageSize={PAGE_SIZE} total={data?.total ?? 0} onChange={setPage} />
+                </nav>
+                <div key={profile?.id} className="min-w-0 overflow-y-auto @2xl:col-start-1 @2xl:row-start-1">
+                    {error && <Alert variant="destructive">{error}</Alert>}
+                    {!error && !data && <Skeleton className="h-32 w-full" />}
+                    {!error && data && !profile && <EmptyState title={t(keyword.trim() ? 'profiles.noMatch' : 'profiles.empty')} />}
+                    {profile && (
+                        <article className="livingmemory-profile space-y-4 pb-8">
+                            <header className="flex flex-wrap items-center justify-between gap-4 px-1 pb-1">
+                                <div className="flex min-w-0 items-center gap-4">
+                                    {renderAvatar(profile)}
+                                    <div className="min-w-0">
+                                        <h1 className="text-2xl font-semibold tracking-tight [overflow-wrap:anywhere]">{profileName(profile)}</h1>
+                                        <p className="mt-1 text-xs tabular-nums text-muted-foreground">{t('field.updatedAt')} · {formatTime(profile.updatedAt)}</p>
+                                    </div>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    <Button size="sm" variant="outline" onClick={() => setEditing(profile)}>{t('common.edit')}</Button>
+                                    <Button size="sm" variant="outline" onClick={() => void callAction('livingmemory.regenerateProfile', {
+                                        presetId, speakerKey: profile.speakerKey
+                                    }).catch(report)}>{t('profiles.regenerate')}</Button>
+                                    <Button size="sm" variant="outline" onClick={() => void callAction('livingmemory.deleteProfile', { id: profile.id }).catch(report)}>
+                                        {t('profiles.delete')}
+                                    </Button>
+                                </div>
+                            </header>
+                            <section className="livingmemory-profile-group livingmemory-profile-reading">
+                                <h2 className="mb-3 text-sm font-semibold text-muted-foreground">{t('tab.profiles')}</h2>
+                                <p className="whitespace-pre-wrap text-base leading-8 [overflow-wrap:anywhere]">{profile.content}</p>
+                            </section>
+                            <ProfileMemories presetId={presetId} profile={profile} />
+                        </article>
+                    )}
+                </div>
+            </div>
+            {editing && <ProfileDialog profile={editing} onClose={() => setEditing(undefined)} />}
+        </div>
+    )
+}
+
+function ProfileMemories({ presetId, profile }: { presetId: string; profile: LivingMemoryProfileView }) {
+    const t = useT()
+    const count = profile.sourceMemoryCount
+    if (!count) return <p className="livingmemory-profile-group px-5 py-4 text-sm text-muted-foreground">{t('profiles.noMemories')}</p>
+    return (
+        <Collapsible className="livingmemory-profile-group">
+            <CollapsibleTrigger className="livingmemory-profile-trigger flex w-full items-center gap-3 text-left text-sm font-semibold hover:bg-muted/50 focus-visible:-outline-offset-2">
+                <svg aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
+                    <path d="M3 5.5c3.5-1 6-.7 9 1.2 3-1.9 5.5-2.2 9-1.2V19c-3.5-1-6-.7-9 1.2-3-1.9-5.5-2.2-9-1.2zM12 6.7v13.5" />
+                </svg>
+                {t('profiles.linkedMemories')}
+                <span className="ml-auto text-sm font-normal tabular-nums text-muted-foreground">{count}</span>
+                <span aria-hidden="true" className="livingmemory-profile-chevron" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="livingmemory-profile-sources">
+                <ProfileMemoryList presetId={presetId} profileId={profile.id} count={count} />
+            </CollapsibleContent>
+        </Collapsible>
+    )
+}
+
+function ProfileMemoryList({ presetId, profileId, count }: { presetId: string; profileId: string; count: number }) {
+    const t = useT()
+    const { data, error } = useLive('livingmemory.profileMemories', { presetId, profileId })
+    const names = useSpeakerNames(presetId)
+    if (error) return <Alert variant="destructive">{error}</Alert>
+    if (!data) return <Skeleton className="mx-5 mb-4 h-16" />
+    return (
+        <div className="livingmemory-profile-list">
+            <ol className="divide-y divide-border/50">
+                {data.map((entry, index) => (
+                    <li key={entry.id} className="flex gap-4 py-4">
+                        <span aria-hidden="true" className="pt-0.5 text-xs tabular-nums text-muted-foreground">{String(index + 1).padStart(2, '0')}</span>
+                        <div className="min-w-0 flex-1">
+                            <Badge variant="secondary">{t(`type.${entry.type}`)}</Badge>
+                            <span className="ml-2 text-xs text-muted-foreground">{t(`status.${entry.status}`)}</span>
+                            {entry.summary && <h3 className="mt-2 font-semibold [overflow-wrap:anywhere]">{entry.summary}</h3>}
+                            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 [overflow-wrap:anywhere]">{entry.content}</p>
+                            <div className="mt-3 space-y-2">
+                                <MemoryFields entry={entry} names={names} />
+                                <p className="flex flex-wrap gap-x-4 text-xs text-muted-foreground">
+                                    <span>{t('field.createdAt')} {formatTime(entry.createdAt)}</span>
+                                    <span>{t('field.updatedAt')} {formatTime(entry.updatedAt)}</span>
+                                </p>
+                            </div>
                         </div>
                     </li>
                 ))}
-            </ul>
-            <Pager
-                page={page}
-                pageSize={PAGE_SIZE}
-                total={profiles.data?.total ?? 0}
-                onChange={setPage}
-            />
-            {editing !== undefined && (
-                <ProfileDialog
-                    profile={editing}
-                    onClose={() => setEditing(undefined)}
-                />
-            )}
+            </ol>
+            {count > data.length && <p className="py-3 text-sm text-muted-foreground">{t('profiles.unavailableMemories', { count: count - data.length })}</p>}
         </div>
     )
 }
@@ -665,7 +756,7 @@ function ProfileDialog({
         <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
             <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
                 <DialogHeader>
-                    <DialogTitle>{profile.speakerLabel}</DialogTitle>
+                    <DialogTitle>{profileName(profile)}</DialogTitle>
                     <DialogDescription>
                         {t('profiles.hint')}
                     </DialogDescription>

@@ -39,6 +39,7 @@
         "dist"
     ],
     "scripts": {
+        "dev": "node scripts/build-client.mjs --watch",
         "build": "tsc -p tsconfig.json && node scripts/build.mjs",
         "clean": "node scripts/clean.mjs",
         "pub": "npm run clean && npm run build && npm publish",
@@ -71,6 +72,7 @@
         "cordis": "^4.0.0-rc.12"
     },
     "devDependencies": {
+        "@chatluna/adapter-webui": "*",
         "@chatluna/permission": "*",
         "@chatluna/runtime-webui": "*",
         "@chatluna/ui-client": "*",
@@ -82,6 +84,7 @@
         "@cordisjs/plugin-loader": "^1.0.0-rc.9",
         "@cordisjs/plugin-timer": "^1.1.4",
         "@cordisjs/unyaml": "2.0.3",
+        "@tanstack/react-query": "^5.101.4",
         "@types/node": "24.13.3",
         "@types/react": "^19.2.0",
         "@types/react-dom": "^19.2.0",

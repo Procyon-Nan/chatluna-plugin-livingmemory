@@ -4,8 +4,7 @@ import type {
     MemoryEntryStatus,
     MemoryEntryType,
     MemoryJobRecord,
-    MemorySnapshotRecord,
-    UserProfileRecord
+    MemorySnapshotRecord
 } from './contracts/memory.ts'
 import type {
     JobListQuery,
@@ -15,6 +14,7 @@ import type {
     MemoryListResult,
     PageResult,
     SnapshotListQuery,
+    UserProfileListItem,
     UserProfileListQuery
 } from './contracts/rpc.ts'
 
@@ -166,16 +166,16 @@ export const filterJobList = (
 }
 
 export const filterUserProfileList = (
-    items: UserProfileRecord[],
+    items: UserProfileListItem[],
     query: UserProfileListQuery
-): PageResult<UserProfileRecord> => {
-    const sorted = items.sort((left, right) => {
-        if (+right.updatedAt !== +left.updatedAt) {
-            return +right.updatedAt - +left.updatedAt
-        }
-
-        return left.speakerLabel.localeCompare(right.speakerLabel)
-    })
+): PageResult<UserProfileListItem> => {
+    const keyword = query.keyword?.trim().toLowerCase()
+    const matches = keyword ? items.filter(profile =>
+        profile.speakerLabel.toLowerCase().includes(keyword) || profile.speakerId?.toLowerCase().includes(keyword)
+    ) : items
+    const sorted = matches.toSorted((left, right) =>
+        +right.updatedAt - +left.updatedAt || left.speakerLabel.localeCompare(right.speakerLabel)
+    )
 
     return paginate(sorted, query.page, query.pageSize)
 }

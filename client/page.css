@@ -1,0 +1,65 @@
+main:has(.livingmemory-page),
+.livingmemory-page,
+.livingmemory-page .overflow-y-auto {
+    scrollbar-width: none;
+}
+
+.livingmemory-profile {
+    --disclosure-duration: 280ms;
+    --group-inset: clamp(1rem, 2.5cqi, 2rem);
+    max-width: 64rem;
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 3%, 2.5rem);
+    padding-block-start: clamp(1rem, 3cqi, 3rem);
+}
+
+.livingmemory-profile-group {
+    border-radius: 1.125rem;
+    background: color-mix(in srgb, var(--card) 85%, var(--muted));
+    color: var(--card-foreground);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--border) 60%, transparent),
+                0 2px 8px rgb(0 0 0 / 4%);
+}
+
+.livingmemory-profile-reading {
+    padding: var(--group-inset);
+}
+
+.livingmemory-profile-trigger {
+    border-radius: inherit;
+    padding: 1rem var(--group-inset);
+}
+
+.livingmemory-profile-list {
+    padding: 0 var(--group-inset) .5rem;
+}
+
+.livingmemory-profile-sources {
+    height: var(--collapsible-panel-height);
+    overflow: hidden;
+    transition: height var(--disclosure-duration) linear, opacity var(--disclosure-duration) linear;
+}
+
+.livingmemory-profile-sources:is([data-starting-style], [data-ending-style]) {
+    height: 0;
+    opacity: 0;
+}
+
+.livingmemory-profile-chevron {
+    width: .5rem;
+    height: .5rem;
+    border: solid currentColor;
+    border-width: 1.5px 1.5px 0 0;
+    transform: rotate(45deg);
+    transition: transform var(--disclosure-duration) linear;
+}
+
+[aria-expanded="true"] > .livingmemory-profile-chevron {
+    transform: rotate(135deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .livingmemory-profile {
+        --disclosure-duration: 0s;
+    }
+}

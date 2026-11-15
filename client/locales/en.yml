@@ -106,6 +106,13 @@ tab.profiles: Profiles
 tab.snapshots: Snapshots
 
 profiles.empty: No user profile has been generated for this preset
+profiles.directory: User directory
+profiles.linkedMemories: Linked memories
+profiles.search: Search by name or user ID
+profiles.clearSearch: Clear search
+profiles.noMatch: No matching users
+profiles.noMemories: This profile has no linked memories.
+profiles.unavailableMemories: 'Linked memories no longer available: {count}.'
 profiles.hint: The profile is distilled from linked memories; once saved it is no longer overwritten automatically.
 profiles.sourceCount: '{count} linked memories'
 profiles.regenerate: Regenerate

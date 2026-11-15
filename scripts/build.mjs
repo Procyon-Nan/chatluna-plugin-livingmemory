@@ -1,11 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { isBuiltin } from 'node:module'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 import { rolldown } from 'rolldown'
-import { build as buildClient } from '@chatluna/ui-client'
 
-const projectRoot = dirname(fileURLToPath(new URL('../package.json', import.meta.url)))
+const projectRoot = resolve(import.meta.dirname, '..')
 const manifest = JSON.parse(await readFile(resolve(projectRoot, 'package.json'), 'utf8'))
 const dependencies = Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies })
 
@@ -25,16 +23,5 @@ try {
     await bundle.close()
 }
 
-await buildClient(projectRoot.replaceAll('\\', '/'), {
-    logLevel: 'info',
-    build: {
-        rollupOptions: {
-            onwarn(warning, warn) {
-                // 管理页只在浏览器运行，组件的客户端标记不影响打包。
-                if (warning.code === 'MODULE_LEVEL_DIRECTIVE' && warning.message.includes('"use client"')) return
-                warn(warning)
-            }
-        }
-    }
-})
+await import('./build-client.mjs')
 await import('./build-workers.mjs')

@@ -1,4 +1,5 @@
 import type { Context } from 'cordis'
+import './page.css'
 import zh from './locales/zh.yml'
 import en from './locales/en.yml'
 import type {} from '../src/contracts/webui_live.ts'

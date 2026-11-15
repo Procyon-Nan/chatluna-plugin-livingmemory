@@ -10,8 +10,7 @@ import type {
     MemorySnapshotRecord,
     MemoryUpdatePatch,
     PresetPersonaCardInfo,
-    PresetSpeakerRecord,
-    UserProfileRecord
+    PresetSpeakerRecord
 } from '../../contracts/memory.ts'
 import type {
     JobListQuery,
@@ -161,15 +160,16 @@ export class LivingMemoryAdminService {
 
     // ── 用户画像与人设 ────────────────────────────────────────────────
 
-    async listUserProfiles(
-        query: UserProfileListQuery
-    ): Promise<PageResult<UserProfileRecord>> {
-        return filterUserProfileList(
-            await this.deps.repository.listUserProfilesByPreset(
-                query.presetId
-            ),
-            query
-        )
+    async listUserProfiles(query: UserProfileListQuery) {
+        const [profiles, speakers] = await Promise.all([
+            this.deps.repository.listUserProfilesByPreset(query.presetId),
+            this.listPresetSpeakers(query.presetId)
+        ])
+        const byKey = new Map(speakers.map(speaker => [speaker.speakerKey, speaker]))
+        return filterUserProfileList(profiles.map(profile => {
+            const speaker = byKey.get(profile.speakerKey)
+            return { ...profile, speakerId: speaker?.speakerId ?? null, platform: speaker?.platform ?? null }
+        }), query)
     }
 
     listPresetSpeakers(presetId: string): Promise<PresetSpeakerRecord[]> {

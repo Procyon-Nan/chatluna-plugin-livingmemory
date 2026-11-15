@@ -226,6 +226,14 @@ export class LivingMemoryRepository
         return this.withSourceLabels(await this.getEntriesByPresetAndIds(presetId, ids))
     }
 
+    async listProfileMemories(presetId: string, profileId: string) {
+        const [profile] = await this.database.get('living_memory_user_profile', { presetId, id: profileId }, ['sourceMemoryIds'])
+        const ids = profile?.sourceMemoryIds ?? []
+        const entries = await this.getEntriesWithSources(presetId, ids)
+        const byId = new Map(entries.map(entry => [entry.id, entry]))
+        return ids.map(id => byId.get(id)).filter(entry => entry !== undefined)
+    }
+
     async getSearchEntriesByPresetAndIds(presetId: string, ids: string[]) {
         return this.withSourceLabels(await this.entries.getSearchEntriesByPresetAndIds(presetId, ids))
     }

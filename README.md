@@ -14,6 +14,8 @@ LivingMemory 不建议与原生 memory 同时启用，两者各自提取、保�
 yarn build
 ```
 
+开发 WebUI 时，在插件目录运行 `yarn dev` 并保持运行，另开终端在模板项目根目录运行 `yarn start`。保存 `client/` 下的改动后，已打开的 LivingMemory 页面会自动更新。首次使用前先执行一次 `yarn build`；修改服务端或 Worker 后仍需重新构建并重启实例。
+
 ## 配套服务
 
 必需服务：
