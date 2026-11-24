@@ -715,6 +715,42 @@ it('uses the actual reply route for recall when a scheduled custom wake has no r
     assert.deepEqual(h.recalls.map(call => call.history.map(m => m.contentLines)), [[['scheduled reply']]])
 })
 
+it('uses the private peer for injection and waits for reply delivery to schedule memory work', async t => {
+    const ctx = new Context()
+    t.after(() => ctx.fiber.dispose())
+    await ctx.plugin(SchemaRegistry)
+    await ctx.plugin(Routing)
+    registerRouteSettings(ctx)
+    const h = createHarness({ settingsOf: (...args) => routeSettings(ctx, ...args) })
+    const identity = { platform: 'onebot', selfId: 'bot', isDirect: true, userId: 'owner' }
+    const routeId = routeIdOf(identity)
+    h.framework.channel = { routeId, identity }
+    ctx.provide('chat_observer')
+    ctx.set('chat_observer', h.framework as never)
+    await ctx.routing.save({ id: 'global', values: { livingmemory: {
+        extractionWindowMessages: 0, recallIntervalMessages: 0, enableSnapshotInjection: false,
+        enableUserProfileInjection: false, extractionIncludeOverheard: true
+    } } })
+    await ctx.routing.save({ id: 'owner-dm', filter: { kind: 'and', operands: [
+        { kind: 'direct' }, { kind: 'scope', field: 'user', values: ['owner'] }
+    ] }, values: { livingmemory: {
+        extractionWindowMessages: 10, recallIntervalMessages: 10, enableSnapshotInjection: true, enableUserProfileInjection: true
+    } } })
+    h.setSnapshot('已有快照')
+    for (let id = 1; id <= 10; id++) await h.observed(id, '私聊消息', { routeId, userId: 'owner' })
+    assert.equal(h.extractions.length, 0)
+    const agent = h.agent()
+    agent.options.location = { platform: 'onebot', selfId: 'bot', isDirect: true }
+    await h.begin(agent, 10)
+    const [injection] = await h.request(agent)
+    assert.equal(contentText(injection.content), '<memory>\n已有快照\n</memory>\n\n<users_profile>\n测试画像\n</users_profile>')
+    await h.send([11], 1, undefined, routeId)
+    await h.observed(11, '回复', { self: true, routeId })
+    assert.deepEqual([h.extractions.length, h.recalls.length], [0, 0])
+    await h.turn(agent)
+    assert.deepEqual([h.extractions.length, h.recalls.length], [1, 1])
+})
+
 it('uses the target DM rule on the first scheduled wake before any chat is observed', async (t) => {
     const ctx = new Context()
     t.after(() => ctx.fiber.dispose())
@@ -725,7 +761,7 @@ it('uses the target DM rule on the first scheduled wake before any chat is obser
     ctx.provide('chat')
     ctx.set('chat', { environmentOf: (id: string) => id === 'session-1' ? dm : undefined } as never)
     ctx.provide('chat_observer')
-    ctx.set('chat_observer', { identityOfConversation: () => undefined } as never)
+    ctx.set('chat_observer', { channelOf: () => undefined } as never)
     await ctx.routing.save({ id: 'dm', filter: { kind: 'scope', field: 'route', values: [routeIdOf(dm)] },
         values: { livingmemory: { enableConversationIsolation: true } } })
     await ctx.routing.save({ id: 'bob', filter: { kind: 'scope', field: 'user', values: ['bob'] },
@@ -739,7 +775,7 @@ it('uses the target DM rule on the first scheduled wake before any chat is obser
     await h.engineTurn(agent, 1, [timer])
     const settings = h.hooks.contextForTurn(agent)?.settings
     assert.equal(settings?.enableConversationIsolation, true)
-    assert.equal(settings.enableUserProfileInjection, false)
+    assert.equal(settings.enableUserProfileInjection, true)
 })
 
 it('uses the first proactive wake for profiles without recalling on either notification', async () => {
