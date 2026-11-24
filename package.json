@@ -1,6 +1,6 @@
 {
     "name": "chatluna-plugin-livingmemory",
-    "version": "0.0.10",
+    "version": "0.0.11",
     "publishConfig": {
         "registry": "https://registry.npmjs.org/",
         "access": "public"
