@@ -40,7 +40,7 @@ declare module '@chatluna/ui-client/client' {
         'livingmemory.profileMemories': LivingMemoryEntryView[]
         'livingmemory.snapshots': LivingMemorySnapshotsSnapshot
         'livingmemory.status': LivingMemoryStatusSnapshot
-        'livingmemory.settingsEntry': { id: string; name: string } | null
+        'livingmemory.settingsEntry': { id: string } | null
     }
     interface Actions {
         'livingmemory.create'(input: EntryInput & {

@@ -12,13 +12,13 @@ export function SettingsPanel() {
         if (entry.status === 'ready') return <Alert>{t('settings.noEntry')}</Alert>
         return <Skeleton className="h-32 w-full" />
     }
-    return <InstanceSettings key={entry.data.id} id={entry.data.id} name={entry.data.name} />
+    return <InstanceSettings key={entry.data.id} id={entry.data.id} />
 }
 
-function InstanceSettings({ id, name }: { id: string; name: string }) {
+function InstanceSettings({ id }: { id: string }) {
     const t = useTranslate('livingmemory')
     const locale = useLocale()
-    const runtime = useLive('plugins.runtime', { name, locale: locale.active.startsWith('zh') ? 'zh' : 'en' })
+    const runtime = useLive('plugins.runtime', { id, locale: locale.active.startsWith('zh') ? 'zh' : 'en' })
     const document = useLive('plugins.document', { id })
     const validation = useFormValidation()
     const [draft, setDraft] = React.useState<{ base: PluginDocument; values: PluginDocument['values'] }>()

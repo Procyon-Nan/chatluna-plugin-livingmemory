@@ -272,7 +272,7 @@ export default class LivingmemoryService extends Service {
                 ctx.chatluna_webui.state('livingmemory.settingsEntry', {
                     get: () => {
                         const entry = this.ctx.fiber.entry
-                        return entry ? { id: entry.id, name: entry.options.name } : null
+                        return entry ? { id: entry.id } : null
                     }
                 })
                 const files = {
