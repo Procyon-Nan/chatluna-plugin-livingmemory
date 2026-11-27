@@ -215,6 +215,11 @@ export class LivingMemoryRepository
         return this.entries.getEntryById(id)
     }
 
+    async findMemoryIds(presetId: string, pattern: RegExp) {
+        const rows = await this.database.get('living_memory_entry', { presetId, id: { $regex: pattern } }, ['id'])
+        return rows.map(row => row.id)
+    }
+
     getEntriesByPresetAndIds(
         presetId: string,
         ids: string[]

@@ -1,3 +1,4 @@
+import { withModelMemoryIds, type MemoryIdSource } from '../model_ids.ts'
 import { isCustomConversation } from '../../../routing.ts'
 import { defineTool, type ToolCallContext, type ToolDefinition } from '@chatluna/tool'
 import type { LivingMemorySearchProvider } from '../../../contracts/workflows.ts'
@@ -21,7 +22,7 @@ interface SearchArgs {
  * 检索范围，否则在整个预设内检索。
  */
 export const createSearchMemoryTool = (
-    searchProvider: LivingMemorySearchProvider,
+    searchProvider: LivingMemorySearchProvider & MemoryIdSource,
     resolveRoute?: ToolRouteResolver
 ): ToolDefinition<SearchArgs> =>
     defineTool({
@@ -56,6 +57,7 @@ export const createSearchMemoryTool = (
                 { ...input, memoryTypes: ['all'], memoryStatus: 'active' },
                 conversationId
             )
-            return results.length ? renderMemoriesForModel(results, true) : '没有找到相关记忆。'
+            if (!results.length) return '没有找到相关记忆。'
+            return renderMemoriesForModel(await withModelMemoryIds(searchProvider, presetId, results), true)
         }
     })

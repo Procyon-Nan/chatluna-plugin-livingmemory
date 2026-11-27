@@ -5,7 +5,6 @@ import {
 } from '../src/service/workflows/dream/post_extraction.ts'
 import {
     advanceDreamBatch,
-    assertDreamMemoriesAvailable,
     createDreamSessionState,
     getDreamCoverage,
     recordDreamOperation
@@ -112,9 +111,7 @@ it('resets group permissions and keeps an earlier group omission after later suc
     recordDreamOperation(state, ['x'], 'kept')
     state.availableMemoryIds.add('replacement')
     advanceDreamBatch(state)
-    assert.throws(() =>
-        assertDreamMemoriesAvailable(state, ['x', 'replacement'])
-    )
+    assert.deepEqual([...state.availableMemoryIds], ['y', 'a'])
     assert.equal(state.processedMemoryIds.has('a'), false)
     recordDreamOperation(state, ['y', 'a'], 'kept')
     advanceDreamBatch(state)

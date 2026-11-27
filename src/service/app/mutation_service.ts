@@ -1,4 +1,4 @@
-import { MemoryInputError } from '../memory/errors.ts'
+import { MemoryInputError, missingMemory } from '../memory/errors.ts'
 import type {
     LivingMemoryPresetExport,
     LivingMemoryPresetImportResult,
@@ -27,7 +27,7 @@ import {
 } from '../memory/speaker_identity.ts'
 import { SerialTaskQueue } from '../shared/serial_task_queue.ts'
 import { formatErrorDetails } from '../shared/utils.ts'
-import { LivingMemoryFactsCommittedError } from '../vector_index/errors.ts'
+import { LivingMemoryFactsCommittedError, withIndexWarning } from '../vector_index/errors.ts'
 import { formatLogScope, type LivingMemoryLogger } from '../logging/logger.ts'
 
 type MemoryFactRepository = Pick<
@@ -303,9 +303,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
                 source.presetId !== presetId ||
                 source.status !== 'active'
             ) {
-                throw new MemoryInputError(
-                    `不存在 ID 为 ${sourceMemoryId} 的记忆，请重新查明记忆 ID 后再调用。`
-                )
+                throw missingMemory(sourceMemoryId)
             }
             await this.registerCallerSpeakerKeys(
                 presetId,
@@ -347,9 +345,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             for (const id of sourceMemoryIds) {
                 const entry = entryById.get(id)
                 if (entry === undefined || entry.status !== 'active') {
-                    throw new MemoryInputError(
-                        `不存在 ID 为 ${id} 的记忆，请重新查明记忆 ID 后再调用。`
-                    )
+                    throw missingMemory(id)
                 }
             }
             await this.registerCallerSpeakerKeys(presetId, memory.speakerKeys)
@@ -374,27 +370,16 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
         archived: MemoryEntryRecord[],
         operation: '合并' | '拆分' | '提取'
     ): Promise<string[]> {
-        try {
-            await this.syncCommittedMutationToIndex({
-                presetId,
-                upserts: [
-                    ...created.map((record) =>
-                        this.buildIndexUpsert(record, 'replace')
-                    ),
-                    ...archived.map((record) =>
-                        this.buildIndexUpsert(record, 'preserve')
-                    )
-                ],
-                deletes: []
-            })
-            return []
-        } catch (error) {
-            if (!(error instanceof LivingMemoryFactsCommittedError)) throw error
-            // 已提交的新 ID 随警告返回，供调用方继续使用。
-            return [
-                `记忆已${operation}，但向量索引同步失败，已调度后台自动对账：${error.message}`
-            ]
-        }
+        const warnings: string[] = []
+        await withIndexWarning(this.syncCommittedMutationToIndex({
+            presetId,
+            upserts: [
+                ...created.map(record => this.buildIndexUpsert(record, 'replace')),
+                ...archived.map(record => this.buildIndexUpsert(record, 'preserve'))
+            ],
+            deletes: []
+        }), warnings, operation)
+        return warnings
     }
 
     async deleteMemories(presetId: string, ids: string[]) {

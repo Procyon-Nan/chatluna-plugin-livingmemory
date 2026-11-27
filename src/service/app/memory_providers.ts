@@ -46,6 +46,10 @@ export class LivingMemoryMemoryProviders
 {
     constructor(private readonly options: LivingMemoryProviderOptions) {}
 
+    findMemoryIds(presetId: string, pattern: RegExp) {
+        return this.options.repository.findMemoryIds(presetId, pattern)
+    }
+
     searchMemories(
         presetId: string,
         input: LivingMemorySearchInput,

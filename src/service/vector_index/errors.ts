@@ -36,3 +36,12 @@ export class LivingMemoryFactsCommittedError extends Error {
     }
 }
 
+/** 写入已提交而索引同步失败时，工具应返回成功和警告，避免模型重复写入。 */
+export async function withIndexWarning<T>(write: Promise<T>, warnings: string[], action: string) {
+    try {
+        return await write
+    } catch (error) {
+        if (!(error instanceof LivingMemoryFactsCommittedError)) throw error
+        warnings.push(`记忆已${action}，但向量索引同步失败，已调度后台自动对账：${error.message}`)
+    }
+}

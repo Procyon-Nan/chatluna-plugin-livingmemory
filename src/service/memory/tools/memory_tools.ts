@@ -1,3 +1,5 @@
+import { withIndexWarning } from '../../vector_index/errors.ts'
+import { modelMemoryIds, withModelMemoryIds, type MemoryIdSource } from '../model_ids.ts'
 import { defineTool, type ToolCallContext, type ToolDefinition } from '@chatluna/tool'
 import { toAttributedMemory, toMemoryFields } from '../entry_fields.ts'
 import type {
@@ -18,8 +20,8 @@ import {
     memorySplitTool,
     memoryUpdateTool
 } from '../../prompts/memory_tools.ts'
-import { MemoryInputError } from '../errors.ts'
-import { LivingMemoryFactsCommittedError } from '../../vector_index/errors.ts'
+import { missingMemory } from '../errors.ts'
+import { mergeToolResult, splitToolResult } from './results.ts'
 import { resolveSpeakerKeysByLabels } from '../speaker_identity.ts'
 import {
     agentOfTool,
@@ -30,8 +32,14 @@ import {
     resolveToolMemoryScope
 } from './tool_runtime.ts'
 
+function toolPresetId(call: ToolCallContext) {
+    const result = resolveToolMemoryPresetId(agentOfTool(call.agent))
+    if (!result.ok) throw new Error(describeLivingMemoryToolScopeFailure(result.reason))
+    return result.presetId
+}
+
 export const createCreateMemoryTool = (
-    creation: LivingMemoryCreationProvider,
+    creation: LivingMemoryCreationProvider & MemoryIdSource,
     maxMemories: number,
     resolveRoute?: ToolRouteResolver
 ): ToolDefinition<{ memories: ExtractedMemoryItem[] }> => {
@@ -53,33 +61,19 @@ export const createCreateMemoryTool = (
             const speakers = await creation.listPresetSpeakers(resolution.scope.presetId)
             for (const memory of input.memories) {
                 const speakerKeys = resolveSpeakerKeysByLabels(memory.speakerLabels, speakers)
-                try {
-                    const record = await creation.createMemory(
-                        resolution.scope,
-                        toMemoryFields(memory),
-                        speakerKeys
-                    )
-                    createdMemories.push({ id: record.id, type: record.type })
-                } catch (error) {
-                    if (error instanceof LivingMemoryFactsCommittedError) {
-                        // 事实已落库，仅索引同步失败：如实按已保存处理并附警告。
-                        // 返回失败会诱导模型重试，产生重复记忆行。
-                        warnings.push(
-                            '记忆已保存，但向量索引同步失败，已调度后台自动对账：' + error.message
-                        )
-                        continue
-                    }
-                    throw error
-                }
+                const record = await withIndexWarning(
+                    creation.createMemory(resolution.scope, toMemoryFields(memory), speakerKeys), warnings, '保存'
+                )
+                if (record) createdMemories.push({ id: record.id, type: record.type })
             }
 
-            return { createdMemories, warnings }
+            return { createdMemories: await withModelMemoryIds(creation, resolution.scope.presetId, createdMemories, warnings), warnings }
         }
     })
 }
 
 export const createUpdateMemoryTool = (
-    updates: LivingMemoryUpdateProvider
+    updates: LivingMemoryUpdateProvider & MemoryIdSource
 ): ToolDefinition<{ memoryId: string; memory: ExtractedMemoryItem }> =>
     defineTool({
         name: memoryUpdateTool.name,
@@ -87,38 +81,24 @@ export const createUpdateMemoryTool = (
         args: memoryUpdateTool.schema,
         traits: { effect: 'write' },
         async run(input: { memoryId: string; memory: ExtractedMemoryItem }, call: ToolCallContext) {
-            const resolution = resolveToolMemoryPresetId(agentOfTool(call.agent))
-            if (resolution.ok === false) {
-                throw new Error(describeLivingMemoryToolScopeFailure(resolution.reason))
-            }
+            const presetId = toolPresetId(call)
 
-            const speakers = await updates.listPresetSpeakers(resolution.presetId)
-            const { memory, memoryId } = input
+            const { memory } = input
+            const refs = await modelMemoryIds(updates, presetId, [input.memoryId])
+            const memoryId = refs.resolve(input.memoryId)
+            const speakers = await updates.listPresetSpeakers(presetId)
             const speakerKeys = resolveSpeakerKeysByLabels(memory.speakerLabels, speakers)
             const warnings: string[] = []
-            try {
-                const record = await updates.updateActiveMemory(
-                    resolution.presetId, memoryId, toAttributedMemory(memory, speakerKeys)
-                )
-                if (record === null) {
-                    throw new MemoryInputError(
-                        `不存在 ID 为 ${memoryId} 的记忆，请重新查明记忆 ID 后再调用。`
-                    )
-                }
-            } catch (error) {
-                if (!(error instanceof LivingMemoryFactsCommittedError)) {
-                    throw error
-                }
-                warnings.push(
-                    '记忆已更新，但向量索引同步失败，已调度后台自动对账：' + error.message
-                )
-            }
-            return { memoryId, updated: true, warnings }
+            const record = await withIndexWarning(
+                updates.updateActiveMemory(presetId, memoryId, toAttributedMemory(memory, speakerKeys)), warnings, '更新'
+            )
+            if (record === null) throw missingMemory(input.memoryId)
+            return { memoryId: refs.display(memoryId), updated: true, warnings }
         }
     })
 
 export const createMergeMemoriesTool = (
-    merges: LivingMemoryMergeProvider
+    merges: LivingMemoryMergeProvider & MemoryIdSource
 ): ToolDefinition<{ sourceMemoryIds: string[]; memory: ExtractedMemoryItem }> =>
     defineTool({
         name: memoryMergeTool.name,
@@ -126,30 +106,24 @@ export const createMergeMemoriesTool = (
         args: memoryMergeTool.schema,
         traits: { effect: 'write' },
         async run(input: { sourceMemoryIds: string[]; memory: ExtractedMemoryItem }, call: ToolCallContext) {
-            const resolution = resolveToolMemoryPresetId(agentOfTool(call.agent))
-            if (resolution.ok === false) {
-                throw new Error(describeLivingMemoryToolScopeFailure(resolution.reason))
-            }
+            const presetId = toolPresetId(call)
 
-            const speakers = await merges.listPresetSpeakers(resolution.presetId)
-            const { sourceMemoryIds, memory } = input
+            const refs = await modelMemoryIds(merges, presetId, input.sourceMemoryIds)
+            const sourceMemoryIds = input.sourceMemoryIds.map(id => refs.resolve(id))
+            const speakers = await merges.listPresetSpeakers(presetId)
+            const { memory } = input
             const speakerKeys = resolveSpeakerKeysByLabels(memory.speakerLabels, speakers)
             const result = await merges.mergeActiveMemories(
-                resolution.presetId,
+                presetId,
                 sourceMemoryIds,
                 toAttributedMemory(memory, speakerKeys)
             )
-            return {
-                memoryId: result.memory.id,
-                archivedMemoryIds: sourceMemoryIds,
-                merged: true,
-                warnings: result.warnings
-            }
+            return mergeToolResult(merges, presetId, sourceMemoryIds, result)
         }
     })
 
 export const createSplitMemoryTool = (
-    splits: LivingMemorySplitProvider
+    splits: LivingMemorySplitProvider & MemoryIdSource
 ): ToolDefinition<{ sourceMemoryId: string; memories: ExtractedMemoryItem[] }> =>
     defineTool({
         name: memorySplitTool.name,
@@ -157,29 +131,23 @@ export const createSplitMemoryTool = (
         args: memorySplitTool.schema,
         traits: { effect: 'write' },
         async run(input: { sourceMemoryId: string; memories: ExtractedMemoryItem[] }, call: ToolCallContext) {
-            const resolution = resolveToolMemoryPresetId(agentOfTool(call.agent))
-            if (resolution.ok === false) {
-                throw new Error(describeLivingMemoryToolScopeFailure(resolution.reason))
-            }
-            const speakers = await splits.listPresetSpeakers(resolution.presetId)
+            const presetId = toolPresetId(call)
+            const refs = await modelMemoryIds(splits, presetId, [input.sourceMemoryId])
+            const sourceId = refs.resolve(input.sourceMemoryId)
+            const speakers = await splits.listPresetSpeakers(presetId)
             const result = await splits.splitActiveMemory(
-                resolution.presetId,
-                input.sourceMemoryId,
+                presetId,
+                sourceId,
                 input.memories.map((memory) =>
                     toAttributedMemory(memory, resolveSpeakerKeysByLabels(memory.speakerLabels, speakers))
                 )
             )
-            return {
-                memoryIds: result.memories.map((memory) => memory.id),
-                archivedMemoryId: input.sourceMemoryId,
-                split: true,
-                warnings: result.warnings
-            }
+            return splitToolResult(splits, presetId, sourceId, result)
         }
     })
 
 export const createDeleteMemoryTool = (
-    archives: LivingMemoryArchiveProvider
+    archives: LivingMemoryArchiveProvider & MemoryIdSource
 ): ToolDefinition<{ memoryId: string }> =>
     defineTool({
         name: memoryDeleteTool.name,
@@ -187,33 +155,19 @@ export const createDeleteMemoryTool = (
         args: memoryDeleteTool.schema,
         traits: { effect: 'write' },
         async run(input: { memoryId: string }, call: ToolCallContext) {
-            const resolution = resolveToolMemoryPresetId(agentOfTool(call.agent))
-            if (resolution.ok === false) {
-                throw new Error(describeLivingMemoryToolScopeFailure(resolution.reason))
-            }
+            const presetId = toolPresetId(call)
 
+            const refs = await modelMemoryIds(archives, presetId, [input.memoryId])
+            const memoryId = refs.resolve(input.memoryId)
             const warnings: string[] = []
-            try {
-                const result = await archives.archiveActiveMemories(resolution.presetId, [input.memoryId])
-                if (result.archived === 0) {
-                    throw new MemoryInputError(
-                        `不存在 ID 为 ${input.memoryId} 的记忆，请重新查明记忆 ID 后再调用。`
-                    )
-                }
-            } catch (error) {
-                if (!(error instanceof LivingMemoryFactsCommittedError)) {
-                    throw error
-                }
-                warnings.push(
-                    '记忆已归档，但向量索引同步失败，已调度后台自动对账：' + error.message
-                )
-            }
-            return { memoryId: input.memoryId, deleted: true, warnings }
+            const result = await withIndexWarning(archives.archiveActiveMemories(presetId, [memoryId]), warnings, '归档')
+            if (result?.archived === 0) throw missingMemory(input.memoryId)
+            return { memoryId: refs.display(memoryId), deleted: true, warnings }
         }
     })
 
 export const createGetMessagesTool = (
-    sources: LivingMemorySourceProvider
+    sources: LivingMemorySourceProvider & MemoryIdSource
 ): ToolDefinition<{ memoryId: string }> =>
     defineTool({
         name: memoryGetMessagesTool.name,
@@ -221,17 +175,11 @@ export const createGetMessagesTool = (
         args: memoryGetMessagesTool.schema,
         traits: { effect: 'read' },
         async run(input: { memoryId: string }, call: ToolCallContext) {
-            const resolution = resolveToolMemoryPresetId(agentOfTool(call.agent))
-            if (resolution.ok === false) {
-                throw new Error(describeLivingMemoryToolScopeFailure(resolution.reason))
-            }
+            const presetId = toolPresetId(call)
 
-            const memory = await sources.getMemorySourceMessages(resolution.presetId, input.memoryId)
-            if (memory === null) {
-                throw new Error(
-                    `不存在 ID 为 ${input.memoryId} 的记忆，请重新查明记忆 ID 后再调用。`
-                )
-            }
-            return renderMemorySourceMessagesForModel(memory)
+            const refs = await modelMemoryIds(sources, presetId, [input.memoryId])
+            const memory = await sources.getMemorySourceMessages(presetId, refs.resolve(input.memoryId))
+            if (memory === null) throw missingMemory(input.memoryId)
+            return renderMemorySourceMessagesForModel({ ...memory, id: refs.display(memory.id) })
         }
     })

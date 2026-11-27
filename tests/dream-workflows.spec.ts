@@ -189,6 +189,7 @@ it('runs the production Dream service through real tools across batches and reco
     const batchSizes: number[] = []
     const { result } = await runService((request) => {
         const ids = currentIds(request)
+        for (const id of ids) assert.match(id, /^[a-f0-9]{12}$/)
         batchSizes.push(ids.length)
         assert.equal(request.model, 'test')
         return checked(ids)
@@ -201,14 +202,17 @@ it('runs the production Dream service through real tools across batches and reco
 })
 
 it('keeps successful operations and proceeds past an ineffective batch as partial', async () => {
-    let firstId = ''
+    let progress = ''
     const { result } = await runService((request, round) => {
         if (round === 1) {
-            firstId = currentIds(request)[0]
-            return checked([firstId])
+            return checked([currentIds(request)[0]])
+        }
+        if (round === 2) {
+            progress = request.messages.at(-1)?.content.find(block => block.type === 'text')?.text ?? ''
         }
         return textFold('没有工具操作')
     })
+    assert.match(progress, /尚未处理的记忆 ID：[0-9a-f]{12}(?:、[0-9a-f]{12})*\n/)
     assert.equal(result.status, 'partial')
     assert.equal(result.processedCount, 1)
     assert.equal(result.unprocessedMemoryIds.length, 30)

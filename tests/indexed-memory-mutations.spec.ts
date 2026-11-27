@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict'
+import { LivingMemoryMemoryProviders } from '../src/service/app/memory_providers.ts'
+import { createDeleteMemoryTool, createGetMessagesTool, createUpdateMemoryTool } from '../src/service/memory/tools/memory_tools.ts'
+import { createSearchMemoryTool } from '../src/service/memory/tools/search_memory_tool.ts'
+import { runTool } from './tool-test-utils.ts'
 import type {
     LivingMemoryPresetExport,
     MemoryEntryRecord,
@@ -51,8 +55,7 @@ const createSession = async (
         presetId,
         state,
         speakers: await repository.listPresetSpeakers(presetId),
-        getEntriesByPresetAndIds: (id, ids) =>
-            repository.getEntriesByPresetAndIds(id, ids),
+        repository,
         mutations
     })
 
@@ -146,6 +149,47 @@ class MemoryIndexSinkStub implements MemoryIndexMutationSink {
     }
 }
 
+it('resolves model references across calls without confusing presets, archived rows or historical primary keys', async () => {
+    await withLivingMemoryRepository(async (ctx, repository) => {
+        const original = await repository.createMemory(scope, { type: 'fact', content: '原始记忆' })
+        const tail = original.id.slice(-12)
+        const hash = 'a'.repeat(52) + tail
+        const insert = (id: string, preset: string, status: 'active' | 'archived') =>
+            ctx.database.create('living_memory_entry', { ...original, id, presetId: preset, status })
+        await insert('b'.repeat(52) + tail, 'another-preset', 'active')
+        const mutations = new LivingMemoryMutationService(repository, new MemoryIndexSinkStub(), createLoggerStub().logger)
+        const provider = new LivingMemoryMemoryProviders({
+            repository, mutations,
+            searchEngine: { searchMemories: () => repository.getEntriesWithSources(presetId, [original.id]) }
+        })
+        const search = async () => runTool<string>(createSearchMemoryTool(provider), { searchTexts: ['记忆'] }, scope)
+        const messages = (memoryId: string) => runTool<string>(createGetMessagesTool(provider), { memoryId }, scope)
+        const remove = (memoryId: string) => runTool(createDeleteMemoryTool(provider), { memoryId }, scope)
+
+        const found = (await search()).split('\n')[0]
+        assert.equal(found, 'id=' + tail)
+        assert.equal((await messages(found.slice(3))).split('\n')[0], found)
+        assert.equal(await messages(original.id), await messages(tail))
+        const otherHash = 'c'.repeat(64)
+        await insert(otherHash, presetId, 'active')
+        await runTool(createUpdateMemoryTool(provider), { memoryId: otherHash.slice(-12), memory: sessionMemory }, scope)
+        assert.equal((await repository.getEntryById(otherHash))?.content, sessionMemory.content)
+
+        await insert(hash, presetId, 'archived')
+        assert.equal((await search()).split('\n')[0], 'id=' + original.id)
+        await assert.rejects(remove(tail), /对应多条记忆/)
+        const { state, invoke } = await createSession(repository, mutations, [[original]])
+        advanceDreamBatch(state)
+        await assert.rejects(invoke('checked_memory', { memoryIds: [tail], reason: '确认' }), (error: Error) =>
+            error.message.includes(original.id) && !error.message.includes(hash))
+        await insert(tail, presetId, 'active')
+        await remove(tail)
+        assert.equal((await repository.getEntryById(tail))?.status, 'archived')
+        assert.equal((await repository.getEntryById(original.id))?.status, 'active')
+        await assert.rejects(messages('000000000001'), /不存在/)
+    })
+})
+
 for (const indexFailure of [false, true]) {
     it(`splits Dream memories with provenance (index failure: ${indexFailure})`, async () => {
         await withLivingMemoryRepository(async (ctx, repository) => {
@@ -195,7 +239,7 @@ for (const indexFailure of [false, true]) {
             )
             advanceDreamBatch(state)
             const result = await invoke('split_memory', {
-                sourceMemoryId: source.id,
+                sourceMemoryId: source.id.slice(-12),
                 memories: [
                     {
                         ...sessionMemory,
@@ -212,12 +256,10 @@ for (const indexFailure of [false, true]) {
                 ]
             })
             assert.equal(result.memoryIds.length, 2)
-            assert.equal(result.archivedMemoryId, source.id)
+            assert.equal(result.archivedMemoryId, source.id.slice(-12))
             assert.equal(result.warnings.length, indexFailure ? 1 : 0)
-            const children = await repository.getEntriesByPresetAndIds(
-                presetId,
-                result.memoryIds
-            )
+            const children = (await repository.listEntriesByPreset(presetId)).filter(entry => entry.id !== source.id)
+            assert.deepEqual(children.map(child => child.id.slice(-12)).sort(), [...result.memoryIds].sort())
             for (const child of children) {
                 assert.equal(child.status, 'active')
                 assert.deepEqual(child.sourceOrigins, source.sourceOrigins)
@@ -235,7 +277,7 @@ for (const indexFailure of [false, true]) {
             )
             assert.equal(links.length, 2)
             assert.ok(
-                links.every((link) => result.memoryIds.includes(link.memoryId))
+                links.every((link) => children.some(child => child.id === link.memoryId))
             )
             assert.equal(
                 (await repository.getEntryById(source.id))?.status,
@@ -340,6 +382,7 @@ it('tracks Dream coverage across batches and reuses merged memories', async () =
             false
         )
         advanceDreamBatch(state)
+        await assert.rejects(invoke('delete_memory', { memoryId: outside.id.slice(-12) }), /已提供的记忆 ID/)
         assert.equal(state.availableMemoryIds.has(outside.id), false)
         assert.equal(getDreamCoverage(state).processedCount, 0)
         const merged = await invoke('merge_memories', {
@@ -422,7 +465,8 @@ it('retains successful Dream coverage when only index synchronization fails', as
             stored.filter((entry) => entry.status === 'archived').length,
             3
         )
-        assert.equal(state.availableMemoryIds.has(outputs[1].memoryId), true)
+        const merged = stored.find(entry => entry.id.slice(-12) === outputs[1].memoryId)!
+        assert.ok(state.availableMemoryIds.has(merged.id))
         await flushBackgroundTasks()
         assert.equal(sink.reconciledPresets.length, 3)
     })

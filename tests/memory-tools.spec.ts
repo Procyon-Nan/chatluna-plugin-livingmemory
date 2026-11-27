@@ -1,3 +1,4 @@
+import type { MemoryIdSource } from '../src/service/memory/model_ids.ts'
 import assert from 'node:assert/strict'
 import { Schema, schemasteryToJsonSchemaNode } from '@chatluna/schema'
 import type {
@@ -111,7 +112,8 @@ it('rejects sub-agent calls and calls without a conversation', () => {
 
 it('always searches active memories and keeps the tool schema stable', async () => {
     const inputs: LivingMemorySearchInput[] = []
-    const provider: LivingMemorySearchProvider = {
+    const provider: LivingMemorySearchProvider & MemoryIdSource = {
+        findMemoryIds: async () => [],
         searchMemories: async (_presetId, input) => {
             inputs.push(input)
             return []
@@ -130,7 +132,8 @@ it('always searches active memories and keeps the tool schema stable', async () 
 
 it('scopes the search to the conversation when isolation is enabled', async () => {
     const calls: (string | undefined)[] = []
-    const provider: LivingMemorySearchProvider = {
+    const provider: LivingMemorySearchProvider & MemoryIdSource = {
+        findMemoryIds: async () => [],
         searchMemories: async (_presetId, _input, conversationId) => {
             calls.push(conversationId)
             return []
@@ -158,7 +161,8 @@ it('scopes the search to the conversation when isolation is enabled', async () =
 })
 
 it('returns matching memories with their ids and source labels', async () => {
-    const provider: LivingMemorySearchProvider = {
+    const provider: LivingMemorySearchProvider & MemoryIdSource = {
+        findMemoryIds: async () => [],
         searchMemories: async () => [
             {
                 id: 'memory-1',
@@ -193,7 +197,8 @@ it('returns matching memories with their ids and source labels', async () => {
 })
 
 it('renders source messages as the original transcript of one memory', async () => {
-    const service: LivingMemorySourceProvider = {
+    const service: LivingMemorySourceProvider & MemoryIdSource = {
+        findMemoryIds: async () => [],
         getMemorySourceMessages: async (_presetId, memoryId) => {
             if (memoryId !== 'memory-1') return null
             return {
@@ -257,7 +262,8 @@ it('resolves speaker labels through the preset speakers', async () => {
             updatedAt: new Date()
         }
     ]
-    const creation: LivingMemoryCreationProvider = {
+    const creation: LivingMemoryCreationProvider & MemoryIdSource = {
+        findMemoryIds: async () => [],
         listPresetSpeakers: async () => speakers,
         createMemory: async (scope, input, speakerKeys) => {
             assert.deepEqual(input, {
@@ -296,8 +302,23 @@ it('resolves speaker labels through the preset speakers', async () => {
     assert.deepEqual(created[0]?.speakerKeys, ['key-alice'])
 })
 
+it('returns the committed ID when the receipt cannot look up its suffix', async () => {
+    const id = '00000000-0000-4000-8000-123456789abc'
+    const tool = createCreateMemoryTool({
+        listPresetSpeakers: async () => [],
+        createMemory: async () => record(id),
+        findMemoryIds: async () => { throw new Error('lookup failed') }
+    }, 1)
+    const result = await runTool<{ createdMemories: { id: string }[]; warnings: string[] }>(tool, {
+        memories: [{ type: 'fact', content: 'c', summary: 's', keywords: ['k'], speakerLabels: [], sentiment: '平静', importance: 0.5 }]
+    }, { presetId: 'default', conversationKey: 'conversation-1' })
+    assert.equal(result.createdMemories[0].id, id)
+    assert.match(result.warnings[0], /短号查询失败.*lookup failed/)
+})
+
 it('reports a missing memory when updating', async () => {
-    const updates: LivingMemoryUpdateProvider = {
+    const updates: LivingMemoryUpdateProvider & MemoryIdSource = {
+        findMemoryIds: async () => [],
         listPresetSpeakers: async () => [],
         updateActiveMemory: async () => null
     }
@@ -325,14 +346,16 @@ it('reports a missing memory when updating', async () => {
 
 it('merges and splits with attributed speaker keys', async () => {
     const merged: unknown[] = []
-    const merges: LivingMemoryMergeProvider = {
+    const merges: LivingMemoryMergeProvider & MemoryIdSource = {
+        findMemoryIds: async () => [],
         listPresetSpeakers: async () => [],
         mergeActiveMemories: async (_presetId, sourceMemoryIds, memory) => {
             merged.push({ sourceMemoryIds, speakerKeys: memory.speakerKeys })
             return { memory: record('merged-1'), warnings: [] }
         }
     }
-    const split: LivingMemorySplitProvider = {
+    const split: LivingMemorySplitProvider & MemoryIdSource = {
+        findMemoryIds: async () => [],
         listPresetSpeakers: async () => [],
         splitActiveMemory: async (_presetId, sourceMemoryId, memories) => ({
             memories: memories.map((_memory, index) => record(`split-${index}`)),
@@ -376,7 +399,8 @@ it('merges and splits with attributed speaker keys', async () => {
 })
 
 it('reports a missing memory when deleting', async () => {
-    const archives: LivingMemoryArchiveProvider = {
+    const archives: LivingMemoryArchiveProvider & MemoryIdSource = {
+        findMemoryIds: async () => [],
         archiveActiveMemories: async () => ({ archived: 0 })
     }
 
@@ -388,7 +412,7 @@ it('reports a missing memory when deleting', async () => {
 
 it('sends memory field constraints and descriptions in the model-facing parameters', () => {
     const tool = createCreateMemoryTool(
-        { listPresetSpeakers: async () => [], createMemory: async () => record('m') },
+        { findMemoryIds: async () => [], listPresetSpeakers: async () => [], createMemory: async () => record('m') },
         3
     )
     const json = schemasteryToJsonSchemaNode(tool.args) as {
@@ -434,7 +458,8 @@ it('trims text fields and rejects empty values', () => {
 })
 it('reports committed memories as saved with a warning when index synchronization fails', async () => {
     let invoked = 0
-    const creation: LivingMemoryCreationProvider = {
+    const creation: LivingMemoryCreationProvider & MemoryIdSource = {
+        findMemoryIds: async () => [],
         listPresetSpeakers: async () => [],
         createMemory: async (_scope, input) => {
             invoked += 1
@@ -468,7 +493,8 @@ it('reports committed memories as saved with a warning when index synchronizatio
 
 it('propagates not-ready failures before any memory is committed', async () => {
     const notReady = new LivingMemoryVectorIndexError('not-ready', 'building', 'vector index is not ready')
-    const creation: LivingMemoryCreationProvider = {
+    const creation: LivingMemoryCreationProvider & MemoryIdSource = {
+        findMemoryIds: async () => [],
         listPresetSpeakers: async () => [],
         createMemory: async () => {
             throw notReady
@@ -494,7 +520,8 @@ it('propagates not-ready failures before any memory is committed', async () => {
 })
 
 it('rejects tool calls without a resolvable scope', async () => {
-    const creation: LivingMemoryCreationProvider = {
+    const creation: LivingMemoryCreationProvider & MemoryIdSource = {
+        findMemoryIds: async () => [],
         listPresetSpeakers: async () => [],
         createMemory: async () => record('m')
     }

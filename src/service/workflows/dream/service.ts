@@ -1,3 +1,4 @@
+import type { MemoryIdSource } from '../../memory/model_ids.ts'
 import type { Context } from 'cordis'
 import type {} from '@chatluna/ai-runtime'
 import type { PresetPersonaResolver } from '../../../contracts/memory.ts'
@@ -28,7 +29,7 @@ import { createDreamSessionTools } from './session/tools.ts'
 import { runDreamSession } from './session/runner.ts'
 import { dreamCompressionThreshold } from './session/history.ts'
 
-interface DreamRepository {
+interface DreamRepository extends MemoryIdSource {
     listPresetSpeakers(presetId: string): Promise<
         Awaited<
             ReturnType<LivingMemoryMutationService['ensurePresetSpeakersCoverage']>
@@ -149,10 +150,7 @@ export class LivingMemoryDreamService {
                     presetId,
                     state,
                     speakers,
-                    getEntriesByPresetAndIds:
-                        this.repository.getEntriesByPresetAndIds.bind(
-                            this.repository
-                        ),
+                    repository: this.repository,
                     mutations: this.mutations
                 })
                 await runDreamSession({
@@ -167,6 +165,7 @@ export class LivingMemoryDreamService {
                     speakers,
                     state,
                     tools,
+                    repository: this.repository,
                     logger,
                     ...(signal === undefined ? {} : { signal }),
                     loadBatch:

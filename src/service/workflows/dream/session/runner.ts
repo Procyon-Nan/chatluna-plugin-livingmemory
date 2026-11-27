@@ -1,3 +1,4 @@
+import { modelMemoryIds, withModelMemoryIds, type MemoryIdSource } from '../../../memory/model_ids.ts'
 import type {} from '@chatluna/ai-runtime/ops'
 import type { Context } from 'cordis'
 import type { PresetSpeakerRecord } from '../../../../contracts/memory.ts'
@@ -27,6 +28,7 @@ const maxBatchRounds = 60
 const maxIneffectiveRounds = 3
 
 interface DreamSessionRunInput {
+    repository: MemoryIdSource
     ctx: Context
     model: string
     /** 模型上下文上限，用于每轮发起前的容量检查。 */
@@ -99,8 +101,9 @@ export async function runDreamSession(input: DreamSessionRunInput) {
         const batchStartedAt = performance.now()
         const entries = await withSourceLabels(ctx, batch.entries)
         signal?.throwIfAborted()
-        const batchPrompt = buildDreamMemoryBatchPrompt(entries, speakers)
-        history.startBatch(batchPrompt)
+        const modelEntries = await withModelMemoryIds(input.repository, input.presetId, entries)
+        signal?.throwIfAborted()
+        history.startBatch(buildDreamMemoryBatchPrompt(modelEntries, speakers))
         logger.diagnosticSummary((fields) => ({
             event: 'Dream 批次开始',
             detail: `${formatLogScope(fields)}; 批次：${batch.id}; 总批次：${state.batches.length}; 记忆：${batch.entries.length} 条`
@@ -138,32 +141,24 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                 )
                 break
             }
-            if (
-                ineffectiveRounds >= maxIneffectiveRounds ||
-                round === maxBatchRounds
-            ) {
+            const pendingRefs = await modelMemoryIds(input.repository, input.presetId, pendingAfter)
+            const pendingForModel = pendingAfter.map(pendingRefs.display)
+            const skip = ineffectiveRounds >= maxIneffectiveRounds || round === maxBatchRounds
+            if (skip) {
                 const reason =
                     ineffectiveRounds >= maxIneffectiveRounds
                         ? '连续 3 轮无有效操作'
                         : '达到每批 60 轮上限'
                 recordSkippedDreamBatch(state, reason)
-                // 跳过原因写入历史，让下一批开始时模型知道上一批为何中断。
-                history.appendUser(
-                    buildDreamTurnFeedbackPrompt(
-                        pendingAfter,
-                        `${feedback}\n${reason}，跳过本批剩余记忆并进入下一批。`
-                    )
-                )
+                feedback += `\n${reason}，跳过本批剩余记忆并进入下一批。`
                 logger.summary(
                     'Dream 跳过批次剩余记忆',
                     `预设：${input.presetId}; 批次：${batch.id}; 原因：${reason}; 已处理：${batch.entries.length - pendingAfter.length}/${batch.entries.length} 条; 跳过：${pendingAfter.length} 条`,
                     'warn'
                 )
-                break
             }
-            history.appendUser(
-                buildDreamTurnFeedbackPrompt(pendingAfter, feedback)
-            )
+            history.appendUser(buildDreamTurnFeedbackPrompt(pendingForModel, feedback))
+            if (skip) break
         }
     }
 }

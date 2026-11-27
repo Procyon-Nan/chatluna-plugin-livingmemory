@@ -158,6 +158,7 @@ const createRun = (options: {
         logs: captured.logs,
         run: (overrides: { signal?: AbortSignal } = {}) =>
             runDreamSession({
+                repository: { findMemoryIds: async () => [] },
                 ctx,
                 model: 'test-model',
                 maxTokenLimit: options.maxTokenLimit ?? 1_000_000,

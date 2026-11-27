@@ -1,4 +1,3 @@
-import { MemoryInputError } from '../../../memory/errors.ts'
 import type {
     DreamBatch,
     DreamOperationStats
@@ -86,18 +85,6 @@ export function pendingDreamMemoryIds(state: DreamSessionState): string[] {
     return entries
         .filter((entry) => !state.processedMemoryIds.has(entry.id))
         .map((entry) => entry.id)
-}
-
-export function assertDreamMemoriesAvailable(
-    state: DreamSessionState,
-    ids: readonly string[]
-) {
-    const missing = ids.filter((id) => !state.availableMemoryIds.has(id))
-    if (missing.length > 0) {
-        throw new MemoryInputError(
-            `请使用${state.mode === 'post-extraction' ? '当前组' : '本次会话'}已提供的记忆 ID，以下 ID 需核对：${missing.join('、')}。`
-        )
-    }
 }
 
 export function recordDreamOperation(

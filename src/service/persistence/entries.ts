@@ -1,4 +1,4 @@
-import { MemoryInputError } from '../memory/errors.ts'
+import { MemoryInputError, missingMemory } from '../memory/errors.ts'
 import { randomUUID } from 'node:crypto'
 import { $ } from '@cordisjs/plugin-database'
 import type { Context } from 'cordis'
@@ -418,9 +418,7 @@ export class LivingMemoryEntryRepository {
                 memoryEntryFields
             )
             if (row === undefined) {
-                throw new MemoryInputError(
-                    `不存在 ID 为 ${sourceMemoryId} 的记忆，请重新查明记忆 ID 后再调用。`
-                )
+                throw missingMemory(sourceMemoryId)
             }
             const source = normalizeEntryRecord(row)
             const now = new Date()
@@ -483,9 +481,7 @@ export class LivingMemoryEntryRepository {
             const sources = sourceMemoryIds.map((id) => {
                 const entry = entryById.get(id)
                 if (entry === undefined) {
-                    throw new MemoryInputError(
-                        `不存在 ID 为 ${id} 的记忆，请重新查明记忆 ID 后再调用。`
-                    )
+                    throw missingMemory(id)
                 }
                 return entry
             })
